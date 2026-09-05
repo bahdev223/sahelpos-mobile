@@ -326,9 +326,15 @@ export async function exigerEcriture(): Promise<void> {
 
   if (!etat.droit) {
     if (!ACTIVATION_OBLIGATOIRE) return;
+    // `etatCourant` distingue deux absences de droit : jamais active, et
+    // droit present mais illisible — abime au transport, ou modifie a la
+    // main dans la base du telephone. Le second porte un message precis, et
+    // l'ecraser par « pas encore activee » enverrait le commercant ressaisir
+    // un code alors que son probleme est ailleurs.
     throw new EcritureFermee(
-      "Cette application n'est pas encore activee. Ouvrez « Mon abonnement » " +
-        "dans le menu et saisissez le code recu de SahelPOS.",
+      etat.message ||
+        "Cette application n'est pas encore activee. Ouvrez « Mon abonnement » " +
+          'dans le menu et saisissez le code recu de SahelPOS.',
     );
   }
 
