@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Journaux de compilation Gradle : ils font plusieurs mega-octets, changent a
+# chaque build et n'ont d'interet que quelques minutes.
+build*.log
+_build.log
