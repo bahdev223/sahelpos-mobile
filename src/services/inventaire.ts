@@ -21,6 +21,7 @@ import {
   lireTout,
   maintenant,
 } from '../db/repositories/base';
+import { exigerEcriture } from './abonnement';
 import { verifierStock } from './notifications';
 
 export type StatutInventaire = 'BROUILLON' | 'VALIDE' | 'ANNULE';
@@ -198,6 +199,10 @@ export async function validerInventaire(
   inventaireId: number,
   utilisateurNom?: string,
 ): Promise<ResultatValidation> {
+  // Le verrou est ici et non dans l'ecran : un bouton grise se
+  // contourne, une fonction qui refuse d'ecrire, non.
+  await exigerEcriture();
+
   const inv = await exigerBrouillon(inventaireId);
 
   const resultat = await dansTransaction(async () => {

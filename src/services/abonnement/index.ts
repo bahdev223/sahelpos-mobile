@@ -269,3 +269,79 @@ export async function detacher(): Promise<void> {
 export async function dernierContact(): Promise<string> {
   return lireCle(CLE_DERNIER_CONTACT);
 }
+
+// --- le verrou -------------------------------------------------------------
+//
+// CE QUI MANQUAIT, ET CE QUE CA COUTAIT
+// --------------------------------------
+// Tout ce qui precede etait ecrit, teste, et n'etait appele NULLE PART en
+// dehors de l'ecran d'abonnement lui-meme. L'application fonctionnait donc
+// entierement sans activation : un APK remis a cent personnes s'utilisait
+// cent fois, gratuitement, sans limite de temps.
+//
+// Le verrou est pose dans les SERVICES d'ecriture, pas dans les ecrans. Un
+// bouton grise se contourne ; une fonction qui refuse d'ecrire, non. C'est
+// aussi le seul endroit ou l'on est certain de ne rien oublier : il n'y a
+// qu'une facon d'enregistrer une vente.
+//
+// CE QUE LE VERROU NE FAIT JAMAIS
+// --------------------------------
+// Il n'efface rien et n'empeche rien de LIRE. Un commercant dont l'abonnement
+// expire garde ses ventes, ses produits, ses clients, ses chiffres, et peut
+// les consulter et les exporter. On ferme une caisse, on ne confisque pas une
+// comptabilite.
+
+/**
+ * Une application jamais activee peut-elle vendre ?
+ *
+ * `true` : non. Le commercant doit saisir un code, obtenu aupres d'un
+ * commercial ou sur le site. C'est la regle voulue pour la distribution :
+ * l'APK se telecharge librement, et ce code est ce qui separe un curieux d'un
+ * client.
+ *
+ * Passer cette constante a `false` rouvre l'application aux installations
+ * neuves — utile pour une demonstration ou un salon. Une seule ligne, et elle
+ * est ici pour qu'on la trouve.
+ */
+export const ACTIVATION_OBLIGATOIRE = true;
+
+/** Levee quand l'ecriture est refusee. Son message s'affiche tel quel. */
+export class EcritureFermee extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EcritureFermee';
+  }
+}
+
+/**
+ * Refuse d'ecrire si le droit ne le permet pas.
+ *
+ * A appeler en PREMIERE ligne de toute fonction qui enregistre une operation
+ * commerciale. Le message est ecrit pour le commercant, pas pour le
+ * developpeur : il dit quoi faire, et ou.
+ */
+export async function exigerEcriture(): Promise<void> {
+  const etat = await etatCourant();
+  if (etat.peutEcrire) return;
+
+  if (!etat.droit) {
+    if (!ACTIVATION_OBLIGATOIRE) return;
+    throw new EcritureFermee(
+      "Cette application n'est pas encore activee. Ouvrez « Mon abonnement » " +
+        "dans le menu et saisissez le code recu de SahelPOS.",
+    );
+  }
+
+  if (etat.perime) {
+    throw new EcritureFermee(
+      "Votre droit d acces doit etre verifie. Connectez le telephone a " +
+        'Internet quelques secondes, puis reessayez.',
+    );
+  }
+
+  throw new EcritureFermee(
+    etat.message ||
+      "Votre abonnement ne permet plus d enregistrer d operations. " +
+        'Contactez SahelPOS.',
+  );
+}
