@@ -65,7 +65,8 @@
             "enableShrinkResourcesInReleaseBuilds": true
           }
         }
-      ]
+      ],
+      "./plugins/signature-release"
     ],
     "scheme": "sahelpos"
   }

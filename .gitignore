@@ -44,3 +44,14 @@ yarn-error.*
 # chaque build et n'ont d'interet que quelques minutes.
 build*.log
 _build.log
+
+# La cle qui signe les APK de production, et son mot de passe.
+#
+# NE JAMAIS COMMITER. Quiconque possede ce fichier peut signer une mise a
+# jour de SahelPOS que les telephones installeront sans broncher.
+#
+# NE JAMAIS PERDRE non plus : sans lui, aucune mise a jour ne peut plus etre
+# publiee pour les installations existantes. Elles devraient etre
+# desinstallees et reinstallees, avec la perte de donnees que cela suppose.
+# Gardez-en une copie hors de cet ordinateur.
+credentials/
