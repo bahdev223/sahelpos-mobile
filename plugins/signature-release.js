@@ -29,7 +29,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const { withAppBuildGradle, withDangerousMod } = require('expo/config-plugins');
+const {
+  withAppBuildGradle,
+  withDangerousMod,
+  withGradleProperties,
+} = require('expo/config-plugins');
 
 const DOSSIER = 'credentials';
 const REGLAGES = 'keystore.properties';
@@ -134,6 +138,39 @@ const brancherLaSignature = (config) =>
     return parametres;
   });
 
+/**
+ * Ne compiler que les architectures qu'on livre reellement.
+ *
+ * React Native compile le natif pour QUATRE architectures par defaut, dont
+ * `x86` et `x86_64` qui n'existent que sur des emulateurs. Aucun telephone
+ * vendu en Afrique de l'Ouest n'en a.
+ *
+ * Ca coute deux fois : une heure de compilation a chaque build complet, et
+ * 59 Mo de bibliotheques inutiles dans l'APK — sur un telechargement paye au
+ * mega-octet par le commercant.
+ *
+ * Ce reglage etait pose a la main dans `android/`, donc perdu au premier
+ * `expo prebuild`. L'APK est passe de 65 a 128 Mo sans que rien ne le
+ * signale. Il vit desormais dans le greffon, qui est commite.
+ */
+const ARCHITECTURES_LIVREES = 'armeabi-v7a,arm64-v8a';
+
+const limiterLesArchitectures = (config) =>
+  withGradleProperties(config, (parametres) => {
+    const cle = 'reactNativeArchitectures';
+    const ligne = parametres.modResults.find(
+      (p) => p.type === 'property' && p.key === cle,
+    );
+    if (ligne) {
+      ligne.value = ARCHITECTURES_LIVREES;
+    } else {
+      parametres.modResults.push({
+        type: 'property', key: cle, value: ARCHITECTURES_LIVREES,
+      });
+    }
+    return parametres;
+  });
+
 module.exports = function signatureRelease(config) {
-  return brancherLaSignature(poserLaCle(config));
+  return limiterLesArchitectures(brancherLaSignature(poserLaCle(config)));
 };
