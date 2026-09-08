@@ -270,6 +270,10 @@ export async function dernierContact(): Promise<string> {
   return lireCle(CLE_DERNIER_CONTACT);
 }
 
+export async function jetonAppareil(): Promise<string> {
+  return lireCle(CLE_APPAREIL);
+}
+
 // --- le verrou -------------------------------------------------------------
 //
 // CE QUI MANQUAIT, ET CE QUE CA COUTAIT

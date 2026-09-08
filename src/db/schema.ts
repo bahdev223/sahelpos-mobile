@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -304,5 +304,25 @@ export const MIGRATIONS: string[][] = [
     // departager. `produit` en avait deja une.
     `ALTER TABLE client      ADD COLUMN date_modification TEXT`,
     `ALTER TABLE fournisseur ADD COLUMN date_modification TEXT`,
+  ],
+
+  // --- version 5 : file d'attente de synchronisation ----------------------
+  //
+  // Une ecriture locale doit survivre a une coupure reseau. L'outbox garde
+  // donc l'objet a pousser jusqu'a ce que Django confirme l'avoir traite.
+  [
+    `CREATE TABLE IF NOT EXISTS sync_outbox (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      type_objet      TEXT    NOT NULL,
+      id_local        TEXT    NOT NULL,
+      operation       TEXT    NOT NULL DEFAULT 'upsert',
+      date_creation   TEXT    NOT NULL,
+      tentatives      INTEGER NOT NULL DEFAULT 0,
+      derniere_erreur TEXT
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_outbox_objet
+       ON sync_outbox(type_objet, id_local)`,
+    `CREATE INDEX IF NOT EXISTS idx_sync_outbox_date
+       ON sync_outbox(date_creation)`,
   ],
 ];

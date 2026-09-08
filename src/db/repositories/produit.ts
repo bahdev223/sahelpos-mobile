@@ -11,6 +11,7 @@ import {
   maintenant,
   versBooleen,
 } from './base';
+import { marquerChangement } from '../../services/synchronisation';
 
 interface LigneProduit {
   id: number;
@@ -145,12 +146,15 @@ export interface SaisieProduit {
 
 export async function creerProduit(saisie: SaisieProduit): Promise<number> {
   return dansTransaction(async () => {
+    const idLocal = genererIdLocal();
+    const horodatage = maintenant();
     const r = await executer(
       `INSERT INTO produit (id_local, nom, categorie, code_barre, prix_unitaire,
                             prix_achat, unite_base, quantite_base, stock_min,
-                            gestion_stock, chemin_image, actif, date_creation)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      genererIdLocal(),
+                            gestion_stock, chemin_image, actif, date_creation,
+                            date_modification)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      idLocal,
       saisie.nom.trim(),
       saisie.categorie ?? null,
       saisie.codeBarre?.trim() || null,
@@ -162,7 +166,8 @@ export async function creerProduit(saisie: SaisieProduit): Promise<number> {
       saisie.gestionStock === false ? 0 : 1,
       saisie.cheminImage ?? null,
       saisie.actif === false ? 0 : 1,
-      maintenant(),
+      horodatage,
+      horodatage,
     );
     const id = r.lastInsertRowId;
     for (const su of saisie.sousUnites ?? []) {
@@ -174,12 +179,17 @@ export async function creerProduit(saisie: SaisieProduit): Promise<number> {
         Math.round(su.prix),
       );
     }
+    await marquerChangement('produit', idLocal);
     return id;
   });
 }
 
 export async function modifierProduit(id: number, saisie: SaisieProduit): Promise<void> {
   await dansTransaction(async () => {
+    const existant = await lirePremier<{ id_local: string }>(
+      'SELECT id_local FROM produit WHERE id = ?',
+      id,
+    );
     await executer(
       `UPDATE produit SET nom = ?, categorie = ?, code_barre = ?, prix_unitaire = ?,
                           prix_achat = ?, unite_base = ?, stock_min = ?,
@@ -215,6 +225,7 @@ export async function modifierProduit(id: number, saisie: SaisieProduit): Promis
         );
       }
     }
+    await marquerChangement('produit', existant?.id_local ?? '');
   });
 }
 
@@ -236,11 +247,16 @@ export async function supprimerOuDesactiver(
   );
 
   if ((usages?.n ?? 0) > 0) {
+    const existant = await lirePremier<{ id_local: string }>(
+      'SELECT id_local FROM produit WHERE id = ?',
+      id,
+    );
     await executer(
       'UPDATE produit SET actif = 0, date_modification = ? WHERE id = ?',
       maintenant(),
       id,
     );
+    await marquerChangement('produit', existant?.id_local ?? '');
     return 'desactive';
   }
 

@@ -8,7 +8,15 @@
  * moyen de savoir d'ou il vient.
  */
 import type { NatureMouvement, SourceOperation } from '../../domain/types';
-import { dansTransaction, executer, lirePremier, lireTout, maintenant } from './base';
+import {
+  dansTransaction,
+  executer,
+  genererIdLocal,
+  lirePremier,
+  lireTout,
+  maintenant,
+} from './base';
+import { marquerChangement } from '../../services/synchronisation';
 
 export interface Mouvement {
   id: number;
@@ -127,7 +135,8 @@ export async function appliquerMouvement(e: EcritureStock): Promise<number> {
     // Un produit sans gestion de stock (un service, une prestation) est trace
     // dans le journal mais n'a pas de quantite a decompter.
     if (!p.gestion_stock) {
-      await ecrireMouvement(e, quantiteBase, null, null);
+      const idLocal = await ecrireMouvement(e, quantiteBase, null, null);
+      await marquerChangement('mouvement', idLocal);
       return 0;
     }
 
@@ -153,7 +162,13 @@ export async function appliquerMouvement(e: EcritureStock): Promise<number> {
       maintenant(),
       e.produitId,
     );
-    await ecrireMouvement(e, e.nature === 'AJUSTEMENT' ? apres - avant : quantiteBase, avant, apres);
+    const idLocal = await ecrireMouvement(
+      e,
+      e.nature === 'AJUSTEMENT' ? apres - avant : quantiteBase,
+      avant,
+      apres,
+    );
+    await marquerChangement('mouvement', idLocal);
     return apres;
   });
 }
@@ -163,13 +178,15 @@ async function ecrireMouvement(
   quantiteBase: number,
   avant: number | null,
   apres: number | null,
-): Promise<void> {
+): Promise<string> {
+  const idLocal = genererIdLocal();
   await executer(
     `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
                                   unite, quantite_base, stock_avant, stock_apres,
                                   prix_unitaire, reference, motif, utilisateur,
                                   date_mouvement)
-     VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    idLocal,
     e.produitId,
     e.nature,
     e.source,
@@ -184,6 +201,7 @@ async function ecrireMouvement(
     e.utilisateur ?? null,
     maintenant(),
   );
+  return idLocal;
 }
 
 export interface ValeurStock {

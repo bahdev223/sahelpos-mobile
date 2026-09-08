@@ -14,6 +14,7 @@ import {
   lireTout,
   maintenant,
 } from './base';
+import { marquerChangement } from '../../services/synchronisation';
 
 interface LigneClient {
   id: number;
@@ -77,28 +78,41 @@ export interface SaisieClient {
 }
 
 export async function creerClient(saisie: SaisieClient): Promise<number> {
+  const idLocal = genererIdLocal();
+  const horodatage = maintenant();
   const r = await executer(
-    `INSERT INTO client (id_local, nom, telephone, email, adresse, date_creation)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    genererIdLocal(),
+    `INSERT INTO client (id_local, nom, telephone, email, adresse, date_creation,
+                         date_modification)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    idLocal,
+    saisie.nom.trim(),
+    saisie.telephone?.trim() || null,
+    saisie.email?.trim() || null,
+    saisie.adresse?.trim() || null,
+    horodatage,
+    horodatage,
+  );
+  await marquerChangement('client', idLocal);
+  return r.lastInsertRowId;
+}
+
+export async function modifierClient(id: number, saisie: SaisieClient): Promise<void> {
+  const existant = await lirePremier<{ id_local: string }>(
+    'SELECT id_local FROM client WHERE id = ?',
+    id,
+  );
+  await executer(
+    `UPDATE client SET nom = ?, telephone = ?, email = ?, adresse = ?,
+                       date_modification = ?
+      WHERE id = ?`,
     saisie.nom.trim(),
     saisie.telephone?.trim() || null,
     saisie.email?.trim() || null,
     saisie.adresse?.trim() || null,
     maintenant(),
-  );
-  return r.lastInsertRowId;
-}
-
-export async function modifierClient(id: number, saisie: SaisieClient): Promise<void> {
-  await executer(
-    'UPDATE client SET nom = ?, telephone = ?, email = ?, adresse = ? WHERE id = ?',
-    saisie.nom.trim(),
-    saisie.telephone?.trim() || null,
-    saisie.email?.trim() || null,
-    saisie.adresse?.trim() || null,
     id,
   );
+  await marquerChangement('client', existant?.id_local ?? '');
 }
 
 /**

@@ -34,6 +34,7 @@ import {
 } from 'react-native';
 
 import { obtenirBase } from '../../src/db/database';
+import { genererIdLocal } from '../../src/db/repositories/base';
 import { C, formaterFrancs, formaterQuantite, s } from '../produit/nouveau';
 import {
   BARRE_HORIZONTALE, BandeauEtat, Vignette } from '../../src/ui/components';
@@ -41,6 +42,7 @@ import { couleurs } from '../../src/ui/theme';
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
 import { verifierStock } from '../../src/services/notifications';
+import { marquerChangement } from '../../src/services/synchronisation';
 
 // --------------------------------------------------------------------------
 // Vocabulaire du domaine
@@ -375,12 +377,14 @@ export async function ecrireMouvement(demande: DemandeMouvement): Promise<Result
     // pas l'ecart : c'est la convention du poste de bureau, gardee pour qu'un
     // futur export tombe juste. L'ecart se lit toujours stock_apres moins
     // stock_avant, et c'est ainsi que le journal l'affiche.
+    const idLocal = genererIdLocal();
     await db.runAsync(
       `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
                                     unite, quantite_base, stock_avant, stock_apres,
                                     prix_unitaire, reference, motif, utilisateur,
                                     date_mouvement)
-       VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      idLocal,
       demande.produitId,
       demande.nature,
       demande.source,
@@ -395,6 +399,7 @@ export async function ecrireMouvement(demande: DemandeMouvement): Promise<Result
       demande.utilisateur ?? null,
       maintenant,
     );
+    await marquerChangement('mouvement', idLocal);
 
     resultat = { stockAvant, stockApres, quantiteBase };
   });
@@ -469,11 +474,13 @@ export async function ecrireStockInitial(lignes: LigneStockInitial[]): Promise<n
       // colonne `unite` de la meme ligne. Le prix saisi est celui de l'unite de
       // base : entrer 4 sacs a 500 F le kilo doit inscrire 25 000 F le sac, pas
       // 500, sinon la valeur de la reception est cinquante fois trop basse.
+      const idLocal = genererIdLocal();
       await db.runAsync(
         `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
                                       unite, quantite_base, stock_avant, stock_apres,
                                       prix_unitaire, motif, date_mouvement)
-         VALUES (lower(hex(randomblob(16))), ?, 'ENTREE', 'INITIALISATION', ?, ?, ?, 0, ?, ?, ?, ?)`,
+         VALUES (?, ?, 'ENTREE', 'INITIALISATION', ?, ?, ?, 0, ?, ?, ?, ?)`,
+        idLocal,
         ligne.produitId,
         ligne.quantite,
         ligne.unite,
@@ -483,6 +490,7 @@ export async function ecrireStockInitial(lignes: LigneStockInitial[]): Promise<n
         'Stock initial',
         maintenant,
       );
+      await marquerChangement('mouvement', idLocal);
     }
   });
 

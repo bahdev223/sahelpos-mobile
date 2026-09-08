@@ -12,6 +12,7 @@ import {
   lireTout,
   maintenant,
 } from './base';
+import { marquerChangement } from '../../services/synchronisation';
 
 export interface Fournisseur {
   id: number;
@@ -87,18 +88,22 @@ export interface SaisieFournisseur {
 
 export async function creerFournisseur(saisie: SaisieFournisseur): Promise<number> {
   if (!saisie.nom.trim()) throw new Error('Le nom du fournisseur est requis.');
+  const idLocal = genererIdLocal();
+  const horodatage = maintenant();
   const r = await executer(
     `INSERT INTO fournisseur (id_local, nom, contact, telephone, email, adresse,
-                              date_creation)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    genererIdLocal(),
+                              date_creation, date_modification)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    idLocal,
     saisie.nom.trim(),
     saisie.contact?.trim() || null,
     saisie.telephone?.trim() || null,
     saisie.email?.trim() || null,
     saisie.adresse?.trim() || null,
-    maintenant(),
+    horodatage,
+    horodatage,
   );
+  await marquerChangement('fournisseur', idLocal);
   return r.lastInsertRowId;
 }
 
@@ -106,17 +111,23 @@ export async function modifierFournisseur(
   id: number,
   saisie: SaisieFournisseur,
 ): Promise<void> {
+  const existant = await lirePremier<{ id_local: string }>(
+    'SELECT id_local FROM fournisseur WHERE id = ?',
+    id,
+  );
   await executer(
     `UPDATE fournisseur SET nom = ?, contact = ?, telephone = ?, email = ?,
-                            adresse = ?
+                            adresse = ?, date_modification = ?
      WHERE id = ?`,
     saisie.nom.trim(),
     saisie.contact?.trim() || null,
     saisie.telephone?.trim() || null,
     saisie.email?.trim() || null,
     saisie.adresse?.trim() || null,
+    maintenant(),
     id,
   );
+  await marquerChangement('fournisseur', existant?.id_local ?? '');
 }
 
 /**

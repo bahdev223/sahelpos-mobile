@@ -33,6 +33,8 @@ import {
 } from 'react-native';
 
 import { obtenirBase } from '../../src/db/database';
+import { genererIdLocal } from '../../src/db/repositories/base';
+import { marquerChangement } from '../../src/services/synchronisation';
 
 // --------------------------------------------------------------------------
 // Palette
@@ -174,11 +176,6 @@ export function formaterQuantite(valeur: number): string {
 // pas casser les neuf ecrans qui l'importent de ce fichier.
 export { uriImage };
 
-function genererIdLocal(): string {
-  const hasard = Math.random().toString(16).slice(2, 10);
-  return `${Date.now().toString(16)}-${hasard}`;
-}
-
 function messageErreur(erreur: unknown): string {
   const texte = erreur instanceof Error ? erreur.message : String(erreur);
   if (/UNIQUE.*code_barre/i.test(texte)) {
@@ -313,12 +310,13 @@ export async function creerProduit(valide: ProduitValide): Promise<number> {
   let identifiant = 0;
 
   await db.withTransactionAsync(async () => {
+    const idLocal = genererIdLocal();
     const insertion = await db.runAsync(
       `INSERT INTO produit (id_local, nom, categorie, code_barre, prix_unitaire,
                             prix_achat, unite_base, quantite_base, stock_min,
                             gestion_stock, chemin_image, actif, date_creation)
        VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
-      genererIdLocal(),
+      idLocal,
       valide.nom,
       valide.categorie,
       valide.codeBarre,
@@ -365,6 +363,7 @@ export async function creerProduit(valide: ProduitValide): Promise<number> {
         maintenant,
       );
     }
+    await marquerChangement('produit', idLocal);
   });
 
   if (identifiant === 0) throw new Error("Le produit n'a pas pu etre enregistre.");

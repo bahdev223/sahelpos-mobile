@@ -10,9 +10,11 @@
 import type * as SQLite from 'expo-sqlite';
 
 import { obtenirBase } from '../db/database';
+import { genererIdLocal } from '../db/repositories/base';
 import type { LigneVente, ModePaiement, Produit } from '../domain/types';
 import { exigerEcriture } from './abonnement';
 import { verifierStock } from './notifications';
+import { marquerChangement } from './synchronisation';
 
 export interface ArticlePanier {
   produit: Produit;
@@ -163,6 +165,7 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
     }
 
     resultat = { venteId, numero, total, lignes };
+    await marquerChangement('vente', idLocal);
   });
 
   if (!resultat) throw new Error("La vente n'a pas pu etre enregistree.");
@@ -195,7 +198,3 @@ async function genererNumero(db: SQLite.SQLiteDatabase): Promise<string> {
   return prefixe + String((ligne?.n ?? 0) + 1).padStart(4, '0');
 }
 
-function genererIdLocal(): string {
-  const hasard = Math.random().toString(16).slice(2, 10);
-  return `${Date.now().toString(16)}-${hasard}`;
-}
