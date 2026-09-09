@@ -30,6 +30,7 @@ import {
 } from 'react-native';
 
 import { obtenirBase } from '../../src/db/database';
+import { seuilAlerteStock } from '../../src/domain/stock';
 import { BandeauEtat } from '../../src/ui/components';
 import { C, formaterFrancs, formaterQuantite, s, uriImage } from './nouveau';
 import { desactiverProduit, supprimerProduit } from './modifier/[id]';
@@ -231,9 +232,10 @@ export default function FicheProduitEcran() {
   const p = fiche.produit;
   const image = uriImage(p.chemin_image);
   const marge = p.prix_unitaire - p.prix_achat;
+  const seuilStock = seuilAlerteStock(p.stock_min);
   const enRupture = p.gestion_stock === 1 && p.quantite_base <= 0;
   const sousLeSeuil =
-    p.gestion_stock === 1 && p.quantite_base > 0 && p.quantite_base <= p.stock_min;
+    p.gestion_stock === 1 && p.quantite_base > 0 && p.quantite_base <= seuilStock;
 
   const couleurStock = enRupture ? C.rouge : sousLeSeuil ? C.orange : C.vert;
   const mentionStock = enRupture ? 'Rupture' : sousLeSeuil ? 'Stock faible' : 'En stock';
@@ -289,7 +291,7 @@ export default function FicheProduitEcran() {
               />
               <Ligne
                 libelle="Stock minimum"
-                valeur={`${formaterQuantite(p.stock_min)} ${p.unite_base}`}
+                valeur={`${formaterQuantite(seuilStock)} ${p.unite_base}`}
               />
             </>
           ) : (

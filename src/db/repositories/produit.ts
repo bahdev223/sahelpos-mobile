@@ -2,6 +2,7 @@
  * Depot des produits, des sous-unites et des categories.
  */
 import type { Produit, SousUnite } from '../../domain/types';
+import { seuilAlerteStock } from '../../domain/stock';
 import {
   dansTransaction,
   executer,
@@ -271,8 +272,20 @@ export async function supprimerOuDesactiver(
 export async function listerAlertesStock(): Promise<Produit[]> {
   const lignes = await lireTout<LigneProduit>(
     `SELECT ${COLONNES} FROM produit
-     WHERE actif = 1 AND gestion_stock = 1 AND quantite_base <= stock_min
-     ORDER BY (quantite_base - stock_min), nom`,
+     WHERE actif = 1 AND gestion_stock = 1
+       AND (
+         (stock_min > 0 AND quantite_base <= stock_min)
+         OR (stock_min <= 0 AND quantite_base <= 10)
+       )
+     ORDER BY nom`,
   );
-  return lignes.map(versProduit);
+  return lignes
+    .filter((ligne) => ligne.quantite_base <= seuilAlerteStock(ligne.stock_min))
+    .sort(
+      (a, b) =>
+        a.quantite_base / seuilAlerteStock(a.stock_min) -
+          b.quantite_base / seuilAlerteStock(b.stock_min) ||
+        a.nom.localeCompare(b.nom, 'fr'),
+    )
+    .map(versProduit);
 }

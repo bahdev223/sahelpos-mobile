@@ -35,6 +35,7 @@ import {
 
 import { obtenirBase } from '../../src/db/database';
 import { genererIdLocal } from '../../src/db/repositories/base';
+import { seuilAlerteStock } from '../../src/domain/stock';
 import { C, formaterFrancs, formaterQuantite, s } from '../produit/nouveau';
 import {
   BARRE_HORIZONTALE, BandeauEtat, Vignette } from '../../src/ui/components';
@@ -202,7 +203,7 @@ export function etatStock(produit: {
     return { cle: 'rupture', libelle: 'Rupture', couleur: C.rouge };
   }
   const quantite = `${formaterQuantite(produit.quantite_base)} ${produit.unite_base}`;
-  if (produit.quantite_base <= produit.stock_min) {
+  if (produit.quantite_base <= seuilAlerteStock(produit.stock_min)) {
     return { cle: 'alerte', libelle: quantite, couleur: C.orange };
   }
   return { cle: 'ok', libelle: quantite, couleur: C.vert };
@@ -852,9 +853,9 @@ function LigneProduitStock(p: {
               {detail}
             </Text>
           ) : null}
-          {p.produit.gestion_stock === 1 && p.produit.stock_min > 0 ? (
+          {p.produit.gestion_stock === 1 ? (
             <Text style={sl.meta}>
-              Seuil d&apos;alerte : {formaterQuantite(p.produit.stock_min)}{' '}
+              Seuil d&apos;alerte : {formaterQuantite(seuilAlerteStock(p.produit.stock_min))}{' '}
               {p.produit.unite_base}
             </Text>
           ) : null}

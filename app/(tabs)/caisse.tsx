@@ -38,6 +38,7 @@ import type { BarcodeScanningResult } from 'expo-camera';
 import { useFocusEffect } from 'expo-router';
 
 import { obtenirBase } from '../../src/db/database';
+import { seuilAlerteStock } from '../../src/domain/stock';
 import type {
   Client,
   LigneVente,
@@ -672,7 +673,7 @@ function CarteProduit({
   const bas =
     produit.gestionStock &&
     produit.quantiteBase > 0 &&
-    produit.quantiteBase <= produit.stockMin;
+    produit.quantiteBase <= seuilAlerteStock(produit.stockMin);
 
   return (
     <Pressable

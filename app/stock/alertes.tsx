@@ -36,6 +36,7 @@ import {
   type ProduitStock,
 } from '../(tabs)/stock';
 import { BandeauEtat, couleurs } from '../../src/ui/components';
+import { seuilAlerteStock } from '../../src/domain/stock';
 import { Icone } from '../../src/ui/icones';
 
 type Etat =
@@ -86,15 +87,12 @@ export default function Alertes() {
     for (const produit of produits) {
       if (produit.gestion_stock === 0) continue;
       if (produit.stock_min <= 0) nbSansSeuil += 1;
-
       const cle = etatStock(produit).cle;
       if (cle === 'rupture') ruptures.push(produit);
       else if (cle === 'alerte') bas.push(produit);
       else continue;
 
-      // Ce qu'il faudrait racheter pour repasser au-dessus du seuil. Un produit
-      // sans seuil est compte pour une unite : il faut bien en reprendre.
-      const cible = produit.stock_min > 0 ? produit.stock_min : 1;
+      const cible = seuilAlerteStock(produit.stock_min);
       cout += Math.max(0, cible - produit.quantite_base) * produit.prix_achat;
     }
 
@@ -110,7 +108,7 @@ export default function Alertes() {
     if (bas.length > 0) {
       construites.push({
         titre: `Stock bas (${bas.length})`,
-        aide: 'Encore disponibles, mais sous le seuil que vous avez fixe.',
+        aide: 'Encore disponibles, mais sous leur seuil de surveillance.',
         couleur: C.orange,
         data: bas,
       });
@@ -185,13 +183,12 @@ export default function Alertes() {
             sansSeuil > 0 ? (
               <View style={sl.note}>
                 <Text style={sl.noteTitre}>
-                  {sansSeuil} produit(s) sans seuil d&apos;alerte
-                </Text>
-                <Text style={sl.noteTexte}>
-                  Leur seuil vaut zero : ils ne seront signales qu&apos;une fois completement
-                  epuises, jamais avant. Renseignez un seuil sur la fiche du produit pour etre
-                  prevenu a temps.
-                </Text>
+              {sansSeuil} produit(s) avec le seuil par defaut
+            </Text>
+            <Text style={sl.noteTexte}>
+              Le seuil par defaut est 10. Renseignez un autre seuil sur la fiche du produit
+              quand son rythme de vente demande une surveillance differente.
+            </Text>
               </View>
             ) : null
           }
@@ -234,10 +231,8 @@ function LigneAlerte(p: {
   onJournal: () => void;
 }) {
   const rupture = p.produit.quantite_base <= 0;
-  const manque =
-    p.produit.stock_min > 0
-      ? arrondirQuantite(p.produit.stock_min - p.produit.quantite_base)
-      : 0;
+  const seuil = seuilAlerteStock(p.produit.stock_min);
+  const manque = arrondirQuantite(seuil - p.produit.quantite_base);
 
   return (
     <View style={sl.carte}>
@@ -265,13 +260,9 @@ function LigneAlerte(p: {
               ? 'Rupture'
               : `${formaterQuantite(p.produit.quantite_base)} ${p.produit.unite_base}`}
           </Text>
-          {p.produit.stock_min > 0 ? (
-            <Text style={sl.seuil}>
-              Seuil {formaterQuantite(p.produit.stock_min)} {p.produit.unite_base}
-            </Text>
-          ) : (
-            <Text style={sl.seuil}>Sans seuil</Text>
-          )}
+          <Text style={sl.seuil}>
+            Seuil {formaterQuantite(seuil)} {p.produit.unite_base}
+          </Text>
         </View>
       </View>
 

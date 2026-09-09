@@ -12,6 +12,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { obtenirBase } from '../../../src/db/database';
+import { seuilAlerteStock } from '../../../src/domain/stock';
 import {
   C,
   FormulaireProduit,
@@ -352,7 +353,8 @@ export default function FicheProduitEcran() {
                       ? C.texteFaible
                       : etat.fiche.produit.quantite_base <= 0
                         ? C.rouge
-                        : etat.fiche.produit.quantite_base <= etat.fiche.produit.stock_min
+                        : etat.fiche.produit.quantite_base <=
+                            seuilAlerteStock(etat.fiche.produit.stock_min)
                           ? C.orange
                           : C.vert
                   }

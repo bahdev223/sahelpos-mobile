@@ -1,14 +1,13 @@
 /**
- * Premier demarrage : configuration de la boutique et creation du compte
- * administrateur.
+ * Premier demarrage mobile.
  *
- * Equivalent mobile de l'assistant d'installation du poste de bureau. Il est
- * volontairement court : trois etapes, aucune option qui ne serve pas des la
- * premiere vente. Tout le reste se regle plus tard dans l'onglet Plus.
+ * Le telephone ne cree plus une boutique locale tout seul. SahelPOS Web est
+ * l'autorite : au premier lancement, le commercant se connecte ou cree son
+ * compte Web, puis le serveur remet un droit signe utilisable hors ligne.
  *
- * L'ecriture finale est faite en une seule transaction : une boutique sans
- * compte, ou un compte sans boutique, produirait une base dans laquelle on ne
- * peut plus entrer.
+ * Ensuite seulement on cree le code d'acces local du gerant. Ce code protege la
+ * caisse quand plusieurs vendeurs se passent le telephone ; il ne remplace pas
+ * l'activation serveur.
  */
 import { useCallback, useMemo, useState } from 'react';
 import {
@@ -24,6 +23,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { obtenirBase } from '../src/db/database';
 import type { Utilisateur } from '../src/domain/types';
 import {
+  connecterCompteMobile,
+  creerBoutiqueMobile,
+  type Droit,
+} from '../src/services/abonnement';
+import {
   Bouton,
   Carte,
   Champ,
@@ -32,12 +36,11 @@ import {
   rayons,
 } from '../src/ui/components';
 
-import { CLES_PARAMETRES, useSession } from './_layout';
-
-const ETAPES = ['Boutique', 'Recu', 'Compte'] as const;
+import { CLES_PARAMETRES, ecrireParametres, useSession } from './_layout';
 
 const LONGUEUR_PIN_MIN = 4;
 const LONGUEUR_PIN_MAX = 6;
+type ModeConnexion = 'connexion' | 'creation';
 
 export function EcranDemarrage() {
   const { ouvrirSession, recharger } = useSession();
@@ -45,34 +48,65 @@ export function EcranDemarrage() {
   const [etape, setEtape] = useState(0);
   const [enCours, setEnCours] = useState(false);
   const [erreurGenerale, setErreurGenerale] = useState<string | null>(null);
+  const [droit, setDroit] = useState<Droit | null>(null);
+  const [mode, setMode] = useState<ModeConnexion>('connexion');
 
   const [nomBoutique, setNomBoutique] = useState('');
-  const [adresse, setAdresse] = useState('');
-  const [telephone, setTelephone] = useState('');
-
-  const [devise, setDevise] = useState('F');
-  const [largeurPapier, setLargeurPapier] = useState<'58mm' | '80mm'>('58mm');
-  const [piedDePage, setPiedDePage] = useState('Merci de votre visite');
-
   const [nomAdmin, setNomAdmin] = useState('');
+  const [telephone, setTelephone] = useState('');
+  const [motDePasseWeb, setMotDePasseWeb] = useState('');
+  const [motDePasseWebConfirme, setMotDePasseWebConfirme] = useState('');
   const [login, setLogin] = useState('');
   const [pin, setPin] = useState('');
   const [pinConfirme, setPinConfirme] = useState('');
 
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
 
+  const titreEtape = useMemo(() => {
+    if (etape === 0) return mode === 'connexion' ? 'Se connecter' : 'Creer un compte';
+    return 'Code local';
+  }, [etape, mode]);
+
+  const sousTitreEtape = useMemo(() => {
+    if (etape === 0) {
+      return "Internet requis au premier lancement.";
+    }
+    return "Protegez la caisse sur ce telephone.";
+  }, [etape]);
+
   const validerEtape = useCallback((): boolean => {
     const trouvees: Record<string, string> = {};
 
-    if (etape === 0 && nomBoutique.trim().length === 0) {
-      trouvees.nomBoutique = 'Le nom de la boutique est obligatoire.';
+    if (etape === 0 && mode === 'connexion') {
+      if (login.trim().length === 0) {
+        trouvees.login = "L'identifiant Web est obligatoire.";
+      }
+      if (motDePasseWeb.length === 0) {
+        trouvees.motDePasseWeb = 'Le mot de passe est obligatoire.';
+      }
     }
 
-    if (etape === 1 && devise.trim().length === 0) {
-      trouvees.devise = 'Indiquez au moins un symbole, par exemple F.';
+    if (etape === 0 && mode === 'creation') {
+      if (nomBoutique.trim().length === 0) {
+        trouvees.nomBoutique = 'Le nom de la boutique est obligatoire.';
+      }
+      if (nomAdmin.trim().length === 0) {
+        trouvees.nomAdmin = 'Votre nom est obligatoire.';
+      }
+      if (login.trim().length === 0) {
+        trouvees.login = "L'identifiant Web est obligatoire.";
+      } else if (/\s/.test(login.trim())) {
+        trouvees.login = "L'identifiant ne doit pas contenir d'espace.";
+      }
+      if (motDePasseWeb.length < 6) {
+        trouvees.motDePasseWeb = 'Le mot de passe Web doit faire au moins 6 caracteres.';
+      }
+      if (motDePasseWebConfirme !== motDePasseWeb) {
+        trouvees.motDePasseWebConfirme = 'Les deux mots de passe ne sont pas identiques.';
+      }
     }
 
-    if (etape === 2) {
+    if (etape === 1) {
       if (login.trim().length === 0) {
         trouvees.login = "L'identifiant est obligatoire.";
       } else if (/\s/.test(login.trim())) {
@@ -88,16 +122,84 @@ export function EcranDemarrage() {
 
     setErreurs(trouvees);
     return Object.keys(trouvees).length === 0;
-  }, [etape, nomBoutique, devise, login, pin, pinConfirme]);
+  }, [
+    etape,
+    mode,
+    nomBoutique,
+    nomAdmin,
+    login,
+    motDePasseWeb,
+    motDePasseWebConfirme,
+    pin,
+    pinConfirme,
+  ]);
+
+  const connecterBoutique = useCallback(async () => {
+    if (!validerEtape()) return;
+    setEnCours(true);
+    setErreurGenerale(null);
+    try {
+      const etat =
+        mode === 'connexion'
+          ? await connecterCompteMobile(login, motDePasseWeb, 'Telephone principal')
+          : await creerBoutiqueMobile(
+              {
+                nomBoutique,
+                nomPatron: nomAdmin,
+                login,
+                motDePasse: motDePasseWeb,
+                telephone,
+                devise: 'FCFA',
+                plan: 'START',
+              },
+              'Telephone principal',
+            );
+      if (!etat.droit) {
+        throw new Error("Le serveur n'a pas renvoye la boutique.");
+      }
+      if (!etat.droit.peutEntrer) {
+        throw new Error(etat.droit.raison || "Cette boutique n'est pas active.");
+      }
+      setDroit(etat.droit);
+      setNomAdmin((valeur) => valeur || (mode === 'creation' ? nomAdmin : login) || 'Gerant');
+      setLogin((valeur) => valeur || normaliserLogin(etat.droit?.nom || 'gerant'));
+      if (mode === 'creation') {
+        setPin('');
+        setPinConfirme('');
+      }
+      setEtape(1);
+      setErreurs({});
+    } catch (erreur) {
+      setErreurGenerale(
+        erreur instanceof Error
+          ? erreur.message
+          : 'Connexion impossible. Verifiez Internet et reessayez.',
+      );
+    } finally {
+      setEnCours(false);
+    }
+  }, [
+    login,
+    mode,
+    motDePasseWeb,
+    nomAdmin,
+    nomBoutique,
+    telephone,
+    validerEtape,
+  ]);
 
   const terminer = useCallback(async () => {
+    if (!droit) {
+      setEtape(0);
+      return;
+    }
     if (!validerEtape()) return;
     setEnCours(true);
     setErreurGenerale(null);
     try {
       const db = await obtenirBase();
-      const maintenant = new Date().toISOString();
       const identifiant = login.trim();
+      const maintenant = new Date().toISOString();
 
       const existant = await db.getFirstAsync<{ n: number }>(
         'SELECT COUNT(*) AS n FROM utilisateur WHERE login = ?',
@@ -109,37 +211,18 @@ export function EcranDemarrage() {
         return;
       }
 
-      // Porte-valeur plutot qu'une variable simple : l'identifiant est produit
-      // dans la transaction et relu apres, ce qu'une variable capturee rendrait
-      // incertaine pour l'analyse de types.
       const cree = { id: 0 };
+      await ecrireParametres({
+        [CLES_PARAMETRES.nom]: droit.nom || 'Boutique',
+        [CLES_PARAMETRES.adresse]: '',
+        [CLES_PARAMETRES.telephone]: '',
+        [CLES_PARAMETRES.devise]: 'F',
+        [CLES_PARAMETRES.piedDePage]: 'Merci de votre visite',
+        [CLES_PARAMETRES.largeurPapier]: '58mm',
+        [CLES_PARAMETRES.installation]: '1',
+      });
 
       await db.withTransactionAsync(async () => {
-        const parametres: Record<string, string> = {
-          [CLES_PARAMETRES.nom]: nomBoutique.trim(),
-          [CLES_PARAMETRES.adresse]: adresse.trim(),
-          [CLES_PARAMETRES.telephone]: telephone.trim(),
-          [CLES_PARAMETRES.devise]: devise.trim(),
-          [CLES_PARAMETRES.piedDePage]: piedDePage.trim(),
-          [CLES_PARAMETRES.largeurPapier]: largeurPapier,
-          [CLES_PARAMETRES.installation]: '1',
-        };
-
-        for (const [cle, valeur] of Object.entries(parametres)) {
-          await db.runAsync(
-            `INSERT INTO parametre (cle, valeur, date_modification) VALUES (?, ?, ?)
-             ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur,
-                                            date_modification = excluded.date_modification`,
-            cle,
-            valeur,
-            maintenant,
-          );
-        }
-
-        // Le code est stocke tel quel : la base est locale au telephone et
-        // aucun module de hachage n'est disponible dans les dependances. Un
-        // code a quatre chiffres ne protege de toute facon que des erreurs de
-        // manipulation entre vendeurs, pas d'un acces physique a l'appareil.
         const insertion = await db.runAsync(
           `INSERT INTO utilisateur (login, nom, code_pin, role, actif, date_creation)
            VALUES (?, ?, ?, 'admin', 1, ?)`,
@@ -148,7 +231,6 @@ export function EcranDemarrage() {
           pin,
           maintenant,
         );
-
         cree.id = insertion.lastInsertRowId;
       });
 
@@ -166,51 +248,25 @@ export function EcranDemarrage() {
       setErreurGenerale(
         erreur instanceof Error
           ? erreur.message
-          : "L'installation n'a pas pu etre enregistree.",
+          : "L'acces local n'a pas pu etre enregistre.",
       );
       setEnCours(false);
     }
-  }, [
-    validerEtape,
-    login,
-    nomBoutique,
-    adresse,
-    telephone,
-    devise,
-    piedDePage,
-    largeurPapier,
-    nomAdmin,
-    pin,
-    recharger,
-    ouvrirSession,
-  ]);
+  }, [droit, login, nomAdmin, ouvrirSession, pin, recharger, validerEtape]);
 
   const suivant = useCallback(() => {
-    if (!validerEtape()) return;
-    if (etape < ETAPES.length - 1) {
-      setEtape(etape + 1);
-      setErreurs({});
-    } else {
-      void terminer();
+    if (etape === 0) {
+      void connecterBoutique();
+      return;
     }
-  }, [validerEtape, etape, terminer]);
+    void terminer();
+  }, [connecterBoutique, etape, terminer]);
 
   const precedent = useCallback(() => {
     setErreurs({});
-    setEtape((valeur) => Math.max(0, valeur - 1));
+    setErreurGenerale(null);
+    setEtape(0);
   }, []);
-
-  const titreEtape = useMemo(() => {
-    if (etape === 0) return 'Votre boutique';
-    if (etape === 1) return 'Le recu client';
-    return 'Votre compte';
-  }, [etape]);
-
-  const sousTitreEtape = useMemo(() => {
-    if (etape === 0) return 'Ce nom apparaitra en haut de chaque recu.';
-    if (etape === 1) return 'Reglages du ticket imprime. Tout est modifiable ensuite.';
-    return "Ce compte pourra creer les autres vendeurs.";
-  }, [etape]);
 
   return (
     <SafeAreaView style={styles.ecran} edges={['top', 'bottom']}>
@@ -223,28 +279,9 @@ export function EcranDemarrage() {
           keyboardShouldPersistTaps="handled"
         >
           <Text style={styles.marque}>SahelPOS</Text>
-          <Text style={styles.accroche}>Installation de la caisse</Text>
-
-          <View style={styles.jauge}>
-            {ETAPES.map((nom, index) => (
-              <View key={nom} style={styles.jaugeBloc}>
-                <View
-                  style={[
-                    styles.jaugeBarre,
-                    index <= etape && styles.jaugeBarreActive,
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.jaugeTexte,
-                    index === etape && styles.jaugeTexteActif,
-                  ]}
-                >
-                  {nom}
-                </Text>
-              </View>
-            ))}
-          </View>
+          <Text style={styles.accroche}>
+            {mode === 'creation' ? "Essai gratuit 14 jours." : 'Connectez-vous a votre boutique.'}
+          </Text>
 
           <Carte style={styles.carte}>
             <Text style={styles.titre}>{titreEtape}</Text>
@@ -252,67 +289,108 @@ export function EcranDemarrage() {
 
             {etape === 0 ? (
               <View>
-                <Champ
-                  label="Nom de la boutique"
-                  valeur={nomBoutique}
-                  onChangeText={setNomBoutique}
-                  placeholder="Alimentation Diarra"
-                  erreur={erreurs.nomBoutique}
-                  autoFocus
-                />
-                <Champ
-                  label="Adresse (facultatif)"
-                  valeur={adresse}
-                  onChangeText={setAdresse}
-                  placeholder="Marche de Medina, Bamako"
-                />
-                <Champ
-                  label="Telephone (facultatif)"
-                  valeur={telephone}
-                  onChangeText={setTelephone}
-                  placeholder="76 00 00 00"
-                  clavier="phone-pad"
-                />
+                {mode === 'connexion' ? (
+                  <View>
+                    <Champ
+                      label="Identifiant"
+                      valeur={login}
+                      onChangeText={setLogin}
+                      placeholder="aminata"
+                      erreur={erreurs.login}
+                      autoFocus
+                    />
+                    <Champ
+                      label="Mot de passe"
+                      valeur={motDePasseWeb}
+                      onChangeText={setMotDePasseWeb}
+                      placeholder="Votre mot de passe"
+                      retourClavier="done"
+                      onValider={() => void connecterBoutique()}
+                      secret
+                      erreur={erreurs.motDePasseWeb}
+                    />
+                    <Bouton
+                      titre="Creer un compte"
+                      variante="secondaire"
+                      onPress={() => {
+                        setMode('creation');
+                        setErreurs({});
+                        setErreurGenerale(null);
+                      }}
+                      style={styles.actionSecondaire}
+                    />
+                  </View>
+                ) : (
+                  <View>
+                    <Champ
+                      label="Nom de la boutique"
+                      valeur={nomBoutique}
+                      onChangeText={setNomBoutique}
+                      placeholder="Alimentation Diarra"
+                      erreur={erreurs.nomBoutique}
+                      autoFocus
+                    />
+                    <Champ
+                      label="Votre nom"
+                      valeur={nomAdmin}
+                      onChangeText={setNomAdmin}
+                      placeholder="Aminata Diarra"
+                      erreur={erreurs.nomAdmin}
+                    />
+                    <Champ
+                      label="Telephone"
+                      valeur={telephone}
+                      onChangeText={setTelephone}
+                      placeholder="76 00 00 00"
+                      clavier="phone-pad"
+                    />
+                    <Champ
+                      label="Identifiant"
+                      valeur={login}
+                      onChangeText={setLogin}
+                      placeholder="aminata"
+                      erreur={erreurs.login}
+                    />
+                    <Champ
+                      label="Mot de passe"
+                      valeur={motDePasseWeb}
+                      onChangeText={setMotDePasseWeb}
+                      placeholder="Minimum 6 caracteres"
+                      secret
+                      erreur={erreurs.motDePasseWeb}
+                    />
+                    <Champ
+                      label="Confirmez le mot de passe"
+                      valeur={motDePasseWebConfirme}
+                      onChangeText={setMotDePasseWebConfirme}
+                      placeholder="Minimum 6 caracteres"
+                      secret
+                      erreur={erreurs.motDePasseWebConfirme}
+                    />
+                    <Bouton
+                      titre="J'ai deja un compte"
+                      variante="secondaire"
+                      onPress={() => {
+                        setMode('connexion');
+                        setErreurs({});
+                        setErreurGenerale(null);
+                      }}
+                      style={styles.actionSecondaire}
+                    />
+                  </View>
+                )}
               </View>
             ) : null}
 
             {etape === 1 ? (
               <View>
-                <Champ
-                  label="Symbole de la monnaie"
-                  valeur={devise}
-                  onChangeText={setDevise}
-                  placeholder="F"
-                  aide="Affiche apres chaque montant. Le franc CFA n'a pas de centimes."
-                  erreur={erreurs.devise}
-                />
-
-                <Text style={styles.label}>Largeur du papier</Text>
-                <View style={styles.choix}>
-                  {(['58mm', '80mm'] as const).map((valeur) => (
-                    <Bouton
-                      key={valeur}
-                      titre={valeur}
-                      sousTitre={valeur === '58mm' ? '32 caracteres' : '48 caracteres'}
-                      variante={largeurPapier === valeur ? 'primaire' : 'secondaire'}
-                      onPress={() => setLargeurPapier(valeur)}
-                      style={styles.choixBouton}
-                    />
-                  ))}
+                <View style={styles.boutiqueConnectee}>
+                  <Text style={styles.boutiqueLibelle}>Boutique connectee</Text>
+                  <Text style={styles.boutiqueNom}>{droit?.nom || 'Boutique'}</Text>
+                  <Text style={styles.boutiqueDetail}>
+                    Plan {droit?.plan || '-'} recu depuis SahelPOS Web.
+                  </Text>
                 </View>
-
-                <Champ
-                  label="Message de bas de recu"
-                  valeur={piedDePage}
-                  onChangeText={setPiedDePage}
-                  placeholder="Merci de votre visite"
-                  style={styles.champEspace}
-                />
-              </View>
-            ) : null}
-
-            {etape === 2 ? (
-              <View>
                 <Champ
                   label="Votre nom"
                   valeur={nomAdmin}
@@ -321,7 +399,7 @@ export function EcranDemarrage() {
                   autoFocus
                 />
                 <Champ
-                  label="Identifiant de connexion"
+                  label="Identifiant local"
                   valeur={login}
                   onChangeText={setLogin}
                   placeholder="aminata"
@@ -366,7 +444,7 @@ export function EcranDemarrage() {
             />
           ) : null}
           <Bouton
-            titre={etape === ETAPES.length - 1 ? "Terminer l'installation" : 'Suivant'}
+            titre={etape === 0 ? 'Continuer' : 'Entrer dans la caisse'}
             onPress={suivant}
             enCours={enCours}
             grand
@@ -382,6 +460,12 @@ function chiffresSeuls(valeur: string): string {
   return valeur.replace(/\D/g, '').slice(0, LONGUEUR_PIN_MAX);
 }
 
+function normaliserLogin(valeur: string): string {
+  const sansAccents = valeur.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const propre = sansAccents.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return propre || 'gerant';
+}
+
 export default EcranDemarrage;
 
 const styles = StyleSheet.create({
@@ -391,29 +475,14 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: '800',
     color: couleurs.primaire,
-    letterSpacing: -0.5,
   },
   accroche: {
     fontSize: 16,
     color: couleurs.texteFaible,
     marginTop: espaces.xs,
     marginBottom: espaces.xl,
+    lineHeight: 22,
   },
-  jauge: { flexDirection: 'row', gap: espaces.s, marginBottom: espaces.l },
-  jaugeBloc: { flex: 1 },
-  jaugeBarre: {
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: couleurs.bordure,
-  },
-  jaugeBarreActive: { backgroundColor: couleurs.primaire },
-  jaugeTexte: {
-    marginTop: espaces.xs,
-    fontSize: 12,
-    fontWeight: '600',
-    color: couleurs.texteFaible,
-  },
-  jaugeTexteActif: { color: couleurs.primaire },
   carte: { marginBottom: espaces.l },
   titre: { fontSize: 22, fontWeight: '800', color: couleurs.texte },
   sousTitre: {
@@ -423,15 +492,30 @@ const styles = StyleSheet.create({
     marginBottom: espaces.l,
     lineHeight: 20,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: couleurs.texteFaible,
-    marginBottom: espaces.s,
+  actionSecondaire: { marginTop: espaces.s },
+  boutiqueConnectee: {
+    padding: espaces.m,
+    borderRadius: rayons.m,
+    backgroundColor: couleurs.succesDouce,
+    marginBottom: espaces.l,
   },
-  choix: { flexDirection: 'row', gap: espaces.m },
-  choixBouton: { flex: 1 },
-  champEspace: { marginTop: espaces.l },
+  boutiqueLibelle: {
+    color: couleurs.texteFaible,
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  boutiqueNom: {
+    color: couleurs.texte,
+    fontSize: 20,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  boutiqueDetail: {
+    color: couleurs.texteFaible,
+    fontSize: 13,
+    marginTop: 4,
+  },
   bandeauErreur: {
     marginTop: espaces.l,
     padding: espaces.m,

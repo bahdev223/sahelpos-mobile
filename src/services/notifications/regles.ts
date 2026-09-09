@@ -21,6 +21,7 @@
  * travaille douze heures par jour.
  */
 import { lireTout } from '../../db/repositories/base';
+import { seuilAlerteStock } from '../../domain/stock';
 
 import { deposer, retirer } from './journal';
 
@@ -101,29 +102,37 @@ export async function evaluerStock(produitsTouches?: number[]): Promise<number> 
     `SELECT id, nom, quantite_base, stock_min, unite_base
        FROM produit
       WHERE actif = 1 AND gestion_stock = 1
-        AND quantite_base > 0 AND quantite_base <= stock_min
-      ORDER BY (quantite_base - stock_min), nom`,
+        AND quantite_base > 0
+      ORDER BY nom`,
   );
+  const produitsBas = bas
+    .filter((p) => p.quantite_base <= seuilAlerteStock(p.stock_min))
+    .sort(
+      (a, b) =>
+        a.quantite_base / seuilAlerteStock(a.stock_min) -
+          b.quantite_base / seuilAlerteStock(b.stock_min) ||
+        a.nom.localeCompare(b.nom, 'fr'),
+    );
 
-  if (bas.length === 0) {
+  if (produitsBas.length === 0) {
     await retirer(CLE_SEUIL_GROUPE);
     return neuves;
   }
 
-  const exemples = bas
+  const exemples = produitsBas
     .slice(0, 3)
     .map((p) => `${p.nom} (${quantiteLisible(p.quantite_base)} ${p.unite_base})`)
     .join(', ');
-  const reste = bas.length > 3 ? ` et ${bas.length - 3} autre(s)` : '';
+  const reste = produitsBas.length > 3 ? ` et ${produitsBas.length - 3} autre(s)` : '';
 
   const nouveau = await deposer({
     cle: CLE_SEUIL_GROUPE,
     genre: 'seuil_groupe',
     gravite: 'attention',
     titre:
-      bas.length === 1
+      produitsBas.length === 1
         ? '1 produit est sous son seuil'
-        : `${bas.length} produits sont sous leur seuil`,
+        : `${produitsBas.length} produits sont sous leur seuil`,
     corps: `${exemples}${reste}.`,
     chemin: '/stock/alertes',
   });

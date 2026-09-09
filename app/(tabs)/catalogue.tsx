@@ -25,6 +25,7 @@ import {
 } from 'react-native';
 
 import { obtenirBase } from '../../src/db/database';
+import { seuilAlerteStock } from '../../src/domain/stock';
 import { C, formaterFrancs, formaterQuantite, s, uriImage } from '../produit/nouveau';
 import { lireParametres } from '../../src/services/parametres';
 import { catalogueHtml, genererEtPartager } from '../../src/services/pdf';
@@ -93,7 +94,9 @@ function etatStock(p: LigneCatalogue): EtatStock {
   if (p.gestion_stock === 0) return { texte: 'Stock non suivi', couleur: C.texteFaible };
   if (p.quantite_base <= 0) return { texte: 'Rupture', couleur: C.rouge };
   const quantite = `${formaterQuantite(p.quantite_base)} ${p.unite_base}`;
-  if (p.quantite_base <= p.stock_min) return { texte: quantite, couleur: C.orange };
+  if (p.quantite_base <= seuilAlerteStock(p.stock_min)) {
+    return { texte: quantite, couleur: C.orange };
+  }
   return { texte: quantite, couleur: C.vert };
 }
 

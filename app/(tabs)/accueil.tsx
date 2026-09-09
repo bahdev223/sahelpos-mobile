@@ -35,6 +35,7 @@ import { BoutonMenu } from '../../src/ui/tiroir';
 import { listerAlertesStock } from '../../src/db/repositories/produit';
 import { listerVentes, totauxPeriode } from '../../src/db/repositories/vente';
 import type { VenteResume } from '../../src/db/repositories/vente';
+import { seuilAlerteStock } from '../../src/domain/stock';
 import type { Produit } from '../../src/domain/types';
 import { compterNonLues } from '../../src/services/notifications';
 
@@ -357,7 +358,8 @@ export default function EcranAccueil() {
                       {produit.nom}
                     </Text>
                     <Text style={s.ligneSous}>
-                      Seuil {formaterQuantite(produit.stockMin)} {produit.uniteBase}
+                      Seuil {formaterQuantite(seuilAlerteStock(produit.stockMin))}{' '}
+                      {produit.uniteBase}
                     </Text>
                   </View>
                   <Text style={s.ligneRupture}>

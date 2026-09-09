@@ -138,7 +138,7 @@ export function saisieVide(): SaisieProduit {
     prixAchat: '',
     prixUnitaire: '',
     uniteBase: 'Unite',
-    stockMin: '0',
+    stockMin: '10',
     stockInitial: '',
     gestionStock: true,
     actif: true,
@@ -582,6 +582,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
   const [uniteLibre, setUniteLibre] = useState(
     !UNITES_BASE.includes(p.saisieInitiale.uniteBase as (typeof UNITES_BASE)[number]),
   );
+  const [uniteMenuOuvert, setUniteMenuOuvert] = useState(false);
   const [camera, setCamera] = useState<'code-barre' | 'photo' | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
   const [erreurGlobale, setErreurGlobale] = useState<string | null>(null);
@@ -846,27 +847,45 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
         {/* ---- Unites ---- */}
         <View style={s.carte}>
           <Text style={s.titreSection}>Unite de base</Text>
-          <View style={s.puces}>
-            {UNITES_BASE.map((u) => (
-              <Puce
-                key={u}
-                texte={u}
-                actif={!uniteLibre && saisie.uniteBase === u}
-                onPress={() => {
-                  setUniteLibre(false);
-                  modifier('uniteBase', u);
-                }}
-              />
-            ))}
-            <Puce
-              texte="Autre"
-              actif={uniteLibre}
-              onPress={() => {
-                setUniteLibre(true);
-                modifier('uniteBase', '');
-              }}
-            />
-          </View>
+          <Pressable
+            style={[s.selecteurUnite, erreurs.champs.uniteBase ? s.zoneSaisieErreur : null]}
+            onPress={() => setUniteMenuOuvert(true)}
+          >
+            <Text style={s.selecteurUniteTexte}>
+              {uniteLibre ? 'Autre unite' : saisie.uniteBase || 'Choisir'}
+            </Text>
+            <Text style={s.selecteurUniteChevron}>⌄</Text>
+          </Pressable>
+          <Modal
+            visible={uniteMenuOuvert}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setUniteMenuOuvert(false)}
+          >
+            <Pressable style={s.voileSelecteur} onPress={() => setUniteMenuOuvert(false)}>
+              <View style={s.menuUnite} onStartShouldSetResponder={() => true}>
+                <Text style={s.menuUniteTitre}>Unite de base</Text>
+                {[...UNITES_BASE, 'Autre'].map((u) => (
+                  <Pressable
+                    key={u}
+                    style={s.menuUniteOption}
+                    onPress={() => {
+                      if (u === 'Autre') {
+                        setUniteLibre(true);
+                        modifier('uniteBase', '');
+                      } else {
+                        setUniteLibre(false);
+                        modifier('uniteBase', u);
+                      }
+                      setUniteMenuOuvert(false);
+                    }}
+                  >
+                    <Text style={s.menuUniteOptionTexte}>{u}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </Pressable>
+          </Modal>
           {uniteLibre ? (
             <Champ
               libelle="Nom de l'unite"
@@ -1113,6 +1132,45 @@ export const s = StyleSheet.create({
   suffixe: { fontSize: 13, color: C.texteFaible, marginLeft: 6 },
   prefixe: { fontSize: 13, color: C.texteFaible, marginRight: 4 },
   messageErreur: { fontSize: 12, color: C.rouge },
+  selecteurUnite: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: C.bordure,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selecteurUniteTexte: { fontSize: 15, fontWeight: '600', color: C.texte },
+  selecteurUniteChevron: { fontSize: 20, color: C.texteFaible },
+  voileSelecteur: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  menuUnite: {
+    backgroundColor: C.carte,
+    borderRadius: 16,
+    padding: 10,
+    gap: 2,
+  },
+  menuUniteTitre: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: C.texte,
+    paddingHorizontal: 8,
+    paddingVertical: 10,
+  },
+  menuUniteOption: {
+    minHeight: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  menuUniteOptionTexte: { fontSize: 16, color: C.texte, fontWeight: '600' },
 
   banniereErreur: {
     backgroundColor: couleurs.dangerDouce,

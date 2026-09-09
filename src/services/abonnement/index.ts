@@ -180,13 +180,10 @@ async function appeler(chemin: string, options: RequestInit = {}): Promise<unkno
       signal: controleur.signal,
       headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
     });
-    const corps = await reponse.json().catch(() => ({}));
+    const texte = await reponse.text();
+    const corps = texte ? essayerJson(texte) : {};
     if (!reponse.ok) {
-      const detail =
-        typeof (corps as { erreur?: unknown }).erreur === 'string'
-          ? (corps as { erreur: string }).erreur
-          : "Le serveur a refuse la demande.";
-      throw new Error(detail);
+      throw new Error(messageErreurHttp(reponse.status, corps));
     }
     return corps;
   } catch (erreur) {
@@ -199,6 +196,37 @@ async function appeler(chemin: string, options: RequestInit = {}): Promise<unkno
   } finally {
     clearTimeout(minuterie);
   }
+}
+
+function essayerJson(texte: string): unknown {
+  try {
+    return JSON.parse(texte);
+  } catch {
+    return {};
+  }
+}
+
+function messageErreurHttp(statut: number, corps: unknown): string {
+  if (corps && typeof corps === 'object') {
+    const donnees = corps as { erreur?: unknown; detail?: unknown };
+    if (typeof donnees.erreur === 'string' && donnees.erreur.trim()) {
+      return donnees.erreur;
+    }
+    if (typeof donnees.detail === 'string' && donnees.detail.trim()) {
+      return donnees.detail;
+    }
+  }
+
+  if (statut === 404) {
+    return "Le serveur SahelPOS n'est pas encore a jour pour l'application mobile.";
+  }
+  if (statut === 401 || statut === 403) {
+    return "Identifiant ou mot de passe incorrect.";
+  }
+  if (statut >= 500) {
+    return 'Le serveur SahelPOS a rencontre une erreur. Reessayez plus tard.';
+  }
+  return `Le serveur a refuse la demande (${statut}).`;
 }
 
 /**
@@ -223,6 +251,76 @@ export async function activer(code: string, libelle = ''): Promise<EtatAbonnemen
 
   // On verifie AVANT d'enregistrer : mieux vaut echouer sur-le-champ que
   // stocker un droit que l'application refusera a la prochaine ouverture.
+  lireDroit(reponse.licence);
+
+  await ecrireCle(CLE_LICENCE, reponse.licence);
+  await ecrireCle(CLE_APPAREIL, reponse.jeton_appareil);
+  await ecrireCle(CLE_DERNIER_CONTACT, new Date().toISOString());
+  return etatCourant();
+}
+
+export interface InscriptionMobile {
+  nomBoutique: string;
+  nomPatron: string;
+  login: string;
+  motDePasse: string;
+  telephone?: string;
+  devise?: string;
+  plan?: string;
+}
+
+export async function connecterCompteMobile(
+  login: string,
+  motDePasse: string,
+  libelle = '',
+): Promise<EtatAbonnement> {
+  const empreinte = await empreinteAppareil();
+  const reponse = (await appeler('/api/public/mobile/connexion/', {
+    method: 'POST',
+    body: JSON.stringify({
+      login,
+      mot_de_passe: motDePasse,
+      empreinte,
+      libelle,
+    }),
+  })) as { licence?: string; jeton_appareil?: string };
+
+  if (!reponse.licence || !reponse.jeton_appareil) {
+    throw new Error("Le serveur n'a pas renvoye de droit d acces.");
+  }
+
+  lireDroit(reponse.licence);
+
+  await ecrireCle(CLE_LICENCE, reponse.licence);
+  await ecrireCle(CLE_APPAREIL, reponse.jeton_appareil);
+  await ecrireCle(CLE_DERNIER_CONTACT, new Date().toISOString());
+  return etatCourant();
+}
+
+export async function creerBoutiqueMobile(
+  saisie: InscriptionMobile,
+  libelle = '',
+): Promise<EtatAbonnement> {
+  const empreinte = await empreinteAppareil();
+  const reponse = (await appeler('/api/public/mobile/inscription/', {
+    method: 'POST',
+    body: JSON.stringify({
+      nom_boutique: saisie.nomBoutique,
+      nom_patron: saisie.nomPatron,
+      login: saisie.login,
+      mot_de_passe: saisie.motDePasse,
+      telephone: saisie.telephone ?? '',
+      devise: saisie.devise ?? 'FCFA',
+      plan: saisie.plan ?? 'START',
+      empreinte,
+      libelle,
+    }),
+  })) as { licence?: string; jeton_appareil?: string };
+
+  if (!reponse.licence || !reponse.jeton_appareil) {
+    throw new Error("Le serveur n'a pas renvoye de droit d acces.");
+  }
+
   lireDroit(reponse.licence);
 
   await ecrireCle(CLE_LICENCE, reponse.licence);
