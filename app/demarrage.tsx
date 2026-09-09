@@ -11,6 +11,7 @@
  */
 import { useCallback, useMemo, useState } from 'react';
 import {
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -278,7 +279,16 @@ export function EcranDemarrage() {
           contentContainerStyle={styles.contenu}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={styles.marque}>SahelPOS</Text>
+          <View style={styles.entete}>
+            <Image
+              source={require('../assets/logo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+              accessible
+              accessibilityLabel="Logo SahelPOS"
+            />
+            <Text style={styles.marque}>SahelPOS</Text>
+          </View>
           <Text style={styles.accroche}>
             {mode === 'creation' ? "Essai gratuit 14 jours." : 'Connectez-vous a votre boutique.'}
           </Text>
@@ -471,10 +481,20 @@ export default EcranDemarrage;
 const styles = StyleSheet.create({
   ecran: { flex: 1, backgroundColor: couleurs.fond },
   contenu: { padding: espaces.l, paddingBottom: espaces.xxl },
+  entete: {
+    alignItems: 'center',
+    marginTop: espaces.m,
+  },
+  logo: {
+    width: 86,
+    height: 86,
+    marginBottom: espaces.s,
+  },
   marque: {
     fontSize: 30,
     fontWeight: '800',
     color: couleurs.primaire,
+    textAlign: 'center',
   },
   accroche: {
     fontSize: 16,
@@ -482,6 +502,7 @@ const styles = StyleSheet.create({
     marginTop: espaces.xs,
     marginBottom: espaces.xl,
     lineHeight: 22,
+    textAlign: 'center',
   },
   carte: { marginBottom: espaces.l },
   titre: { fontSize: 22, fontWeight: '800', color: couleurs.texte },

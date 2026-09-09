@@ -58,7 +58,9 @@ export type NomIcone =
   | 'graphique'
   | 'argent'
   | 'etiquette'
-  | 'document';
+  | 'document'
+  | 'oeil'
+  | 'oeilFerme';
 
 /**
  * Traces, en syntaxe `d` de SVG.
@@ -101,6 +103,11 @@ const TRACES: Record<NomIcone, string[]> = {
   graphique: ['M4 20V4', 'M4 20h16', 'M8 17v-5', 'M12.5 17V8', 'M17 17v-8'],
   argent: ['M3 7h18v10H3z', 'M12 14.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5', 'M6.5 10.5h.01', 'M17.5 13.5h.01'],
   etiquette: ['M4 4h7l9 9-7 7-9-9z', 'M8 8h.01'],
+  oeil: ['M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z',
+         'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6'],
+  oeilFerme: ['M3 3l18 18', 'M10.6 10.6A3 3 0 0 0 13.4 13.4',
+              'M9.9 5.2A10.5 10.5 0 0 1 12 5c6 0 9.5 7 9.5 7a15.5 15.5 0 0 1-3.1 3.8',
+              'M6.6 6.5C3.9 8.3 2.5 12 2.5 12s3.5 7 9.5 7a9.6 9.6 0 0 0 4-.9'],
   // Feuille avec un coin plie : le document qu'on exporte et qu'on envoie.
   document: ['M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z',
              'M14 3v5h5', 'M9 13h6', 'M9 17h4'],

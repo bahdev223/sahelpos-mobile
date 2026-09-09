@@ -13,7 +13,7 @@
  * clairs sur blanc disparaissent dehors, d'ou un texte tres fonce sur des fonds
  * francs plutot qu'une palette pastel.
  */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -45,6 +45,7 @@ export const CIBLE_MIN = 48;
 import { File, Paths } from 'expo-file-system';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Icone } from '../icones';
 import { couleurs, espaces, rayons } from '../theme';
 export { couleurs, espaces, rayons };
 
@@ -211,29 +212,54 @@ export function Champ({
   alignerADroite = false,
   style,
 }: ProprietesChamp) {
+  const [secretVisible, setSecretVisible] = useState(false);
+
   return (
     <View style={[stylesChamp.bloc, style]}>
       {label ? <Text style={stylesChamp.label}>{label}</Text> : null}
-      <TextInput
-        value={valeur}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={couleurs.texteFaible}
-        keyboardType={clavier}
-        returnKeyType={retourClavier}
-        onSubmitEditing={onValider}
-        secureTextEntry={secret}
-        autoFocus={autoFocus}
-        editable={editable}
-        autoCapitalize="none"
-        autoCorrect={false}
-        style={[
-          stylesChamp.saisie,
-          alignerADroite && stylesChamp.saisieDroite,
-          !editable && stylesChamp.saisieBloquee,
-          erreur ? stylesChamp.saisieEnErreur : null,
-        ]}
-      />
+      <View>
+        <TextInput
+          value={valeur}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={couleurs.texteFaible}
+          keyboardType={clavier}
+          returnKeyType={retourClavier}
+          onSubmitEditing={onValider}
+          secureTextEntry={secret && !secretVisible}
+          autoFocus={autoFocus}
+          editable={editable}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={[
+            stylesChamp.saisie,
+            secret && stylesChamp.saisieAvecSecret,
+            alignerADroite && stylesChamp.saisieDroite,
+            !editable && stylesChamp.saisieBloquee,
+            erreur ? stylesChamp.saisieEnErreur : null,
+          ]}
+        />
+        {secret ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={secretVisible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+            onPress={() => setSecretVisible((visible) => !visible)}
+            disabled={!editable}
+            hitSlop={8}
+            style={({ pressed }) => [
+              stylesChamp.boutonSecret,
+              pressed && stylesChamp.boutonSecretPresse,
+              !editable && stylesChamp.boutonSecretInactif,
+            ]}
+          >
+            <Icone
+              nom={secretVisible ? 'oeilFerme' : 'oeil'}
+              taille={22}
+              couleur={couleurs.texteFaible}
+            />
+          </Pressable>
+        ) : null}
+      </View>
       {erreur ? (
         <Text style={stylesChamp.erreur}>{erreur}</Text>
       ) : aide ? (
@@ -262,9 +288,22 @@ const stylesChamp = StyleSheet.create({
     fontSize: 17,
     color: couleurs.texte,
   },
+  saisieAvecSecret: { paddingRight: 58 },
   saisieDroite: { textAlign: 'right', fontSize: 22, fontWeight: '700' },
   saisieBloquee: { backgroundColor: couleurs.surfaceDouce },
   saisieEnErreur: { borderColor: couleurs.danger, borderWidth: 2 },
+  boutonSecret: {
+    position: 'absolute',
+    right: 6,
+    top: 0,
+    bottom: 0,
+    width: 48,
+    minHeight: CIBLE_MIN,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  boutonSecretPresse: { opacity: 0.6 },
+  boutonSecretInactif: { opacity: 0.35 },
   erreur: { marginTop: espaces.xs, fontSize: 13, color: couleurs.danger },
   aide: { marginTop: espaces.xs, fontSize: 13, color: couleurs.texteFaible },
 });
