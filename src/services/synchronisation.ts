@@ -17,6 +17,8 @@ import { jetonAppareil } from './abonnement';
 const SERVEUR = 'https://sahelpos.saheltech.tech';
 const DELAI_RESEAU = 20000;
 const CLE_CURSOR = 'sync.cursor';
+const CLE_BOUTIQUE = 'sync.boutique';
+const CLE_BOOTSTRAP = 'sync.bootstrap_effectue';
 
 type TypeObjet = 'produit' | 'client' | 'fournisseur' | 'vente' | 'mouvement';
 
@@ -36,6 +38,8 @@ interface ProduitSync {
   quantite_base: number | string;
   stock_min: number | string;
   gestion_stock: boolean | number;
+  chemin_image?: string | null;
+  image_url?: string | null;
   actif: boolean | number;
   date_creation?: string | null;
   date_modification?: string | null;
@@ -127,6 +131,13 @@ export interface ResultatSynchronisation {
   cursor: string;
 }
 
+export class SynchronisationImpossible extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SynchronisationImpossible';
+  }
+}
+
 export async function marquerChangement(
   typeObjet: TypeObjet,
   idLocal: string,
@@ -184,6 +195,52 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
   await ecrireParam(CLE_CURSOR, pull.cursor);
 
   return { pousses, recus, cursor: pull.cursor };
+}
+
+export async function bootstrapInitial(boutiqueId: string): Promise<ResultatSynchronisation> {
+  const boutiqueCourante = await lireParam(CLE_BOUTIQUE);
+  const dejaPret = await lireParam(CLE_BOOTSTRAP);
+  if (boutiqueCourante === boutiqueId && dejaPret === '1') {
+    return synchroniser();
+  }
+
+  if (boutiqueCourante && boutiqueCourante !== boutiqueId) {
+    await viderDonneesMetier();
+  }
+
+  await ecrireParam(CLE_BOUTIQUE, boutiqueId);
+  await ecrireParam(CLE_CURSOR, '');
+
+  try {
+    const resultat = await synchroniser();
+    await ecrireParam(CLE_BOOTSTRAP, '1');
+    return resultat;
+  } catch (erreur) {
+    await ecrireParam(CLE_BOOTSTRAP, '0');
+    throw new SynchronisationImpossible(
+      erreur instanceof Error
+        ? erreur.message
+        : "La premiere synchronisation n'a pas pu etre terminee.",
+    );
+  }
+}
+
+async function viderDonneesMetier(): Promise<void> {
+  await dansTransaction(async () => {
+    await executer('DELETE FROM sync_outbox');
+    await executer('DELETE FROM ligne_vente');
+    await executer('DELETE FROM vente');
+    await executer('DELETE FROM mouvement_stock');
+    await executer('DELETE FROM ligne_achat');
+    await executer('DELETE FROM paiement_achat');
+    await executer('DELETE FROM achat');
+    await executer('DELETE FROM ligne_inventaire');
+    await executer('DELETE FROM inventaire');
+    await executer('DELETE FROM sous_unite');
+    await executer('DELETE FROM produit');
+    await executer('DELETE FROM client');
+    await executer('DELETE FROM fournisseur');
+  });
 }
 
 async function appeler<T>(
@@ -347,8 +404,9 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
   await executer(
     `INSERT INTO produit (id_local, nom, categorie, code_barre, prix_unitaire,
                           prix_achat, unite_base, quantite_base, stock_min,
-                          gestion_stock, actif, date_creation, date_modification)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          gestion_stock, chemin_image, actif, date_creation,
+                          date_modification)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id_local) DO UPDATE SET
        nom = excluded.nom,
        categorie = excluded.categorie,
@@ -359,18 +417,20 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
        quantite_base = excluded.quantite_base,
        stock_min = excluded.stock_min,
        gestion_stock = excluded.gestion_stock,
+       chemin_image = excluded.chemin_image,
        actif = excluded.actif,
        date_modification = excluded.date_modification`,
     p.id_local,
     p.nom,
     p.categorie ?? null,
     p.code_barre ?? null,
-    Number(p.prix_unitaire ?? 0),
-    Number(p.prix_achat ?? 0),
+    nombre(p.prix_unitaire),
+    nombre(p.prix_achat),
     p.unite_base || 'Unite',
-    Number(p.quantite_base ?? 0),
-    Number(p.stock_min ?? 0),
+    nombre(p.quantite_base),
+    nombre(p.stock_min),
     p.gestion_stock ? 1 : 0,
+    p.chemin_image ?? p.image_url ?? null,
     p.supprime_le ? 0 : p.actif ? 1 : 0,
     p.date_creation ?? maintenant(),
     p.date_modification ?? maintenant(),
@@ -386,8 +446,8 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
       'INSERT INTO sous_unite (produit_id, nom, facteur, prix) VALUES (?, ?, ?, ?)',
       local.id,
       su.nom,
-      Number(su.facteur ?? 1),
-      Number(su.prix ?? 0),
+      nombre(su.facteur, 1),
+      nombre(su.prix),
     );
   }
 }
@@ -458,11 +518,11 @@ async function appliquerVente(v: VenteSync): Promise<void> {
     v.numero,
     client?.id ?? null,
     v.date_vente,
-    Number(v.total ?? 0),
-    Number(v.montant_paye ?? 0),
+    nombre(v.total),
+    nombre(v.montant_paye),
     v.mode_paiement,
     v.statut,
-    Number(v.benefice_total ?? 0),
+    nombre(v.benefice_total),
   );
   for (const l of v.lignes ?? []) {
     const produit = await lirePremier<{ id: number }>(
@@ -479,13 +539,13 @@ async function appliquerVente(v: VenteSync): Promise<void> {
       produit.id,
       l.libelle,
       l.unite,
-      Number(l.facteur ?? 1),
-      Number(l.quantite ?? 0),
-      Number(l.quantite_base ?? 0),
-      Number(l.prix_unitaire ?? 0),
-      Number(l.cout_unitaire ?? 0),
-      Number(l.total ?? 0),
-      Number(l.benefice_total ?? 0),
+      nombre(l.facteur, 1),
+      nombre(l.quantite),
+      nombre(l.quantite_base),
+      nombre(l.prix_unitaire),
+      nombre(l.cout_unitaire),
+      nombre(l.total),
+      nombre(l.benefice_total),
     );
   }
 }
@@ -511,12 +571,12 @@ async function appliquerMouvement(m: MouvementSync): Promise<void> {
     produit.id,
     m.nature === 'CORRECTION' ? 'AJUSTEMENT' : m.nature,
     m.source,
-    Number(m.quantite ?? 0),
+    nombre(m.quantite),
     m.unite ?? null,
-    Number(m.quantite_base ?? 0),
-    m.stock_avant === null || m.stock_avant === undefined ? null : Number(m.stock_avant),
-    m.stock_apres === null || m.stock_apres === undefined ? null : Number(m.stock_apres),
-    m.prix_unitaire === null || m.prix_unitaire === undefined ? null : Number(m.prix_unitaire),
+    nombre(m.quantite_base),
+    nombreOptionnel(m.stock_avant),
+    nombreOptionnel(m.stock_apres),
+    nombreOptionnel(m.prix_unitaire),
     m.reference ?? null,
     m.motif ?? null,
     m.utilisateur ?? null,
@@ -545,4 +605,15 @@ async function ecrireParam(cle: string, valeur: string): Promise<void> {
 
 function placeholders(valeurs: unknown[]): string {
   return valeurs.map(() => '?').join(', ');
+}
+
+function nombre(valeur: number | string | null | undefined, defaut = 0): number {
+  const n = Number(valeur ?? defaut);
+  return Number.isFinite(n) ? n : defaut;
+}
+
+function nombreOptionnel(valeur: number | string | null | undefined): number | null {
+  if (valeur === null || valeur === undefined || valeur === '') return null;
+  const n = Number(valeur);
+  return Number.isFinite(n) ? n : null;
 }

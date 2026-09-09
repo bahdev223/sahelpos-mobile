@@ -21,9 +21,12 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { obtenirBase } from '../src/db/database';
-import { rafraichir as rafraichirAbonnement } from '../src/services/abonnement';
+import {
+  etatCourant as etatAbonnementCourant,
+  rafraichir as rafraichirAbonnement,
+} from '../src/services/abonnement';
 import { verifierStock } from '../src/services/notifications';
-import { synchroniser } from '../src/services/synchronisation';
+import { bootstrapInitial, synchroniser } from '../src/services/synchronisation';
 import type { Role, Utilisateur } from '../src/domain/types';
 import type { LargeurPapier } from '../src/services/impression/escpos';
 import { Chargement, Erreur, couleurs } from '../src/ui/components';
@@ -211,7 +214,14 @@ export default function DispositionRacine() {
   // caisse est ouverte, mais une coupure reseau ne bloque jamais le comptoir.
   useEffect(() => {
     if (!pileMontee) return;
-    void synchroniser().catch(() => {});
+    void (async () => {
+      const etat = await etatAbonnementCourant();
+      if (etat.droit?.boutique) {
+        await bootstrapInitial(etat.droit.boutique);
+        return;
+      }
+      await synchroniser();
+    })().catch(() => {});
   }, [pileMontee]);
 
   // L'aiguillage de la racine est fait par app/index.tsx, qui redirige vers

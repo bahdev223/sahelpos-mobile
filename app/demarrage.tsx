@@ -28,6 +28,7 @@ import {
   creerBoutiqueMobile,
   type Droit,
 } from '../src/services/abonnement';
+import { bootstrapInitial } from '../src/services/synchronisation';
 import {
   Bouton,
   Carte,
@@ -161,6 +162,7 @@ export function EcranDemarrage() {
       if (!etat.droit.peutEntrer) {
         throw new Error(etat.droit.raison || "Cette boutique n'est pas active.");
       }
+      await bootstrapInitial(etat.droit.boutique);
       setDroit(etat.droit);
       setNomAdmin((valeur) => valeur || (mode === 'creation' ? nomAdmin : login) || 'Gerant');
       setLogin((valeur) => valeur || normaliserLogin(etat.droit?.nom || 'gerant'));

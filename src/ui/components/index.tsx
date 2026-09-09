@@ -522,7 +522,12 @@ export function BandeauEtat({ fond = couleurs.surface }: { fond?: string }) {
  */
 export function uriImage(cheminRelatif: string | null): string | null {
   if (!cheminRelatif) return null;
-  if (cheminRelatif.startsWith('file://') || cheminRelatif.startsWith('content://')) {
+  if (
+    cheminRelatif.startsWith('file://') ||
+    cheminRelatif.startsWith('content://') ||
+    cheminRelatif.startsWith('http://') ||
+    cheminRelatif.startsWith('https://')
+  ) {
     return cheminRelatif;
   }
   try {
