@@ -828,64 +828,70 @@ function LigneProduitStock(p: {
 
   return (
     <Pressable style={sl.carteProduit} onPress={p.onOuvrir} accessibilityRole="button">
-      <Vignette chemin={p.produit.chemin_image} nom={p.produit.nom} taille={86} />
-        <View style={sl.carteProduitTextes}>
-          <Text style={sl.nom} numberOfLines={2}>
-            {p.produit.nom}
-          </Text>
-          <Text style={sl.detail} numberOfLines={1}>
-            {p.produit.categorie || 'Sans categorie'}
-          </Text>
-          <Text style={sl.meta}>Code : {p.produit.code_barre || '-'}</Text>
-          <Pressable style={sl.codeBarres} onPress={p.onJournal}>
-            <Text style={sl.codeBarresTexte}>||||</Text>
-          </Pressable>
-        </View>
-        <View style={sl.carteProduitDroite}>
-          <View
+      <Vignette chemin={p.produit.chemin_image} nom={p.produit.nom} taille={72} />
+      <View style={sl.carteProduitCorps}>
+        <View style={sl.carteProduitHaut}>
+          <View style={sl.carteProduitTextes}>
+            <Text style={sl.nom} numberOfLines={2} adjustsFontSizeToFit>
+              {p.produit.nom}
+            </Text>
+            <Text style={sl.detail} numberOfLines={1}>
+              {p.produit.categorie || 'Sans categorie'}
+            </Text>
+            <Text style={sl.meta} numberOfLines={1}>Code : {p.produit.code_barre || '-'}</Text>
+          </View>
+          <View style={sl.carteProduitActions}>
+            <View
             style={[
               sl.badgeStock,
               rupture ? sl.badgeRupture : alerte ? sl.badgeAlerte : sl.badgeOk,
             ]}>
-            <View
-              style={[
-                sl.pointEtat,
-                { backgroundColor: rupture ? C.rouge : alerte ? C.orange : C.vert },
-              ]}
-            />
-            <Text
-              style={[
-                sl.badgeStockTexte,
-                { color: rupture ? C.rouge : alerte ? C.orange : C.vert },
-              ]}>
-              {rupture ? 'Rupture' : alerte ? 'Stock faible' : 'En stock'}
-            </Text>
-          </View>
-          <View style={sl.chiffresStock}>
-            <View>
-              <Text style={sl.libelleChiffre}>Quantite</Text>
-              <Text style={sl.quantite}>
-                {formaterQuantite(p.produit.quantite_base)}{' '}
-                <Text style={sl.unite}>{p.produit.unite_base}</Text>
+              <View
+                style={[
+                  sl.pointEtat,
+                  { backgroundColor: rupture ? C.rouge : alerte ? C.orange : C.vert },
+                ]}
+              />
+              <Text
+                style={[
+                  sl.badgeStockTexte,
+                  { color: rupture ? C.rouge : alerte ? C.orange : C.vert },
+                ]}
+                numberOfLines={1}
+              >
+                {rupture ? 'Rupture' : alerte ? 'Stock faible' : 'En stock'}
               </Text>
             </View>
-            <View style={sl.separateurVertical} />
-            <View>
+            <Pressable style={sl.menuProduit} onPress={p.onJournal} hitSlop={8}>
+              <Text style={sl.menuProduitTexte}>⋮</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={sl.carteProduitBas}>
+          <View style={sl.chiffresStock}>
+            <View style={sl.blocChiffre}>
+              <Text style={sl.libelleChiffre}>Quantite</Text>
+              <Text style={sl.quantite} numberOfLines={1} adjustsFontSizeToFit>
+                {formaterQuantite(p.produit.quantite_base)} <Text style={sl.unite}>{p.produit.unite_base}</Text>
+              </Text>
+            </View>
+            <View style={sl.blocSeuil}>
               <Text style={sl.libelleChiffre}>Seuil</Text>
-              <Text style={sl.seuil}>{formaterQuantite(seuil)}</Text>
+              <Text style={sl.seuil} numberOfLines={1}>{formaterQuantite(seuil)}</Text>
             </View>
           </View>
           <View style={sl.prixAchat}>
-            <Icone nom="achats" taille={20} couleur={C.accent} />
+            <Icone nom="achats" taille={18} couleur={C.accent} />
             <View>
-              <Text style={sl.prixAchatValeur}>{formaterFrancs(p.produit.prix_achat)}</Text>
+              <Text style={sl.prixAchatValeur} numberOfLines={1} adjustsFontSizeToFit>
+                {formaterFrancs(p.produit.prix_achat)}
+              </Text>
               <Text style={sl.prixAchatLibelle}>Prix d'achat</Text>
             </View>
           </View>
         </View>
-      <Pressable style={sl.menuProduit} onPress={p.onJournal} hitSlop={8}>
-        <Text style={sl.menuProduitTexte}>⋮</Text>
-      </Pressable>
+      </View>
     </Pressable>
   );
 }
@@ -899,22 +905,22 @@ const sl = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 9,
     backgroundColor: C.carte,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.bordure,
   },
   enteteTitre: { flex: 1 },
-  titreEcran: { fontSize: 23, fontWeight: '800', color: C.texte },
-  sousTitreEcran: { marginTop: 1, fontSize: 14, color: C.texteFaible },
-  enteteActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  titreEcran: { fontSize: 21, fontWeight: '900', color: C.texte },
+  sousTitreEcran: { marginTop: 0, fontSize: 13, color: C.texteFaible },
+  enteteActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   boutonIcone: {
-    width: 48,
-    height: 48,
-    borderRadius: 13,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: C.bordure,
     backgroundColor: C.carte,
@@ -937,31 +943,31 @@ const sl = StyleSheet.create({
     lineHeight: 22,
   },
   boutonBoutique: {
-    minWidth: 138,
-    maxWidth: 174,
-    height: 48,
-    borderRadius: 13,
+    minWidth: 104,
+    maxWidth: 128,
+    height: 44,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: C.bordure,
     backgroundColor: C.carte,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 10,
+    gap: 6,
+    paddingHorizontal: 8,
   },
   initialesBoutique: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: C.accent,
     color: '#FFFFFF',
     textAlign: 'center',
-    lineHeight: 32,
+    lineHeight: 30,
     fontSize: 12,
     fontWeight: '900',
   },
-  nomBoutique: { flex: 1, minWidth: 0, color: C.texte, fontSize: 13, fontWeight: '800' },
+  nomBoutique: { flex: 1, minWidth: 0, color: C.texte, fontSize: 12, fontWeight: '800' },
   chevronBoutique: { color: C.texteFaible, fontSize: 18, fontWeight: '900' },
 
   tete: { gap: 12, paddingBottom: 4 },
@@ -993,57 +999,60 @@ const sl = StyleSheet.create({
   banniereFleche: { fontSize: 18, color: C.texteFaible, fontWeight: '700' },
 
   recherche: {
-    minHeight: 56,
+    minHeight: 52,
     backgroundColor: C.carte,
-    borderRadius: 16,
-    paddingHorizontal: 14,
+    borderRadius: 14,
+    paddingHorizontal: 12,
   },
   effacer: { fontSize: 12, color: C.accent, fontWeight: '600' },
   puces: { gap: 10, paddingVertical: 2, alignItems: 'center' },
   puceEtat: {
-    minHeight: 44,
-    paddingHorizontal: 18,
-    borderRadius: 22,
+    minHeight: 40,
+    paddingHorizontal: 14,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: C.bordure,
     backgroundColor: C.carte,
     justifyContent: 'center',
   },
   puceEtatActive: { backgroundColor: C.accent, borderColor: C.accent },
-  puceEtatTexte: { color: C.texteFaible, fontSize: 14, fontWeight: '700' },
+  puceEtatTexte: { color: C.texteFaible, fontSize: 13, fontWeight: '800' },
   puceEtatTexteActive: { color: '#FFFFFF' },
   puceCategorie: {
-    minHeight: 44,
+    minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 18,
-    borderRadius: 22,
+    paddingHorizontal: 14,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: C.bordure,
     backgroundColor: C.carte,
   },
-  puceCategorieTexte: { color: C.texte, fontSize: 14, fontWeight: '700' },
+  puceCategorieTexte: { color: C.texte, fontSize: 13, fontWeight: '800' },
   chevron: { color: C.texteFaible, fontSize: 18, fontWeight: '800' },
 
-  liste: { padding: 12, paddingBottom: 112, gap: 10 },
+  liste: { padding: 10, paddingBottom: 112, gap: 9 },
   listeVide: { flexGrow: 1, padding: 12, paddingBottom: 112 },
 
   carteProduit: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    alignItems: 'flex-start',
+    gap: 10,
     backgroundColor: C.carte,
-    borderRadius: 15,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: C.bordure,
-    padding: 12,
+    padding: 10,
   },
-  carteProduitTextes: { flex: 1, minWidth: 0, gap: 4 },
-  carteProduitDroite: { alignItems: 'stretch', gap: 8, width: 128 },
-  nom: { fontSize: 16, fontWeight: '800', color: C.texte, lineHeight: 20 },
-  detail: { fontSize: 13, color: C.texteFaible },
-  meta: { fontSize: 13, color: C.texteFaible },
+  carteProduitCorps: { flex: 1, minWidth: 0, gap: 8 },
+  carteProduitHaut: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  carteProduitTextes: { flex: 1, minWidth: 0, gap: 2 },
+  carteProduitActions: { alignItems: 'flex-end', gap: 2, maxWidth: 104 },
+  carteProduitBas: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  nom: { fontSize: 14, fontWeight: '900', color: C.texte, lineHeight: 17 },
+  detail: { fontSize: 12, color: C.texteFaible },
+  meta: { fontSize: 12, color: C.texteFaible },
   metaAlerte: { fontSize: 11, color: C.orange, fontWeight: '600' },
   codeBarres: {
     marginTop: 4,
@@ -1059,35 +1068,37 @@ const sl = StyleSheet.create({
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    gap: 5,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   badgeOk: { backgroundColor: couleurs.succesDouce },
   badgeAlerte: { backgroundColor: couleurs.avertissementDouce },
   badgeRupture: { backgroundColor: couleurs.dangerDouce },
-  pointEtat: { width: 8, height: 8, borderRadius: 4 },
-  badgeStockTexte: { fontSize: 12, fontWeight: '800' },
-  chiffresStock: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  libelleChiffre: { fontSize: 11, color: C.texteFaible, marginBottom: 1 },
-  quantite: { fontSize: 18, fontWeight: '900', color: C.texte },
-  unite: { fontSize: 12, fontWeight: '500', color: C.texteFaible },
-  seuil: { fontSize: 18, fontWeight: '900', color: C.orange },
-  separateurVertical: { width: 1, height: 34, backgroundColor: C.bordure },
+  pointEtat: { width: 7, height: 7, borderRadius: 4 },
+  badgeStockTexte: { fontSize: 11, fontWeight: '900' },
+  chiffresStock: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  blocChiffre: { flex: 1, minWidth: 0 },
+  blocSeuil: { width: 46 },
+  libelleChiffre: { fontSize: 10, color: C.texteFaible, marginBottom: 1 },
+  quantite: { fontSize: 16, fontWeight: '900', color: C.texte },
+  unite: { fontSize: 11, fontWeight: '500', color: C.texteFaible },
+  seuil: { fontSize: 16, fontWeight: '900', color: C.orange },
   prixAchat: {
-    minHeight: 46,
+    width: 116,
+    minHeight: 42,
     borderRadius: 10,
     backgroundColor: couleurs.primaireDouce,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
-    paddingHorizontal: 10,
+    gap: 7,
+    paddingHorizontal: 9,
   },
-  prixAchatValeur: { fontSize: 14, color: C.accent, fontWeight: '900' },
-  prixAchatLibelle: { fontSize: 11, color: C.texteFaible },
-  menuProduit: { width: 22, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
-  menuProduitTexte: { fontSize: 24, color: C.texteFaible, fontWeight: '800' },
+  prixAchatValeur: { fontSize: 13, color: C.accent, fontWeight: '900' },
+  prixAchatLibelle: { fontSize: 10, color: C.texteFaible },
+  menuProduit: { width: 28, height: 24, alignItems: 'center', justifyContent: 'center' },
+  menuProduitTexte: { fontSize: 22, color: C.texteFaible, fontWeight: '800', lineHeight: 22 },
 
   pied: { paddingVertical: 16, fontSize: 12, color: C.texteFaible, textAlign: 'center' },
 
