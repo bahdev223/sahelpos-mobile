@@ -123,44 +123,41 @@ export default function EcranTableauDeBord() {
           />
         }
       >
-        <Carte titre="Aujourd'hui">
-          <Montant valeur={jour?.chiffreAffaires ?? 0} taille="grand" />
-          <View style={styles.sousChiffres}>
-            <Bloc
-              libelle="Ventes"
-              valeur={String(jour?.nbVentes ?? 0)}
-            />
-            <Bloc
-              libelle="Benefice"
-              valeur={formaterMontant(jour?.benefice ?? 0)}
-              couleur={couleurs.primaire}
-            />
-            <Bloc
-              libelle="Encaisse"
-              valeur={formaterMontant(jour?.encaisse ?? 0)}
-            />
-          </View>
-        </Carte>
-
-        <Carte titre="Ce mois-ci">
-          <View style={styles.moisLigne}>
-            <View>
-              <Text style={styles.moisLibelle}>Chiffre d'affaires</Text>
-              <Montant valeur={mois?.chiffreAffaires ?? 0} taille="moyen" />
-            </View>
-            <View style={styles.moisDroite}>
-              <Text style={styles.moisLibelle}>Benefice</Text>
-              <Montant
-                valeur={mois?.benefice ?? 0}
-                taille="moyen"
-                couleur={couleurs.primaire}
-              />
-            </View>
-          </View>
-          <Text style={styles.moisDetail}>
-            {mois?.nbVentes ?? 0} vente{(mois?.nbVentes ?? 0) > 1 ? 's' : ''} depuis le 1er
-          </Text>
-        </Carte>
+        <View style={styles.grilleChiffres}>
+          <MiniCarte
+            libelle="CA aujourd'hui"
+            valeur={formaterMontant(jour?.chiffreAffaires ?? 0)}
+            detail={`${jour?.nbVentes ?? 0} vente${(jour?.nbVentes ?? 0) > 1 ? 's' : ''}`}
+          />
+          <MiniCarte
+            libelle="Benefice"
+            valeur={formaterMontant(jour?.benefice ?? 0)}
+            couleur={couleurs.primaire}
+            detail="aujourd'hui"
+          />
+          <MiniCarte
+            libelle="Encaisse"
+            valeur={formaterMontant(jour?.encaisse ?? 0)}
+            detail="aujourd'hui"
+          />
+          <MiniCarte
+            libelle="CA mois"
+            valeur={formaterMontant(mois?.chiffreAffaires ?? 0)}
+            detail={`${mois?.nbVentes ?? 0} vente${(mois?.nbVentes ?? 0) > 1 ? 's' : ''}`}
+          />
+          <MiniCarte
+            libelle="Benefice mois"
+            valeur={formaterMontant(mois?.benefice ?? 0)}
+            couleur={couleurs.primaire}
+            detail="depuis le 1er"
+          />
+          <MiniCarte
+            libelle="Stock a surveiller"
+            valeur={String(alertes.length)}
+            couleur={alertes.length > 0 ? couleurs.danger : couleurs.primaire}
+            detail={alertes.length > 0 ? 'a reapprovisionner' : 'stock calme'}
+          />
+        </View>
 
         {/* Ce qui est du a la boutique : un credit oublie est de l'argent
             perdu, il doit rester sous les yeux. */}
@@ -236,28 +233,64 @@ export default function EcranTableauDeBord() {
   );
 }
 
-function Bloc({
+function MiniCarte({
   libelle,
   valeur,
+  detail,
   couleur,
 }: {
   libelle: string;
   valeur: string;
+  detail: string;
   couleur?: string;
 }) {
   return (
-    <View style={styles.bloc}>
-      <Text style={styles.blocLibelle}>{libelle}</Text>
-      <Text style={[styles.blocValeur, couleur ? { color: couleur } : null]}>
+    <Carte style={styles.miniCarte}>
+      <Text style={styles.miniLibelle} numberOfLines={1}>
+        {libelle}
+      </Text>
+      <Text
+        style={[styles.miniValeur, couleur ? { color: couleur } : null]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {valeur}
       </Text>
-    </View>
+      <Text style={styles.miniDetail} numberOfLines={1}>
+        {detail}
+      </Text>
+    </Carte>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: couleurs.fond },
-  contenu: { padding: espaces.l, paddingBottom: espaces.xxl, gap: espaces.m },
+  contenu: { padding: espaces.m, paddingBottom: espaces.xxl, gap: espaces.m },
+
+  grilleChiffres: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: espaces.s,
+  },
+  miniCarte: {
+    width: '31.5%',
+    minWidth: 104,
+    flexGrow: 1,
+    padding: espaces.m,
+  },
+  miniLibelle: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: couleurs.texteFaible,
+    textTransform: 'uppercase',
+  },
+  miniValeur: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: couleurs.texte,
+    marginTop: 4,
+  },
+  miniDetail: { fontSize: 11, color: couleurs.texteFaible, marginTop: 2 },
 
   sousChiffres: {
     flexDirection: 'row',

@@ -530,6 +530,9 @@ export function uriImage(cheminRelatif: string | null): string | null {
   ) {
     return cheminRelatif;
   }
+  if (cheminRelatif.startsWith('/media/')) {
+    return `https://sahelpos.saheltech.tech${cheminRelatif}`;
+  }
   try {
     return new File(Paths.document, cheminRelatif).uri;
   } catch {

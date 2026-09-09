@@ -556,7 +556,7 @@ type Filtre = 'tous' | 'alerte' | 'rupture' | 'non_suivi';
 
 const FILTRES: { cle: Filtre; libelle: string }[] = [
   { cle: 'tous', libelle: 'Tous' },
-  { cle: 'alerte', libelle: 'En alerte' },
+  { cle: 'alerte', libelle: 'Stock faible' },
   { cle: 'rupture', libelle: 'Rupture' },
   { cle: 'non_suivi', libelle: 'Non suivis' },
 ];
@@ -611,6 +611,14 @@ export default function Stock() {
     return { valeurAchat, valeurVente, ruptures, alertes, aInitialiser };
   }, [produits]);
 
+  const nombreFiltre = useCallback(
+    (cle: Filtre) => {
+      if (cle === 'tous') return produits.length;
+      return produits.filter((p) => etatStock(p).cle === cle).length;
+    },
+    [produits],
+  );
+
   const filtres = useMemo(() => {
     const terme = normaliser(recherche.trim());
     return produits.filter((p) => {
@@ -629,15 +637,23 @@ export default function Stock() {
       <BandeauEtat />
       <View style={sl.entete}>
         <BoutonMenu />
-        <Text style={sl.titreEcran}>Stock</Text>
+        <View style={sl.enteteTitre}>
+          <Text style={sl.titreEcran}>Etat du stock</Text>
+          <Text style={sl.sousTitreEcran}>{produits.length} produits</Text>
+        </View>
         <View style={sl.enteteActions}>
-          <Pressable style={sl.actionEntete} onPress={() => router.push('/stock/mouvements')}>
-            <Icone nom="mouvements" taille={18} couleur={couleurs.primaire} />
-            <Text style={sl.actionEnteteTexte}>Journal</Text>
+          <Pressable style={sl.boutonIcone} onPress={() => router.push('/stock/alertes')}>
+            <Icone
+              nom="cloche"
+              taille={21}
+              couleur={bilan.ruptures + bilan.alertes > 0 ? C.rouge : C.texte}
+            />
+            {bilan.ruptures + bilan.alertes > 0 ? (
+              <Text style={sl.badgeCloche}>{bilan.ruptures + bilan.alertes}</Text>
+            ) : null}
           </Pressable>
-          <Pressable style={sl.actionEntete} onPress={() => router.push('/stock/lots')}>
-            <Icone nom="achats" taille={18} couleur={couleurs.primaire} />
-            <Text style={sl.actionEnteteTexte}>Receptions</Text>
+          <Pressable style={sl.boutonBoutique} onPress={() => router.push('/stock/mouvements')}>
+            <Icone nom="mouvements" taille={18} couleur={couleurs.primaire} />
           </Pressable>
         </View>
       </View>
@@ -666,51 +682,13 @@ export default function Stock() {
           }
           ListHeaderComponent={
             <View style={sl.tete}>
-              <View style={sl.cartes}>
-                <Carte
-                  titre="Valeur d'achat"
-                  valeur={formaterFrancs(bilan.valeurAchat)}
-                  aide="Ce que le stock a coute"
-                />
-                <Carte
-                  titre="Valeur de vente"
-                  valeur={formaterFrancs(bilan.valeurVente)}
-                  aide="Ce qu'il rapporterait"
-                />
-              </View>
-
-              {bilan.ruptures > 0 || bilan.alertes > 0 ? (
-                <Pressable style={sl.banniere} onPress={() => router.push('/stock/alertes')}>
-                  <View style={sl.banniereTextes}>
-                    <Text style={sl.banniereTitre}>
-                      {bilan.ruptures} rupture(s), {bilan.alertes} stock(s) bas
-                    </Text>
-                    <Text style={sl.banniereAide}>Voir ce qu&apos;il faut racheter</Text>
-                  </View>
-                  <Text style={sl.banniereFleche}>{'>'}</Text>
-                </Pressable>
-              ) : null}
-
-              {bilan.aInitialiser > 0 ? (
-                <Pressable style={sl.banniereDouce} onPress={() => router.push('/stock/initial')}>
-                  <View style={sl.banniereTextes}>
-                    <Text style={sl.banniereDouceTitre}>
-                      {bilan.aInitialiser} produit(s) sans stock de depart
-                    </Text>
-                    <Text style={sl.banniereAide}>
-                      Renseignez ce que vous avez en boutique pour que le suivi commence juste
-                    </Text>
-                  </View>
-                  <Text style={sl.banniereFleche}>{'>'}</Text>
-                </Pressable>
-              ) : null}
-
               <View style={[s.zoneSaisie, sl.recherche]}>
+                <Icone nom="recherche" taille={21} couleur={C.texteFaible} />
                 <TextInput
                   style={s.saisie}
                   value={recherche}
                   onChangeText={setRecherche}
-                  placeholder="Nom, categorie ou code-barres"
+                  placeholder="Rechercher un produit, un code, une categorie..."
                   placeholderTextColor={C.texteFaible}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -731,13 +709,21 @@ export default function Stock() {
                 {FILTRES.map((f) => (
                   <Pressable
                     key={f.cle}
-                    style={[s.puce, filtre === f.cle ? s.puceActive : null]}
+                    style={[sl.puceEtat, filtre === f.cle ? sl.puceEtatActive : null]}
                     onPress={() => setFiltre(f.cle)}>
-                    <Text style={[s.puceTexte, filtre === f.cle ? s.puceTexteActif : null]}>
-                      {f.libelle}
+                    <Text
+                      style={[
+                        sl.puceEtatTexte,
+                        filtre === f.cle ? sl.puceEtatTexteActive : null,
+                      ]}>
+                      {f.libelle} ({nombreFiltre(f.cle)})
                     </Text>
                   </Pressable>
                 ))}
+                <Pressable style={sl.puceCategorie} onPress={() => setFiltre('tous')}>
+                  <Text style={sl.puceCategorieTexte}>Categorie</Text>
+                  <Text style={sl.chevron}>⌄</Text>
+                </Pressable>
               </ScrollView>
             </View>
           }
@@ -809,20 +795,9 @@ export default function Stock() {
       )}
 
       <Pressable style={sl.boutonFlottant} onPress={() => router.push('/stock/ajustement')}>
-        <Text style={sl.boutonFlottantTexte}>Entree / Sortie / Ajustement</Text>
+        <Icone nom="plus" taille={30} couleur="#FFFFFF" />
+        <Text style={sl.boutonFlottantLibelle}>Nouveau</Text>
       </Pressable>
-    </View>
-  );
-}
-
-function Carte(p: { titre: string; valeur: string; aide: string }) {
-  return (
-    <View style={sl.carteStat}>
-      <Text style={sl.carteTitre}>{p.titre}</Text>
-      <Text style={sl.carteValeur} numberOfLines={1} adjustsFontSizeToFit>
-        {p.valeur}
-      </Text>
-      <Text style={sl.carteAide}>{p.aide}</Text>
     </View>
   );
 }
@@ -834,51 +809,85 @@ function LigneProduitStock(p: {
   onJournal: () => void;
 }) {
   const etat = etatStock(p.produit);
-  const sousUnites = analyserSousUnites(p.produit.sous_unites);
-  const detail =
-    p.produit.gestion_stock === 1 && sousUnites.length > 0 && p.produit.quantite_base > 0
-      ? decomposerStock(p.produit.quantite_base, p.produit.unite_base, sousUnites)
-      : null;
+  const seuil = seuilAlerteStock(p.produit.stock_min);
+  const rupture = etat.cle === 'rupture';
+  const alerte = etat.cle === 'alerte';
 
   return (
     <View style={sl.carteProduit}>
       <Pressable style={sl.carteProduitHaut} onPress={p.onOuvrir} accessibilityRole="button">
-        <Vignette chemin={p.produit.chemin_image} nom={p.produit.nom} />
+        <Vignette chemin={p.produit.chemin_image} nom={p.produit.nom} taille={92} />
         <View style={sl.carteProduitTextes}>
           <Text style={sl.nom} numberOfLines={2}>
             {p.produit.nom}
           </Text>
-          {detail ? (
-            <Text style={sl.detail} numberOfLines={1}>
-              {detail}
-            </Text>
-          ) : null}
-          {p.produit.gestion_stock === 1 ? (
-            <Text style={sl.meta}>
-              Seuil d&apos;alerte : {formaterQuantite(seuilAlerteStock(p.produit.stock_min))}{' '}
-              {p.produit.unite_base}
-            </Text>
-          ) : null}
-          {p.produit.gestion_stock === 1 && p.produit.nb_mouvements === 0 ? (
-            <Text style={sl.metaAlerte}>Stock de depart jamais renseigne</Text>
-          ) : null}
+          <Text style={sl.detail} numberOfLines={1}>
+            {p.produit.categorie || 'Sans categorie'}
+          </Text>
+          <Text style={sl.meta}>Code : {p.produit.code_barre || '-'}</Text>
+          <Pressable style={sl.codeBarres} onPress={p.onJournal}>
+            <Icone nom="mouvements" taille={16} couleur={C.texteFaible} />
+          </Pressable>
         </View>
         <View style={sl.carteProduitDroite}>
-          <Text style={[sl.stock, { color: etat.couleur }]} numberOfLines={1}>
-            {etat.libelle}
-          </Text>
-          <Text style={sl.valeur}>
-            {formaterFrancs(p.produit.quantite_base * p.produit.prix_achat)}
-          </Text>
+          <View
+            style={[
+              sl.badgeStock,
+              rupture ? sl.badgeRupture : alerte ? sl.badgeAlerte : sl.badgeOk,
+            ]}>
+            <View
+              style={[
+                sl.pointEtat,
+                { backgroundColor: rupture ? C.rouge : alerte ? C.orange : C.vert },
+              ]}
+            />
+            <Text
+              style={[
+                sl.badgeStockTexte,
+                { color: rupture ? C.rouge : alerte ? C.orange : C.vert },
+              ]}>
+              {rupture ? 'Rupture' : alerte ? 'Stock faible' : 'En stock'}
+            </Text>
+          </View>
+          <View style={sl.chiffresStock}>
+            <View>
+              <Text style={sl.libelleChiffre}>Quantite</Text>
+              <Text style={sl.quantite}>
+                {formaterQuantite(p.produit.quantite_base)}{' '}
+                <Text style={sl.unite}>{p.produit.unite_base}</Text>
+              </Text>
+            </View>
+            <View style={sl.separateurVertical} />
+            <View>
+              <Text style={sl.libelleChiffre}>Seuil</Text>
+              <Text style={sl.seuil}>{formaterQuantite(seuil)}</Text>
+            </View>
+          </View>
+          <View style={sl.prixAchat}>
+            <Icone nom="achats" taille={20} couleur={C.accent} />
+            <View>
+              <Text style={sl.prixAchatValeur}>{formaterFrancs(p.produit.prix_achat)}</Text>
+              <Text style={sl.prixAchatLibelle}>Prix d'achat</Text>
+            </View>
+          </View>
         </View>
       </Pressable>
 
       <View style={sl.carteProduitBas}>
-        <Pressable style={sl.lien} onPress={p.onJournal} hitSlop={6}>
-          <Text style={sl.lienTexte}>Journal</Text>
-        </Pressable>
         <Pressable style={sl.lien} onPress={p.onAjuster} hitSlop={6}>
           <Text style={sl.lienTexte}>Mouvement</Text>
+        </Pressable>
+        {(rupture || alerte) ? (
+          <Pressable style={sl.lienCommande} onPress={p.onAjuster} hitSlop={6}>
+            <Text style={sl.lienCommandeTexte}>Ajouter a la prochaine commande</Text>
+          </Pressable>
+        ) : (
+          <Pressable style={sl.lien} onPress={p.onJournal} hitSlop={6}>
+            <Text style={sl.lienTexte}>Journal</Text>
+          </Pressable>
+        )}
+        <Pressable style={sl.menuProduit} onPress={p.onOuvrir} hitSlop={8}>
+          <Text style={sl.menuProduitTexte}>⋮</Text>
         </Pressable>
       </View>
     </View>
@@ -894,44 +903,55 @@ const sl = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    paddingHorizontal: 12,
+    gap: 14,
+    paddingHorizontal: 16,
     paddingTop: 12,
-    paddingBottom: 10,
+    paddingBottom: 12,
     backgroundColor: C.carte,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.bordure,
   },
-  titreEcran: { fontSize: 20, fontWeight: '700', color: C.texte },
-  enteteActions: { flexDirection: 'row', gap: 8 },
-  actionEntete: {
-    // Pictogramme puis libelle : le premier se reconnait de loin, le second
-    // leve le doute.
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 8,
+  enteteTitre: { flex: 1 },
+  titreEcran: { fontSize: 23, fontWeight: '800', color: C.texte },
+  sousTitreEcran: { marginTop: 1, fontSize: 14, color: C.texteFaible },
+  enteteActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  boutonIcone: {
+    width: 48,
+    height: 48,
+    borderRadius: 13,
     borderWidth: 1,
     borderColor: C.bordure,
-  },
-  actionEnteteTexte: { fontSize: 13, color: C.accent, fontWeight: '600' },
-
-  tete: { gap: 10, paddingBottom: 4 },
-  cartes: { flexDirection: 'row', gap: 8 },
-  carteStat: {
-    flex: 1,
     backgroundColor: C.carte,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: C.bordure,
-    padding: 10,
-    gap: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  carteTitre: { fontSize: 11, color: C.texteFaible, fontWeight: '600' },
-  carteValeur: { fontSize: 17, fontWeight: '700', color: C.texte },
-  carteAide: { fontSize: 10, color: C.texteFaible },
+  badgeCloche: {
+    position: 'absolute',
+    right: -5,
+    top: -7,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 5,
+    backgroundColor: C.rouge,
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  boutonBoutique: {
+    width: 48,
+    height: 48,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: C.bordure,
+    backgroundColor: couleurs.primaireDouce,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  tete: { gap: 12, paddingBottom: 4 },
 
   banniere: {
     flexDirection: 'row',
@@ -959,37 +979,110 @@ const sl = StyleSheet.create({
   banniereAide: { fontSize: 12, color: C.texteFaible, lineHeight: 17 },
   banniereFleche: { fontSize: 18, color: C.texteFaible, fontWeight: '700' },
 
-  recherche: { backgroundColor: C.carte },
+  recherche: {
+    minHeight: 56,
+    backgroundColor: C.carte,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+  },
   effacer: { fontSize: 12, color: C.accent, fontWeight: '600' },
-  puces: { gap: 8, paddingVertical: 2, alignItems: 'center' },
+  puces: { gap: 10, paddingVertical: 2, alignItems: 'center' },
+  puceEtat: {
+    minHeight: 44,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: C.bordure,
+    backgroundColor: C.carte,
+    justifyContent: 'center',
+  },
+  puceEtatActive: { backgroundColor: C.accent, borderColor: C.accent },
+  puceEtatTexte: { color: C.texteFaible, fontSize: 14, fontWeight: '700' },
+  puceEtatTexteActive: { color: '#FFFFFF' },
+  puceCategorie: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: C.bordure,
+    backgroundColor: C.carte,
+  },
+  puceCategorieTexte: { color: C.texte, fontSize: 14, fontWeight: '700' },
+  chevron: { color: C.texteFaible, fontSize: 18, fontWeight: '800' },
 
-  liste: { padding: 12, paddingBottom: 96, gap: 8 },
-  listeVide: { flexGrow: 1, padding: 12, paddingBottom: 96 },
+  liste: { padding: 12, paddingBottom: 112, gap: 10 },
+  listeVide: { flexGrow: 1, padding: 12, paddingBottom: 112 },
 
   carteProduit: {
     backgroundColor: C.carte,
-    borderRadius: 10,
+    borderRadius: 15,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: C.bordure,
     overflow: 'hidden',
   },
-  carteProduitHaut: { flexDirection: 'row', gap: 10, padding: 10, alignItems: 'flex-start' },
-  carteProduitTextes: { flex: 1, gap: 3 },
-  carteProduitDroite: { alignItems: 'flex-end', gap: 3, maxWidth: 130 },
-  nom: { fontSize: 15, fontWeight: '600', color: C.texte },
-  detail: { fontSize: 12, color: C.texte },
-  meta: { fontSize: 11, color: C.texteFaible },
+  carteProduitHaut: { flexDirection: 'row', gap: 13, padding: 14, alignItems: 'flex-start' },
+  carteProduitTextes: { flex: 1, minWidth: 0, gap: 4 },
+  carteProduitDroite: { alignItems: 'stretch', gap: 8, width: 150 },
+  nom: { fontSize: 16, fontWeight: '800', color: C.texte, lineHeight: 20 },
+  detail: { fontSize: 13, color: C.texteFaible },
+  meta: { fontSize: 13, color: C.texteFaible },
   metaAlerte: { fontSize: 11, color: C.orange, fontWeight: '600' },
-  stock: { fontSize: 14, fontWeight: '700' },
-  valeur: { fontSize: 11, color: C.texteFaible },
+  codeBarres: {
+    marginTop: 4,
+    width: 46,
+    height: 24,
+    borderRadius: 7,
+    backgroundColor: couleurs.surfaceDouce,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeStock: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  badgeOk: { backgroundColor: couleurs.succesDouce },
+  badgeAlerte: { backgroundColor: couleurs.avertissementDouce },
+  badgeRupture: { backgroundColor: couleurs.dangerDouce },
+  pointEtat: { width: 8, height: 8, borderRadius: 4 },
+  badgeStockTexte: { fontSize: 12, fontWeight: '800' },
+  chiffresStock: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  libelleChiffre: { fontSize: 12, color: C.texteFaible, marginBottom: 1 },
+  quantite: { fontSize: 20, fontWeight: '900', color: C.texte },
+  unite: { fontSize: 13, fontWeight: '500', color: C.texteFaible },
+  seuil: { fontSize: 20, fontWeight: '900', color: C.orange },
+  separateurVertical: { width: 1, height: 34, backgroundColor: C.bordure },
+  prixAchat: {
+    minHeight: 48,
+    borderRadius: 10,
+    backgroundColor: couleurs.primaireDouce,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    paddingHorizontal: 10,
+  },
+  prixAchatValeur: { fontSize: 15, color: C.accent, fontWeight: '900' },
+  prixAchatLibelle: { fontSize: 11, color: C.texteFaible },
 
   carteProduitBas: {
     flexDirection: 'row',
+    alignItems: 'center',
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: C.bordure,
   },
   lien: { flex: 1, paddingVertical: 10, alignItems: 'center' },
   lienTexte: { fontSize: 13, color: C.accent, fontWeight: '600' },
+  lienCommande: { flex: 1.6, paddingVertical: 10, alignItems: 'center' },
+  lienCommandeTexte: { fontSize: 12, color: C.orange, fontWeight: '800' },
+  menuProduit: { width: 42, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
+  menuProduitTexte: { fontSize: 24, color: C.texteFaible, fontWeight: '800' },
 
   pied: { paddingVertical: 16, fontSize: 12, color: C.texteFaible, textAlign: 'center' },
 
@@ -999,14 +1092,21 @@ const sl = StyleSheet.create({
 
   boutonFlottant: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 16,
+    right: 18,
+    bottom: 22,
+    width: 66,
+    height: 66,
     backgroundColor: C.accent,
-    borderRadius: 10,
-    paddingVertical: 15,
+    borderRadius: 33,
     alignItems: 'center',
+    justifyContent: 'center',
     elevation: 3,
   },
-  boutonFlottantTexte: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+  boutonFlottantLibelle: {
+    position: 'absolute',
+    bottom: -28,
+    color: C.accent,
+    fontWeight: '700',
+    fontSize: 12,
+  },
 });

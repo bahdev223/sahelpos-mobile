@@ -25,6 +25,7 @@ import {
   Champ,
   ListeVide,
   Montant,
+  Vignette,
   couleurs,
   espaces,
   formaterMontant,
@@ -53,7 +54,6 @@ export default function EcranNouvelAchat() {
   const [fournisseurId, setFournisseurId] = useState<number | null>(null);
   const [reference, setReference] = useState('');
   const [articles, setArticles] = useState<ArticleAchat[]>([]);
-  const [montantPaye, setMontantPaye] = useState('');
   const [enCours, setEnCours] = useState(false);
 
   // --- selection d'un produit ---------------------------------------------
@@ -138,7 +138,7 @@ export default function EcranNouvelAchat() {
         Alert.alert('Achat vide', 'Ajoutez au moins un produit.');
         return;
       }
-      const paye = Number(montantPaye.replace(',', '.')) || 0;
+      const paye = 0;
       if (paye > total) {
         Alert.alert(
           'Montant trop eleve',
@@ -172,7 +172,7 @@ export default function EcranNouvelAchat() {
         setEnCours(false);
       }
     },
-    [articles, fournisseurId, reference, montantPaye, total, router],
+    [articles, fournisseurId, reference, total, router],
   );
 
   return (
@@ -249,36 +249,24 @@ export default function EcranNouvelAchat() {
           />
         </Carte>
 
-        <Carte titre="Reglement">
+        <Carte titre="Total">
           <View style={styles.totalLigne}>
             <Text style={styles.totalLibelle}>Total de l achat</Text>
             <Montant valeur={total} taille="grand" />
           </View>
-          <Champ
-            valeur={montantPaye}
-            onChangeText={setMontantPaye}
-            label="Montant paye maintenant"
-            placeholder="0"
-            clavier="numeric"
-            aide="Laissez a zero si vous payez plus tard : le reste devient une dette."
-            alignerADroite
-          />
+          <Text style={styles.aide}>
+            Tresorerie non activee : aucun reglement a saisir. La marchandise entre en
+            stock a l enregistrement.
+          </Text>
         </Carte>
 
         <Bouton
-          titre="Enregistrer et recevoir"
+          titre="Enregistrer l achat"
           sousTitre="La marchandise entre en stock immediatement"
           onPress={() => void enregistrer(true)}
           enCours={enCours}
           desactive={articles.length === 0}
           grand
-        />
-        <Bouton
-          titre="Enregistrer sans recevoir"
-          sousTitre="La marchandise n est pas encore arrivee"
-          onPress={() => void enregistrer(false)}
-          variante="secondaire"
-          desactive={articles.length === 0 || enCours}
         />
       </ScrollView>
 
@@ -294,7 +282,18 @@ export default function EcranNouvelAchat() {
         <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
           {produitChoisi ? (
             <ScrollView contentContainerStyle={styles.contenu}>
-              <Text style={styles.modalTitre}>{produitChoisi.nom}</Text>
+              <Text style={styles.modalTitre}>Ajouter un article</Text>
+
+              <View style={styles.produitSelectionne}>
+                <Vignette chemin={produitChoisi.cheminImage} nom={produitChoisi.nom} taille={70} />
+                <View style={styles.produitSelectionneInfos}>
+                  <Text style={styles.produitSelectionneNom}>{produitChoisi.nom}</Text>
+                  <Text style={styles.detail}>
+                    Stock actuel : {formaterQuantite(produitChoisi.quantiteBase)}
+                  </Text>
+                  <Text style={styles.detail}>Code : {produitChoisi.codeBarre || '-'}</Text>
+                </View>
+              </View>
 
               <Carte titre="Unite achetee">
                 {unites.map((u) => {
@@ -375,6 +374,7 @@ export default function EcranNouvelAchat() {
                     onPress={() => void ouvrirProduit(item)}
                     style={({ pressed }) => [styles.ligne, pressed && styles.lignePressee]}
                   >
+                    <Vignette chemin={item.cheminImage} nom={item.nom} taille={54} />
                     <View style={styles.ligneGauche}>
                       <Text style={styles.nom}>{item.nom}</Text>
                       <Text style={styles.detail}>
@@ -448,6 +448,18 @@ const styles = StyleSheet.create({
   totalLibelle: { fontSize: 15, fontWeight: '600', color: couleurs.texte },
 
   modalTitre: { fontSize: 20, fontWeight: '700', color: couleurs.texte },
+  produitSelectionne: {
+    flexDirection: 'row',
+    gap: espaces.m,
+    alignItems: 'center',
+    padding: espaces.m,
+    borderRadius: rayons.l,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  produitSelectionneInfos: { flex: 1, gap: 3 },
+  produitSelectionneNom: { fontSize: 16, fontWeight: '700', color: couleurs.texte },
   choix: {
     minHeight: 56,
     justifyContent: 'center',
@@ -467,7 +479,7 @@ const styles = StyleSheet.create({
   ligne: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: espaces.m,
     minHeight: 64,
     paddingHorizontal: espaces.l,
     paddingVertical: espaces.m,
