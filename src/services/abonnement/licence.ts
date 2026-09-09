@@ -29,7 +29,7 @@ import nacl from 'tweetnacl';
  * Elle n'a rien de secret : elle ne sert qu'a verifier. La cle privee qui
  * correspond ne quitte jamais le serveur.
  */
-const CLE_PUBLIQUE = 'u/L+hJ83jUwy1fAG/Cv/uYzXaaydeGxJ3IXQAEJ88VI=';
+const CLE_PUBLIQUE = 'SP7gf7Ei9MFKpqPvQxtTn2qPhEOHQFtmXn0Ro9ih8sA=';
 
 /** Forme de droit que cette version sait lire. */
 const VERSION_ATTENDUE = 1;
