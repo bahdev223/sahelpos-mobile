@@ -44,6 +44,7 @@ import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
 import { verifierStock } from '../../src/services/notifications';
 import { marquerChangement } from '../../src/services/synchronisation';
+import { useSession } from '../_layout';
 
 // --------------------------------------------------------------------------
 // Vocabulaire du domaine
@@ -563,6 +564,7 @@ const FILTRES: { cle: Filtre; libelle: string }[] = [
 
 export default function Stock() {
   const router = useRouter();
+  const { boutique } = useSession();
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [recherche, setRecherche] = useState('');
   const [filtre, setFiltre] = useState<Filtre>('tous');
@@ -653,7 +655,18 @@ export default function Stock() {
             ) : null}
           </Pressable>
           <Pressable style={sl.boutonBoutique} onPress={() => router.push('/stock/mouvements')}>
-            <Icone nom="mouvements" taille={18} couleur={couleurs.primaire} />
+            <Text style={sl.initialesBoutique}>
+              {boutique.nom
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((mot) => mot[0]?.toUpperCase() ?? '')
+                .join('') || 'ST'}
+            </Text>
+            <Text style={sl.nomBoutique} numberOfLines={1}>
+              {boutique.nom}
+            </Text>
+            <Text style={sl.chevronBoutique}>⌄</Text>
           </Pressable>
         </View>
       </View>
@@ -814,9 +827,8 @@ function LigneProduitStock(p: {
   const alerte = etat.cle === 'alerte';
 
   return (
-    <View style={sl.carteProduit}>
-      <Pressable style={sl.carteProduitHaut} onPress={p.onOuvrir} accessibilityRole="button">
-        <Vignette chemin={p.produit.chemin_image} nom={p.produit.nom} taille={92} />
+    <Pressable style={sl.carteProduit} onPress={p.onOuvrir} accessibilityRole="button">
+      <Vignette chemin={p.produit.chemin_image} nom={p.produit.nom} taille={86} />
         <View style={sl.carteProduitTextes}>
           <Text style={sl.nom} numberOfLines={2}>
             {p.produit.nom}
@@ -826,7 +838,7 @@ function LigneProduitStock(p: {
           </Text>
           <Text style={sl.meta}>Code : {p.produit.code_barre || '-'}</Text>
           <Pressable style={sl.codeBarres} onPress={p.onJournal}>
-            <Icone nom="mouvements" taille={16} couleur={C.texteFaible} />
+            <Text style={sl.codeBarresTexte}>||||</Text>
           </Pressable>
         </View>
         <View style={sl.carteProduitDroite}>
@@ -871,26 +883,10 @@ function LigneProduitStock(p: {
             </View>
           </View>
         </View>
+      <Pressable style={sl.menuProduit} onPress={p.onJournal} hitSlop={8}>
+        <Text style={sl.menuProduitTexte}>⋮</Text>
       </Pressable>
-
-      <View style={sl.carteProduitBas}>
-        <Pressable style={sl.lien} onPress={p.onAjuster} hitSlop={6}>
-          <Text style={sl.lienTexte}>Mouvement</Text>
-        </Pressable>
-        {(rupture || alerte) ? (
-          <Pressable style={sl.lienCommande} onPress={p.onAjuster} hitSlop={6}>
-            <Text style={sl.lienCommandeTexte}>Ajouter a la prochaine commande</Text>
-          </Pressable>
-        ) : (
-          <Pressable style={sl.lien} onPress={p.onJournal} hitSlop={6}>
-            <Text style={sl.lienTexte}>Journal</Text>
-          </Pressable>
-        )}
-        <Pressable style={sl.menuProduit} onPress={p.onOuvrir} hitSlop={8}>
-          <Text style={sl.menuProduitTexte}>⋮</Text>
-        </Pressable>
-      </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -941,15 +937,32 @@ const sl = StyleSheet.create({
     lineHeight: 22,
   },
   boutonBoutique: {
-    width: 48,
+    minWidth: 138,
+    maxWidth: 174,
     height: 48,
     borderRadius: 13,
     borderWidth: 1,
     borderColor: C.bordure,
-    backgroundColor: couleurs.primaireDouce,
+    backgroundColor: C.carte,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
   },
+  initialesBoutique: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: C.accent,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 32,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  nomBoutique: { flex: 1, minWidth: 0, color: C.texte, fontSize: 13, fontWeight: '800' },
+  chevronBoutique: { color: C.texteFaible, fontSize: 18, fontWeight: '900' },
 
   tete: { gap: 12, paddingBottom: 4 },
 
@@ -1017,15 +1030,17 @@ const sl = StyleSheet.create({
   listeVide: { flexGrow: 1, padding: 12, paddingBottom: 112 },
 
   carteProduit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: C.carte,
     borderRadius: 15,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: C.bordure,
-    overflow: 'hidden',
+    padding: 12,
   },
-  carteProduitHaut: { flexDirection: 'row', gap: 13, padding: 14, alignItems: 'flex-start' },
   carteProduitTextes: { flex: 1, minWidth: 0, gap: 4 },
-  carteProduitDroite: { alignItems: 'stretch', gap: 8, width: 150 },
+  carteProduitDroite: { alignItems: 'stretch', gap: 8, width: 128 },
   nom: { fontSize: 16, fontWeight: '800', color: C.texte, lineHeight: 20 },
   detail: { fontSize: 13, color: C.texteFaible },
   meta: { fontSize: 13, color: C.texteFaible },
@@ -1039,6 +1054,7 @@ const sl = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  codeBarresTexte: { color: C.texteFaible, fontSize: 16, fontWeight: '900', letterSpacing: 1 },
   badgeStock: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -1053,14 +1069,14 @@ const sl = StyleSheet.create({
   badgeRupture: { backgroundColor: couleurs.dangerDouce },
   pointEtat: { width: 8, height: 8, borderRadius: 4 },
   badgeStockTexte: { fontSize: 12, fontWeight: '800' },
-  chiffresStock: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  libelleChiffre: { fontSize: 12, color: C.texteFaible, marginBottom: 1 },
-  quantite: { fontSize: 20, fontWeight: '900', color: C.texte },
-  unite: { fontSize: 13, fontWeight: '500', color: C.texteFaible },
-  seuil: { fontSize: 20, fontWeight: '900', color: C.orange },
+  chiffresStock: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  libelleChiffre: { fontSize: 11, color: C.texteFaible, marginBottom: 1 },
+  quantite: { fontSize: 18, fontWeight: '900', color: C.texte },
+  unite: { fontSize: 12, fontWeight: '500', color: C.texteFaible },
+  seuil: { fontSize: 18, fontWeight: '900', color: C.orange },
   separateurVertical: { width: 1, height: 34, backgroundColor: C.bordure },
   prixAchat: {
-    minHeight: 48,
+    minHeight: 46,
     borderRadius: 10,
     backgroundColor: couleurs.primaireDouce,
     flexDirection: 'row',
@@ -1068,20 +1084,9 @@ const sl = StyleSheet.create({
     gap: 9,
     paddingHorizontal: 10,
   },
-  prixAchatValeur: { fontSize: 15, color: C.accent, fontWeight: '900' },
+  prixAchatValeur: { fontSize: 14, color: C.accent, fontWeight: '900' },
   prixAchatLibelle: { fontSize: 11, color: C.texteFaible },
-
-  carteProduitBas: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: C.bordure,
-  },
-  lien: { flex: 1, paddingVertical: 10, alignItems: 'center' },
-  lienTexte: { fontSize: 13, color: C.accent, fontWeight: '600' },
-  lienCommande: { flex: 1.6, paddingVertical: 10, alignItems: 'center' },
-  lienCommandeTexte: { fontSize: 12, color: C.orange, fontWeight: '800' },
-  menuProduit: { width: 42, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
+  menuProduit: { width: 22, alignItems: 'center', justifyContent: 'center', alignSelf: 'stretch' },
   menuProduitTexte: { fontSize: 24, color: C.texteFaible, fontWeight: '800' },
 
   pied: { paddingVertical: 16, fontSize: 12, color: C.texteFaible, textAlign: 'center' },

@@ -38,6 +38,10 @@ import type { VenteResume } from '../../src/db/repositories/vente';
 import { seuilAlerteStock } from '../../src/domain/stock';
 import type { Produit } from '../../src/domain/types';
 import { compterNonLues } from '../../src/services/notifications';
+import {
+  autorise,
+  etatCourant as etatAbonnementCourant,
+} from '../../src/services/abonnement';
 
 function bornesJour(): { debut: string; fin: string } {
   const debut = new Date();
@@ -62,6 +66,15 @@ function heureCourte(iso: string): string {
   return `${h}:${m}`;
 }
 
+function dateAccueil(): string {
+  return new Intl.DateTimeFormat('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date());
+}
+
 interface Donnees {
   chiffreAffaires: number;
   nbVentes: number;
@@ -69,6 +82,7 @@ interface Donnees {
   resteDu: number;
   alertes: Produit[];
   dernieres: VenteResume[];
+  afficherDepenses: boolean;
 }
 
 type Etat =
@@ -86,10 +100,11 @@ export default function EcranAccueil() {
 
   const charger = useCallback(async () => {
     const jour = bornesJour();
-    const [totaux, alertes, dernieres] = await Promise.all([
+    const [totaux, alertes, dernieres, abonnement] = await Promise.all([
       totauxPeriode(jour.debut, jour.fin),
       listerAlertesStock(),
       listerVentes({ limite: 5 }),
+      etatAbonnementCourant(),
     ]);
     setEtat({
       phase: 'pret',
@@ -100,6 +115,7 @@ export default function EcranAccueil() {
         resteDu: totaux.resteDu,
         alertes,
         dernieres,
+        afficherDepenses: autorise(abonnement, 'tresorerie'),
       },
     });
   }, []);
@@ -126,6 +142,7 @@ export default function EcranAccueil() {
                 resteDu: 0,
                 alertes: [],
                 dernieres: [],
+                afficherDepenses: false,
               },
             });
           }
@@ -165,9 +182,10 @@ export default function EcranAccueil() {
       <BandeauEtat />
       <View style={s.entete}>
         <BoutonMenu />
-        <Text style={s.enteteTitre} numberOfLines={1}>
-          {boutique.nom}
-        </Text>
+        <View style={s.marque}>
+          <Text style={s.marqueNom}>Sahel<Text style={s.marqueAccent}>POS</Text></Text>
+          <Text style={s.marqueBoutique} numberOfLines={1}>{boutique.nom}</Text>
+        </View>
         <Pressable
           onPress={() => router.push('/notifications')}
           hitSlop={10}
@@ -189,41 +207,76 @@ export default function EcranAccueil() {
           <RefreshControl refreshing={rafraichit} onRefresh={surRafraichir} tintColor={couleurs.primaire} />
         }
       >
-        <Text style={s.salut}>
-          {salutation()} {utilisateur?.nom ?? ''}
-        </Text>
-        <Text style={s.sousSalut}>Voici ce qui se passe aujourd hui</Text>
+        <View style={s.carteBienvenue}>
+          <View>
+            <Text style={s.salut}>
+              {salutation()} {utilisateur?.nom ?? ''} !
+            </Text>
+            <Text style={s.sousSalut}>{dateAccueil()}</Text>
+          </View>
+          <Pressable style={s.selectJour}>
+            <Icone nom="inventaire" taille={16} couleur={couleurs.primaire} />
+            <Text style={s.selectJourTexte}>Aujourd'hui</Text>
+            <Icone nom="chevron" taille={14} couleur={couleurs.texteFaible} />
+          </Pressable>
+        </View>
+
+        <View style={s.caCarte}>
+          <View>
+            <Text style={s.caLibelle}>Chiffre d'affaires</Text>
+            <Text style={s.caValeur}>{formaterMontant(d.chiffreAffaires, boutique.devise)}</Text>
+            <Text style={s.caDetail}>{d.nbVentes} vente{d.nbVentes > 1 ? 's' : ''} aujourd'hui</Text>
+          </View>
+          <View style={s.caIcone}>
+            <Icone nom="graphique" taille={26} couleur={couleurs.primaire} />
+          </View>
+        </View>
 
         <View style={s.tuiles}>
-          <Tuile
-            icone="argent"
-            libelle="Ventes du jour"
-            valeur={formaterMontant(d.chiffreAffaires, boutique.devise)}
-            teinte={couleurs.primaire}
-            fond={couleurs.primaireDouce}
-          />
-          <Tuile
-            icone="ventes"
-            libelle="Nombre de ventes"
-            valeur={String(d.nbVentes)}
+          <TuileCompacte
+            icone="graphique"
+            libelle="Benefice"
+            valeur={formaterMontant(d.benefice, boutique.devise)}
+            detail={
+              d.chiffreAffaires > 0
+                ? `Marge ${((d.benefice / d.chiffreAffaires) * 100).toFixed(1)} %`
+                : 'Marge 0 %'
+            }
             teinte={couleurs.succesFonce}
             fond={couleurs.succesDouce}
-          />
-          <Tuile
-            icone="alerte"
-            libelle="Stock faible"
-            valeur={String(d.alertes.length)}
-            teinte={couleurs.avertissementFonce}
-            fond={couleurs.avertissementDouce}
-            onPress={() => router.push('/stock/alertes')}
-          />
-          <Tuile
-            icone="graphique"
-            libelle="Benefice du jour"
-            valeur={formaterMontant(d.benefice, boutique.devise)}
-            teinte={couleurs.accentFonce}
-            fond={couleurs.accentDouce}
             onPress={() => router.push('/tableau-de-bord')}
+          />
+          {d.afficherDepenses ? (
+            <TuileCompacte
+              icone="argent"
+              libelle="Depenses"
+              valeur={formaterMontant(0, boutique.devise)}
+              detail="Aujourd'hui"
+              teinte={couleurs.danger}
+              fond={couleurs.dangerDouce}
+            />
+          ) : null}
+        </View>
+
+        <View style={s.tuiles}>
+          <Pressable style={s.raccourciSimple} onPress={() => router.push('/stock/alertes')}>
+            <View style={[s.raccourciIcone, { backgroundColor: couleurs.primaireDouce }]}>
+              <Icone nom="stock" taille={23} couleur={couleurs.primaire} />
+            </View>
+            <View style={s.raccourciTextes}>
+              <Text style={s.raccourciTitre}>Stock a surveiller</Text>
+              <Text style={s.raccourciValeur}>{d.alertes.length} produits</Text>
+            </View>
+            <Icone nom="chevron" taille={18} couleur={couleurs.texteFaible} />
+          </Pressable>
+          <TuileCompacte
+            icone="clients"
+            libelle="Creances clients"
+            valeur={formaterMontant(d.resteDu, boutique.devise)}
+            detail={d.resteDu > 0 ? 'A suivre' : 'Aucune en cours'}
+            teinte={couleurs.primaire}
+            fond={couleurs.primaireDouce}
+            onPress={() => router.push('/clients')}
           />
         </View>
 
@@ -236,43 +289,6 @@ export default function EcranAccueil() {
             <Icone nom="chevron" taille={16} couleur={couleurs.avertissementFonce} />
           </Pressable>
         ) : null}
-
-        <Pressable
-          style={({ pressed }) => [s.bouton, pressed && s.boutonPresse]}
-          onPress={() => router.push('/caisse')}
-        >
-          <Icone nom="plus" taille={22} couleur={couleurs.texteInverse} />
-          <Text style={s.boutonTexte}>Nouvelle vente</Text>
-        </Pressable>
-
-        {/*
-          Acces PERMANENT au repertoire.
-
-          Le lien vers les clients n'existait qu'au-dessus, et seulement quand
-          une ardoise etait impayee : une boutique dont tout le monde a paye
-          n'avait plus aucun chemin vers ses fiches depuis l'accueil. Il
-          restait le tiroir, mais un ecran qu'il faut deviner est un ecran qui
-          n'existe pas.
-        */}
-        <View style={s.repertoire}>
-          <Pressable
-            style={({ pressed }) => [s.raccourci, pressed && s.raccourciPresse]}
-            onPress={() => router.push('/clients')}
-          >
-            <Icone nom="clients" taille={22} couleur={couleurs.primaire} />
-            <Text style={s.raccourciTitre}>Clients</Text>
-            <Text style={s.raccourciDetail}>Fiches et ardoises</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [s.raccourci, pressed && s.raccourciPresse]}
-            onPress={() => router.push('/fournisseurs')}
-          >
-            <Icone nom="fournisseurs" taille={22} couleur={couleurs.primaire} />
-            <Text style={s.raccourciTitre}>Fournisseurs</Text>
-            <Text style={s.raccourciDetail}>Fiches et dettes</Text>
-          </Pressable>
-        </View>
 
         <View style={s.sectionEntete}>
           <Text style={s.sectionTitre}>Dernieres ventes</Text>
@@ -334,40 +350,32 @@ export default function EcranAccueil() {
         {d.alertes.length > 0 ? (
           <>
             <View style={s.sectionEntete}>
-              <Text style={s.sectionTitre}>A reapprovisionner</Text>
+              <Text style={s.sectionTitre}>Produits en alerte</Text>
               <Pressable onPress={() => router.push('/stock/alertes')} hitSlop={8}>
                 <Text style={s.lienVoirTout}>Voir tout</Text>
               </Pressable>
             </View>
-            <View style={s.bloc}>
-              {d.alertes.slice(0, 4).map((produit, index) => (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.alertesVisuelles}>
+              {d.alertes.slice(0, 8).map((produit) => (
                 <Pressable
                   key={produit.id}
                   onPress={() =>
                     router.push({ pathname: '/produit/[id]', params: { id: String(produit.id) } })
                   }
-                  style={({ pressed }) => [
-                    s.ligne,
-                    index > 0 && s.ligneSuivante,
-                    pressed && s.lignePressee,
-                  ]}
+                  style={({ pressed }) => [s.alerteCarte, pressed && s.lignePressee]}
                 >
-                  <Vignette chemin={produit.cheminImage} nom={produit.nom} taille={38} />
-                  <View style={s.ligneTextes}>
-                    <Text style={s.ligneTitre} numberOfLines={1}>
-                      {produit.nom}
-                    </Text>
-                    <Text style={s.ligneSous}>
-                      Seuil {formaterQuantite(seuilAlerteStock(produit.stockMin))}{' '}
-                      {produit.uniteBase}
+                  <Vignette chemin={produit.cheminImage} nom={produit.nom} taille={76} />
+                  <View style={s.alerteBadge}>
+                    <Text style={s.alerteBadgeTexte}>
+                      {formaterQuantite(produit.quantiteBase)}
                     </Text>
                   </View>
-                  <Text style={s.ligneRupture}>
-                    {formaterQuantite(produit.quantiteBase)} {produit.uniteBase}
+                  <Text style={s.alerteNom} numberOfLines={2}>
+                    {produit.nom}
                   </Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
           </>
         ) : null}
       </ScrollView>
@@ -409,6 +417,39 @@ function Tuile({
   );
 }
 
+function TuileCompacte({
+  icone,
+  libelle,
+  valeur,
+  detail,
+  teinte,
+  fond,
+  onPress,
+}: {
+  icone: NomIcone;
+  libelle: string;
+  valeur: string;
+  detail: string;
+  teinte: string;
+  fond: string;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable style={({ pressed }) => [s.tuileCompacte, pressed && s.tuilePressee]} onPress={onPress}>
+      <View style={s.tuileCompacteHaut}>
+        <Text style={s.tuileCompacteLibelle}>{libelle}</Text>
+        <View style={[s.tuileMiniIcone, { backgroundColor: fond }]}>
+          <Icone nom={icone} taille={18} couleur={teinte} />
+        </View>
+      </View>
+      <Text style={[s.tuileCompacteValeur, { color: teinte }]} numberOfLines={1} adjustsFontSizeToFit>
+        {valeur}
+      </Text>
+      <Text style={s.tuileCompacteDetail}>{detail}</Text>
+    </Pressable>
+  );
+}
+
 const s = StyleSheet.create({
   plein: { flex: 1, backgroundColor: couleurs.fond },
 
@@ -416,14 +457,17 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: espaces.s,
-    paddingHorizontal: espaces.m,
-    paddingVertical: espaces.m,
-    backgroundColor: couleurs.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: couleurs.bordure,
+    paddingHorizontal: espaces.l,
+    paddingTop: espaces.l,
+    paddingBottom: 28,
+    backgroundColor: couleurs.primaire,
   },
-  enteteTitre: { flex: 1, fontSize: 18, fontWeight: '700', color: couleurs.texte },
-  cloche: { padding: 4 },
+  marque: { flex: 1, minWidth: 0 },
+  marqueNom: { color: couleurs.texteInverse, fontSize: 21, fontWeight: '900' },
+  marqueAccent: { color: couleurs.accent },
+  marqueBoutique: { color: 'rgba(255,255,255,0.82)', fontSize: 13, marginTop: -1 },
+  enteteTitre: { flex: 1, fontSize: 18, fontWeight: '700', color: couleurs.texteInverse },
+  cloche: { padding: 7 },
   pointCloche: {
     position: 'absolute',
     top: 0,
@@ -438,16 +482,90 @@ const s = StyleSheet.create({
   },
   pointClocheTexte: { fontSize: 10, fontWeight: '700', color: couleurs.texteInverse },
 
-  contenu: { padding: espaces.l, paddingBottom: espaces.xxl },
-  salut: { fontSize: 22, fontWeight: '700', color: couleurs.texte },
-  sousSalut: { fontSize: 13, color: couleurs.texteFaible, marginTop: 2 },
+  contenu: { padding: espaces.l, paddingTop: 0, paddingBottom: espaces.xxl },
+  carteBienvenue: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: espaces.s,
+    marginTop: -16,
+    paddingTop: espaces.l,
+    paddingHorizontal: espaces.l,
+    paddingBottom: espaces.m,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    backgroundColor: couleurs.surface,
+  },
+  salut: { fontSize: 18, fontWeight: '800', color: couleurs.texte },
+  sousSalut: { fontSize: 12, color: couleurs.texteFaible, marginTop: 1, textTransform: 'capitalize' },
+  selectJour: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 10,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  selectJourTexte: { color: couleurs.texte, fontSize: 13, fontWeight: '700' },
+  caCarte: {
+    minHeight: 112,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: espaces.m,
+    padding: espaces.l,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  caLibelle: { color: couleurs.texte, fontSize: 13, fontWeight: '600' },
+  caValeur: { color: couleurs.primaire, fontSize: 26, fontWeight: '900', marginTop: 7 },
+  caDetail: { color: couleurs.texteFaible, fontSize: 13, marginTop: 4 },
+  caIcone: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: couleurs.primaireDouce,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   tuiles: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: espaces.m,
-    marginTop: espaces.l,
+    marginTop: espaces.m,
   },
+  tuileCompacte: {
+    width: '47.5%',
+    flexGrow: 1,
+    minHeight: 98,
+    padding: espaces.m,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  tuileCompacteHaut: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: espaces.s,
+  },
+  tuileMiniIcone: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tuileCompacteLibelle: { flex: 1, color: couleurs.texte, fontSize: 13, fontWeight: '600' },
+  tuileCompacteValeur: { marginTop: 8, fontSize: 20, fontWeight: '900' },
+  tuileCompacteDetail: { marginTop: 3, color: couleurs.texteFaible, fontSize: 12 },
   tuile: {
     // Deux par ligne : au-dela le montant se tronque sur un ecran de 720 points.
     width: '47.5%',
@@ -501,6 +619,28 @@ const s = StyleSheet.create({
     gap: espaces.m,
     marginTop: espaces.m,
   },
+  raccourciSimple: {
+    width: '47.5%',
+    flexGrow: 1,
+    minHeight: 82,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaces.s,
+    padding: espaces.m,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  raccourciIcone: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  raccourciTextes: { flex: 1, minWidth: 0 },
+  raccourciValeur: { color: couleurs.texte, fontSize: 15, fontWeight: '900', marginTop: 2 },
   raccourci: {
     flex: 1,
     gap: 2,
@@ -552,6 +692,29 @@ const s = StyleSheet.create({
   ligneMontant: { fontSize: 15, fontWeight: '700', color: couleurs.texte },
   ligneStatut: { fontSize: 11, fontWeight: '600', marginTop: 1 },
   ligneRupture: { fontSize: 14, fontWeight: '700', color: couleurs.danger },
+  alertesVisuelles: { gap: espaces.s, paddingRight: espaces.l },
+  alerteCarte: {
+    width: 104,
+    minHeight: 142,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+    padding: espaces.s,
+  },
+  alerteBadge: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: couleurs.danger,
+  },
+  alerteBadgeTexte: { color: couleurs.texteInverse, fontSize: 11, fontWeight: '900' },
+  alerteNom: { marginTop: 7, color: couleurs.texte, fontSize: 12, fontWeight: '800', lineHeight: 15 },
 
   vide: {
     alignItems: 'center',

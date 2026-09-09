@@ -1045,10 +1045,8 @@ export default function NouveauProduit() {
 
   const valider = useCallback(
     async (valide: ProduitValide) => {
-      const identifiant = await creerProduit(valide);
-      // On remplace l'ecran de creation par la fiche : revenir en arriere doit
-      // ramener au catalogue, pas a un formulaire deja enregistre.
-      router.replace({ pathname: '/produit/[id]', params: { id: String(identifiant) } });
+      await creerProduit(valide);
+      router.dismissTo('/(tabs)/catalogue');
     },
     [router],
   );
