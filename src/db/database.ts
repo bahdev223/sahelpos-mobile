@@ -13,11 +13,29 @@ import { MIGRATIONS, SCHEMA_VERSION } from './schema';
 const NOM_BASE = 'sahelpos.db';
 
 let base: SQLite.SQLiteDatabase | null = null;
+let ouverture: Promise<SQLite.SQLiteDatabase> | null = null;
 
 /** Retourne la base, en l'ouvrant et en la migrant au premier appel. */
 export async function obtenirBase(): Promise<SQLite.SQLiteDatabase> {
   if (base) return base;
 
+  // Au lancement, le bootstrap, les ecrans et le moteur de synchronisation
+  // peuvent tous demander SQLite dans la meme frame. Ouvrir plusieurs bases
+  // natives avant que la premiere migration soit terminee provoque parfois un
+  // `NativeDatabase.prepareAsync` nul sur Android. Tous les appelants doivent
+  // attendre exactement la meme ouverture et la meme migration.
+  if (ouverture) return ouverture;
+
+  ouverture = ouvrirEtMigrer();
+  try {
+    base = await ouverture;
+    return base;
+  } finally {
+    ouverture = null;
+  }
+}
+
+async function ouvrirEtMigrer(): Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync(NOM_BASE);
 
   // Sans cette ligne, SQLite ignore les ON DELETE CASCADE declares au schema.
@@ -27,7 +45,6 @@ export async function obtenirBase(): Promise<SQLite.SQLiteDatabase> {
   await db.execAsync('PRAGMA journal_mode = WAL;');
 
   await migrer(db);
-  base = db;
   return db;
 }
 
@@ -56,6 +73,7 @@ async function migrer(db: SQLite.SQLiteDatabase): Promise<void> {
 
 /** A n'utiliser que dans les tests : referme et oublie la base ouverte. */
 export async function fermerBase(): Promise<void> {
+  if (ouverture) await ouverture;
   if (!base) return;
   await base.closeAsync();
   base = null;

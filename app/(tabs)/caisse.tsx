@@ -1196,16 +1196,6 @@ const MODES: { valeur: ModePaiement; libelle: string }[] = [
   { valeur: 'credit', libelle: 'Credit' },
 ];
 
-function suggestionsEspeces(total: number): number[] {
-  const paliers = [500, 1000, 2000, 5000, 10000];
-  const valeurs = new Set<number>([total]);
-  for (const palier of paliers) {
-    const arrondi = Math.ceil(total / palier) * palier;
-    if (arrondi >= total) valeurs.add(arrondi);
-  }
-  return [...valeurs].sort((a, b) => a - b).slice(0, 5);
-}
-
 function ModalePaiement({
   visible,
   panier,
@@ -1339,18 +1329,6 @@ function ModalePaiement({
                   alignerADroite
                   style={styles.champEspace}
                 />
-                <View style={styles.grilleChoix}>
-                  {suggestionsEspeces(total).map((valeur) => (
-                    <Pressable
-                      key={valeur}
-                      accessibilityRole="button"
-                      onPress={() => setRecuTexte(String(valeur))}
-                      style={[styles.puce, styles.puceMontant]}
-                    >
-                      <Text style={styles.puceNom}>{formaterMontant(valeur, devise)}</Text>
-                    </Pressable>
-                  ))}
-                </View>
                 <View style={styles.blocMonnaie}>
                   <Text style={styles.blocMonnaieLibelle}>Monnaie a rendre</Text>
                   <Montant
