@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, useFocusEffect } from 'expo-router';
 
 import { Bouton, Carte, Champ, couleurs, espaces, rayons } from '../src/ui/components';
 import {
@@ -42,6 +42,25 @@ const NOM_PLAN: Record<string, string> = {
   BUSINESS: 'Reseau',
 };
 
+const NOM_STATUT: Record<string, string> = {
+  essai: 'Essai gratuit',
+  actif: 'Actif',
+  expire: 'Expire',
+  suspendu: 'Suspendu',
+  resilie: 'Resilie',
+};
+
+function texteRestant(jours: number | null, date: string): string {
+  if (jours !== null) {
+    if (jours === 0) return 'Expire aujourd’hui';
+    return `${jours} jour${jours > 1 ? 's' : ''} restant${jours > 1 ? 's' : ''}`;
+  }
+  const fin = new Date(date).getTime();
+  if (!Number.isFinite(fin)) return '—';
+  const joursCalcules = Math.max(0, Math.ceil((fin - Date.now()) / 86_400_000));
+  return joursCalcules === 0 ? 'Expire aujourd’hui' : `${joursCalcules} jour${joursCalcules > 1 ? 's' : ''} restant${joursCalcules > 1 ? 's' : ''}`;
+}
+
 export default function EcranAbonnement() {
   const [etat, setEtat] = useState<EtatAbonnement | null>(null);
   const [code, setCode] = useState('');
@@ -54,6 +73,21 @@ export default function EcranAbonnement() {
   useEffect(() => {
     void charger();
   }, [charger]);
+
+  // Un droit deja enregistre reste utilisable hors ligne. Des que cet ecran
+  // s'ouvre avec Internet, on le renouvelle toutefois afin d'afficher la
+  // vraie echeance du forfait sans obliger le commercant a toucher un bouton.
+  useFocusEffect(
+    useCallback(() => {
+      void (async () => {
+        try {
+          setEtat(await rafraichir());
+        } catch {
+          await charger();
+        }
+      })();
+    }, [charger]),
+  );
 
   const surActiver = useCallback(async () => {
     setEnCours(true);
@@ -129,9 +163,14 @@ export default function EcranAbonnement() {
           <Carte titre="Votre offre">
             <Ligne libelle="Boutique" valeur={droit.nom} />
             <Ligne libelle="Offre" valeur={NOM_PLAN[droit.plan] ?? droit.plan} />
+            <Ligne libelle="Statut" valeur={NOM_STATUT[droit.statut] ?? droit.statut} />
             <Ligne
-              libelle="Verifie jusqu au"
-              valeur={dateCourte(droit.expireLe)}
+              libelle="Renouvellement"
+              valeur={dateCourte(droit.abonnementExpireLe || droit.expireLe)}
+            />
+            <Ligne
+              libelle="Temps restant"
+              valeur={texteRestant(droit.joursRestants, droit.abonnementExpireLe || droit.expireLe)}
             />
             <Ligne
               libelle="Encaissement"

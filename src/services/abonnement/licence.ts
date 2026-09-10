@@ -47,6 +47,10 @@ export interface Droit {
   fonctionnalites: string[];
   /** Message destine au commercant. Vide si tout va bien. */
   raison: string;
+  /** Vraie echeance commerciale, distincte du droit offline de 30 jours. */
+  abonnementExpireLe: string;
+  finGraceLe: string;
+  joursRestants: number | null;
   expireLe: string;
   emisLe: string;
 }
@@ -171,6 +175,11 @@ export function lireDroit(licence: string): Droit {
       ? (brut.fonctionnalites as unknown[]).map(String)
       : [],
     raison: String(brut.raison ?? ''),
+    abonnementExpireLe: String(brut.abonnement_expire_le ?? ''),
+    finGraceLe: String(brut.fin_grace_le ?? ''),
+    joursRestants: Number.isFinite(Number(brut.jours_restants))
+      ? Math.max(0, Math.floor(Number(brut.jours_restants)))
+      : null,
     expireLe: String(brut.expire_le ?? ''),
     emisLe: String(brut.emis_le ?? ''),
   };
