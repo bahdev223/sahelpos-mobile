@@ -11,6 +11,8 @@ export interface Parametres {
   boutiqueNom: string;
   boutiqueAdresse: string;
   boutiqueTelephone: string;
+  /** Chemin relatif du logo, affiche sur les documents PDF de la boutique. */
+  boutiqueLogo: string;
   devise: string;
   recuPiedDePage: string;
   /** Largeur du papier de l'imprimante : '58mm' ou '80mm'. */
@@ -24,7 +26,8 @@ export const PARAMETRES_PAR_DEFAUT: Parametres = {
   boutiqueNom: 'Ma boutique',
   boutiqueAdresse: '',
   boutiqueTelephone: '',
-  devise: 'FCFA',
+  boutiqueLogo: '',
+  devise: 'F',
   recuPiedDePage: 'Merci de votre visite',
   imprimantePapier: '58mm',
   imprimanteAppareil: '',
@@ -33,6 +36,23 @@ export const PARAMETRES_PAR_DEFAUT: Parametres = {
 
 /** Correspondance entre les champs de l'objet et les cles stockees en base. */
 const CLES: Record<keyof Parametres, string> = {
+  // Ces cles sont aussi celles que lit la session (`app/_layout.tsx`). Une
+  // page Boutique qui ecrivait dans un autre espace de noms donnait un faux
+  // sentiment d'enregistrement : le tableau de bord et les factures lisaient
+  // encore les anciennes valeurs.
+  boutiqueNom: 'boutique_nom',
+  boutiqueAdresse: 'boutique_adresse',
+  boutiqueTelephone: 'boutique_telephone',
+  boutiqueLogo: 'boutique_logo',
+  devise: 'devise',
+  recuPiedDePage: 'recu_pied_de_page',
+  imprimantePapier: 'recu_largeur_papier',
+  imprimanteAppareil: 'imprimante_appareil',
+  installationTerminee: 'installation_terminee',
+};
+
+/** Lecture de compatibilite pour les reglages ecrits par les anciennes APK. */
+const ANCIENNES_CLES: Partial<Record<keyof Parametres, string>> = {
   boutiqueNom: 'boutique.nom',
   boutiqueAdresse: 'boutique.adresse',
   boutiqueTelephone: 'boutique.telephone',
@@ -51,7 +71,8 @@ export async function lireParametres(): Promise<Parametres> {
 
   const resultat = { ...PARAMETRES_PAR_DEFAUT };
   for (const champ of Object.keys(CLES) as Array<keyof Parametres>) {
-    const brut = parCle.get(CLES[champ]);
+    const brut = parCle.get(CLES[champ]) ??
+      (ANCIENNES_CLES[champ] ? parCle.get(ANCIENNES_CLES[champ]!) : undefined);
     if (brut === undefined) continue;
     if (champ === 'installationTerminee') {
       resultat.installationTerminee = brut === '1' || brut === 'true';
@@ -89,6 +110,7 @@ export async function enteteRecu(): Promise<{
   nom: string;
   adresse?: string;
   telephone?: string;
+  logo?: string;
   piedDePage?: string;
 }> {
   const p = await lireParametres();
@@ -96,6 +118,7 @@ export async function enteteRecu(): Promise<{
     nom: p.boutiqueNom,
     adresse: p.boutiqueAdresse || undefined,
     telephone: p.boutiqueTelephone || undefined,
+    logo: p.boutiqueLogo || undefined,
     piedDePage: p.recuPiedDePage || undefined,
   };
 }

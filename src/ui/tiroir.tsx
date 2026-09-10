@@ -139,6 +139,12 @@ const GROUPES: Groupe[] = [
         icone: 'sauvegarde',
       },
       {
+        titre: 'Synchronisation',
+        description: 'Etat Web et donnees hors ligne',
+        chemin: '/parametres/synchronisation',
+        icone: 'reseau',
+      },
+      {
         titre: 'Mon abonnement',
         description: 'Activation et offre en cours',
         chemin: '/abonnement',

@@ -22,6 +22,7 @@
  */
 import * as Impression from 'expo-print';
 import * as Partage from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
 
 import type { AchatResume, LigneAchat } from './achat';
 import type { Fournisseur } from '../db/repositories/fournisseur';
@@ -53,6 +54,17 @@ function echapper(texte: string | null | undefined): string {
     .replace(/"/g, '&quot;');
 }
 
+/** Resout le chemin relatif choisi dans « Ma boutique » pour le moteur PDF. */
+function uriLogo(chemin: string): string {
+  if (!chemin) return '';
+  if (/^(file|content|https?):\/\//.test(chemin)) return chemin;
+  try {
+    return new File(Paths.document, chemin).uri;
+  } catch {
+    return '';
+  }
+}
+
 /** `2026-09-03T18:23:00.000Z` -> `03/09/2026`. */
 function dateCourte(iso: string | null | undefined): string {
   if (!iso) return '';
@@ -81,6 +93,8 @@ const STYLE = `
   }
   .entete { display: flex; justify-content: space-between; align-items: flex-start;
             border-bottom: 3px solid #004a8d; padding-bottom: 10px; margin-bottom: 18px; }
+  .entete-marque { display: flex; align-items: center; gap: 10px; }
+  .logo-boutique { width: 46px; height: 46px; object-fit: contain; border-radius: 6px; }
   .boutique { font-size: 20px; font-weight: 700; color: #004a8d; margin: 0 0 4px; }
   .boutique-ligne { color: #64748b; font-size: 11px; margin: 1px 0; }
   .doc-titre { font-size: 16px; font-weight: 700; text-align: right; margin: 0; }
@@ -114,11 +128,15 @@ function enteteHtml(p: Parametres, titre: string, sousTitre: string): string {
     .filter((v) => v && v.trim())
     .map((v) => `<p class="boutique-ligne">${echapper(v)}</p>`)
     .join('');
+  const logo = uriLogo(p.boutiqueLogo);
   return `
     <div class="entete">
-      <div>
-        <p class="boutique">${echapper(p.boutiqueNom)}</p>
-        ${lignes}
+      <div class="entete-marque">
+        ${logo ? `<img class="logo-boutique" src="${echapper(logo)}" alt="Logo de la boutique" />` : ''}
+        <div>
+          <p class="boutique">${echapper(p.boutiqueNom)}</p>
+          ${lignes}
+        </div>
       </div>
       <div>
         <p class="doc-titre">${echapper(titre)}</p>

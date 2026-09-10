@@ -1,19 +1,17 @@
 /**
- * Les quatre onglets de l'application.
+ * Les cinq onglets de l'application.
  *
- * POURQUOI QUATRE ET NON CINQ
+ * POURQUOI CINQ ONGLETS
  * ---------------------------
- * La barre portait un cinquieme bouton « Plus » qui n'etait qu'un sommaire :
- * un onglet permanent depense de la place au pouce pour une page qu'on
- * traverse sans s'y arreter. Ce sommaire est devenu le tiroir, ouvert depuis
- * l'en-tete ; la barre ne garde que les quatre ecrans ou le commercant passe
- * reellement sa journee.
+ * L'achat est une action quotidienne de stock : il doit etre atteignable sans
+ * ouvrir le tiroir. Les cinq libelles restent courts et conservent une cible
+ * tactile de 48 points sur le plus petit telephone pris en charge.
  *
  * POURQUOI CET ORDRE
  * ------------------
  * Accueil d'abord parce qu'on ouvre l'application pour savoir ou on en est,
- * puis la caisse qu'on utilise cent fois, puis le catalogue et le stock qu'on
- * consulte entre deux clients. Les ventes et tout le reste sont dans le tiroir.
+ * puis la caisse, le catalogue, les achats et le stock. Les ventes et tout le
+ * reste sont dans le tiroir.
  *
  * POURQUOI LES PICTOGRAMMES NE SONT PLUS DESSINES ICI
  * --------------------------------------------------
@@ -72,6 +70,7 @@ export default function DispositionOnglets() {
         name="catalogue"
         options={{ title: 'Catalogue', tabBarIcon: icone('catalogue') }}
       />
+      <Tabs.Screen name="achats" options={{ title: 'Achats', tabBarIcon: icone('achats') }} />
       <Tabs.Screen name="stock" options={{ title: 'Stock', tabBarIcon: icone('stock') }} />
       <Tabs.Screen name="ventes" options={{ href: null }} />
     </Tabs>

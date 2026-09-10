@@ -163,12 +163,14 @@ const stylesBouton = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  grand: { minHeight: 60, borderRadius: rayons.l },
+  // Les actions principales restent confortables au pouce sans transformer
+  // le bas de l'ecran en bloc massif sur un telephone compact.
+  grand: { minHeight: 52, borderRadius: rayons.l },
   contour: { borderWidth: 1, borderColor: couleurs.bordure },
   presse: { opacity: 0.72 },
   inactif: { opacity: 0.45 },
-  titre: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  titreGrand: { fontSize: 19 },
+  titre: { fontSize: 15, fontWeight: '700', textAlign: 'center' },
+  titreGrand: { fontSize: 16 },
   sousTitre: {
     fontSize: 13,
     textAlign: 'center',
@@ -492,8 +494,8 @@ const stylesMontant = StyleSheet.create({
   base: { color: couleurs.texte, fontVariant: ['tabular-nums'] },
   petit: { fontSize: 14, fontWeight: '600' },
   moyen: { fontSize: 17, fontWeight: '700' },
-  grand: { fontSize: 24, fontWeight: '800' },
-  geant: { fontSize: 40, fontWeight: '800', letterSpacing: -0.5 },
+  grand: { fontSize: 22, fontWeight: '800' },
+  geant: { fontSize: 30, fontWeight: '800', letterSpacing: -0.3 },
 });
 
 /**

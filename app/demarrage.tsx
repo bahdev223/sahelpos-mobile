@@ -38,7 +38,7 @@ import {
   rayons,
 } from '../src/ui/components';
 
-import { CLES_PARAMETRES, ecrireParametres, useSession } from './_layout';
+import { CLES_PARAMETRES, ecrireParametres, lireParametres, useSession } from './_layout';
 
 const LONGUEUR_PIN_MIN = 4;
 const LONGUEUR_PIN_MAX = 6;
@@ -215,13 +215,19 @@ export function EcranDemarrage() {
       }
 
       const cree = { id: 0 };
+      // Le pull Web vient de se terminer dans connecterBoutique(). Il faut
+      // conserver ses donnees : reposer ici « F », une adresse vide ou un nom
+      // de secours ecrasait la fiche synchronisee a la toute premiere
+      // installation et expliquait des ecrans avec des chiffres coherents mais
+      // une boutique incoherente.
+      const parametresSynchronises = await lireParametres();
       await ecrireParametres({
-        [CLES_PARAMETRES.nom]: droit.nom || 'Boutique',
-        [CLES_PARAMETRES.adresse]: '',
-        [CLES_PARAMETRES.telephone]: '',
-        [CLES_PARAMETRES.devise]: 'F',
-        [CLES_PARAMETRES.piedDePage]: 'Merci de votre visite',
-        [CLES_PARAMETRES.largeurPapier]: '58mm',
+        [CLES_PARAMETRES.nom]: parametresSynchronises[CLES_PARAMETRES.nom] || droit.nom || 'Boutique',
+        [CLES_PARAMETRES.adresse]: parametresSynchronises[CLES_PARAMETRES.adresse] || '',
+        [CLES_PARAMETRES.telephone]: parametresSynchronises[CLES_PARAMETRES.telephone] || '',
+        [CLES_PARAMETRES.devise]: parametresSynchronises[CLES_PARAMETRES.devise] || 'F',
+        [CLES_PARAMETRES.piedDePage]: parametresSynchronises[CLES_PARAMETRES.piedDePage] || 'Merci de votre visite',
+        [CLES_PARAMETRES.largeurPapier]: parametresSynchronises[CLES_PARAMETRES.largeurPapier] || '58mm',
         [CLES_PARAMETRES.installation]: '1',
       });
 

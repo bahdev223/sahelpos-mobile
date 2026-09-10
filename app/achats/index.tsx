@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { useSession } from '../_layout';
 
 import {
   Bouton,
@@ -52,6 +53,7 @@ function dateCourte(iso: string): string {
 
 export default function EcranAchats() {
   const router = useRouter();
+  const { boutique, synchroniserMaintenant } = useSession();
   const [achats, setAchats] = useState<AchatResume[]>([]);
   const [dette, setDette] = useState(0);
   const [chargement, setChargement] = useState(true);
@@ -72,6 +74,16 @@ export default function EcranAchats() {
     }
   }, []);
 
+  const rafraichir = useCallback(async () => {
+    setRafraichit(true);
+    try {
+      await synchroniserMaintenant();
+      await charger();
+    } finally {
+      setRafraichit(false);
+    }
+  }, [charger, synchroniserMaintenant]);
+
   useFocusEffect(
     useCallback(() => {
       charger();
@@ -82,7 +94,7 @@ export default function EcranAchats() {
 
   return (
     <SafeAreaView style={styles.page} edges={['bottom']}>
-      <Stack.Screen options={{ headerShown: true, title: 'Achats' }} />
+      <Stack.Screen options={{ headerShown: false }} />
 
       {erreur ? (
         <Erreur message={erreur} onReessayer={charger} />
@@ -96,10 +108,7 @@ export default function EcranAchats() {
           refreshControl={
             <RefreshControl
               refreshing={rafraichit}
-              onRefresh={() => {
-                setRafraichit(true);
-                charger();
-              }}
+              onRefresh={rafraichir}
             />
           }
           ListHeaderComponent={
@@ -110,6 +119,7 @@ export default function EcranAchats() {
                 </Text>
                 <Montant
                   valeur={dette}
+                  devise={boutique.devise}
                   taille="grand"
                   couleur={dette > 0 ? couleurs.danger : couleurs.primaire}
                 />
@@ -142,12 +152,12 @@ export default function EcranAchats() {
                   </Text>
                   {reste > 0 && item.statut !== 'ANNULE' ? (
                     <Text style={styles.resteLigne}>
-                      reste {formaterMontant(reste)}
+                      reste {formaterMontant(reste, boutique.devise)}
                     </Text>
                   ) : null}
                 </View>
                 <View style={styles.ligneDroite}>
-                  <Montant valeur={item.total} taille="moyen" />
+                  <Montant valeur={item.total} devise={boutique.devise} taille="moyen" />
                   <Text style={[styles.statut, { color: COULEUR_STATUT[item.statut] }]}>
                     {LIBELLE_STATUT[item.statut]}
                   </Text>

@@ -36,9 +36,9 @@ import {
 import { obtenirBase } from '../../src/db/database';
 import { genererIdLocal } from '../../src/db/repositories/base';
 import { seuilAlerteStock } from '../../src/domain/stock';
-import { C, formaterFrancs, formaterQuantite, s } from '../produit/nouveau';
+import { C, formaterQuantite, s } from '../produit/nouveau';
 import {
-  BARRE_HORIZONTALE, BandeauEtat, Vignette } from '../../src/ui/components';
+  BARRE_HORIZONTALE, BandeauEtat, formaterMontant, Vignette } from '../../src/ui/components';
 import { couleurs } from '../../src/ui/theme';
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
@@ -564,7 +564,7 @@ const FILTRES: { cle: Filtre; libelle: string }[] = [
 
 export default function Stock() {
   const router = useRouter();
-  const { boutique } = useSession();
+  const { boutique, revisionSynchronisation, synchroniserMaintenant } = useSession();
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [recherche, setRecherche] = useState('');
   const [filtre, setFiltre] = useState<Filtre>('tous');
@@ -584,13 +584,18 @@ export default function Stock() {
   useFocusEffect(
     useCallback(() => {
       void charger(true);
-    }, [charger]),
+    }, [charger, revisionSynchronisation]),
   );
 
-  const rafraichir = useCallback(() => {
+  const rafraichir = useCallback(async () => {
     setRafraichissement(true);
-    void charger(true).finally(() => setRafraichissement(false));
-  }, [charger]);
+    try {
+      await synchroniserMaintenant();
+      await charger(true);
+    } finally {
+      setRafraichissement(false);
+    }
+  }, [charger, synchroniserMaintenant]);
 
   const produits = etat.phase === 'pret' ? etat.produits : [];
 
@@ -653,20 +658,6 @@ export default function Stock() {
             {bilan.ruptures + bilan.alertes > 0 ? (
               <Text style={sl.badgeCloche}>{bilan.ruptures + bilan.alertes}</Text>
             ) : null}
-          </Pressable>
-          <Pressable style={sl.boutonBoutique} onPress={() => router.push('/stock/mouvements')}>
-            <Text style={sl.initialesBoutique}>
-              {boutique.nom
-                .split(/\s+/)
-                .filter(Boolean)
-                .slice(0, 2)
-                .map((mot) => mot[0]?.toUpperCase() ?? '')
-                .join('') || 'ST'}
-            </Text>
-            <Text style={sl.nomBoutique} numberOfLines={1}>
-              {boutique.nom}
-            </Text>
-            <Text style={sl.chevronBoutique}>⌄</Text>
           </Pressable>
         </View>
       </View>
@@ -784,6 +775,7 @@ export default function Stock() {
           renderItem={({ item }) => (
             <LigneProduitStock
               produit={item}
+              devise={boutique.devise}
               onOuvrir={() =>
                 router.push({
                   pathname: '/produit/[id]',
@@ -817,6 +809,7 @@ export default function Stock() {
 
 function LigneProduitStock(p: {
   produit: ProduitStock;
+  devise: string;
   onOuvrir: () => void;
   onAjuster: () => void;
   onJournal: () => void;
@@ -885,7 +878,7 @@ function LigneProduitStock(p: {
             <Icone nom="achats" taille={18} couleur={C.accent} />
             <View>
               <Text style={sl.prixAchatValeur} numberOfLines={1} adjustsFontSizeToFit>
-                {formaterFrancs(p.produit.prix_achat)}
+                {formaterMontant(p.produit.prix_achat, p.devise)}
               </Text>
               <Text style={sl.prixAchatLibelle}>Prix d'achat</Text>
             </View>

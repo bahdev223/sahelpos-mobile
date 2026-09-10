@@ -32,6 +32,7 @@ import { catalogueHtml, genererEtPartager } from '../../src/services/pdf';
 import { BandeauEtat, BARRE_HORIZONTALE, couleurs } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
+import { useSession } from '../_layout';
 
 // --------------------------------------------------------------------------
 // Acces aux donnees
@@ -111,6 +112,7 @@ type Etat =
 
 export default function Catalogue() {
   const router = useRouter();
+  const { revisionSynchronisation, synchroniserMaintenant } = useSession();
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [recherche, setRecherche] = useState('');
   const [categorie, setCategorie] = useState<string | null>(null);
@@ -137,13 +139,18 @@ export default function Catalogue() {
   useFocusEffect(
     useCallback(() => {
       void charger(true);
-    }, [charger]),
+    }, [charger, revisionSynchronisation]),
   );
 
-  const rafraichir = useCallback(() => {
+  const rafraichir = useCallback(async () => {
     setRafraichissement(true);
-    void charger(true).finally(() => setRafraichissement(false));
-  }, [charger]);
+    try {
+      await synchroniserMaintenant();
+      await charger(true);
+    } finally {
+      setRafraichissement(false);
+    }
+  }, [charger, synchroniserMaintenant]);
 
   const produits = etat.phase === 'pret' ? etat.produits : [];
 

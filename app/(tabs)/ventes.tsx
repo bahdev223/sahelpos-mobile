@@ -35,6 +35,7 @@ import {
   type VenteResume,
 } from '../../src/db/repositories/vente';
 import type { StatutVente } from '../../src/domain/types';
+import { useSession } from '../_layout';
 
 type Periode = 'jour' | 'semaine' | 'mois';
 
@@ -78,6 +79,7 @@ function heure(iso: string): string {
 
 export default function EcranVentes() {
   const router = useRouter();
+  const { synchroniserMaintenant } = useSession();
   const [periode, setPeriode] = useState<Periode>('jour');
   const [ventes, setVentes] = useState<VenteResume[]>([]);
   const [totaux, setTotaux] = useState<TotauxPeriode | null>(null);
@@ -102,6 +104,16 @@ export default function EcranVentes() {
       setRafraichit(false);
     }
   }, [periode]);
+
+  const rafraichir = useCallback(async () => {
+    setRafraichit(true);
+    try {
+      await synchroniserMaintenant();
+      await charger();
+    } finally {
+      setRafraichit(false);
+    }
+  }, [charger, synchroniserMaintenant]);
 
   useFocusEffect(
     useCallback(() => {
@@ -174,10 +186,7 @@ export default function EcranVentes() {
         refreshControl={
           <RefreshControl
             refreshing={rafraichit}
-            onRefresh={() => {
-              setRafraichit(true);
-              charger();
-            }}
+            onRefresh={rafraichir}
           />
         }
         ListEmptyComponent={

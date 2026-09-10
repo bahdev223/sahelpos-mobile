@@ -20,6 +20,7 @@ import {
 } from '../db/repositories/base';
 import { exigerEcriture } from './abonnement';
 import { verifierStock } from './notifications';
+import { marquerChangement } from './synchronisation';
 
 export type StatutAchat = 'BROUILLON' | 'RECU' | 'ANNULE';
 
@@ -182,6 +183,7 @@ export async function enregistrerAchat(demande: DemandeAchat): Promise<ResultatA
   const total = lignes.reduce((s, l) => s + l.total, 0);
   const paye = arrondir(demande.montantPaye ?? 0);
   const horodatage = maintenant();
+  const idLocal = genererIdLocal();
 
   // La valeur est RENVOYEE par la transaction plutot qu'affectee a une variable
   // exterieure : TypeScript ne peut pas savoir qu'une fermeture a bien ete
@@ -190,15 +192,16 @@ export async function enregistrerAchat(demande: DemandeAchat): Promise<ResultatA
     const numero = await genererNumero();
     const r = await executer(
       `INSERT INTO achat (id_local, numero, fournisseur_id, reference, date_achat,
-                          total, montant_paye, statut)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'BROUILLON')`,
-      genererIdLocal(),
+                          total, montant_paye, statut, date_modification)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'BROUILLON', ?)`,
+      idLocal,
       numero,
       demande.fournisseurId ?? null,
       demande.reference?.trim() || null,
       horodatage,
       total,
       paye,
+      horodatage,
     );
     const achatId = r.lastInsertRowId;
 
@@ -223,6 +226,9 @@ export async function enregistrerAchat(demande: DemandeAchat): Promise<ResultatA
     return { achatId, numero, total, recu: false };
   });
 
+  // L'achat existe deja a ce stade. Le marquer avant la reception garantit
+  // qu'une erreur locale de stock ne le fait jamais disparaitre de la file.
+  await marquerChangement('achat', idLocal);
   if (demande.recevoirMaintenant !== false) {
     await recevoirAchat(cree.achatId);
     return { ...cree, recu: true };
@@ -242,8 +248,8 @@ export async function recevoirAchat(achatId: number): Promise<void> {
   await exigerEcriture();
 
   await dansTransaction(async () => {
-    const a = await lirePremier<{ numero: string; statut: string }>(
-      'SELECT numero, statut FROM achat WHERE id = ?',
+    const a = await lirePremier<{ numero: string; statut: string; id_local: string }>(
+      'SELECT numero, statut, id_local FROM achat WHERE id = ?',
       achatId,
     );
     if (!a) throw new Error('Achat introuvable.');
@@ -303,8 +309,8 @@ export async function recevoirAchat(achatId: number): Promise<void> {
     }
 
     await executer(
-      "UPDATE achat SET statut = 'RECU', date_reception = ? WHERE id = ?",
-      horodatage, achatId,
+      "UPDATE achat SET statut = 'RECU', date_reception = ?, date_modification = ? WHERE id = ?",
+      horodatage, horodatage, achatId,
     );
   });
 
@@ -313,6 +319,8 @@ export async function recevoirAchat(achatId: number): Promise<void> {
   // resterait affiche alors que le riz est dans le magasin.
   const lignes = await listerLignesAchat(achatId);
   void verifierStock(lignes.map((l) => l.produitId));
+  const achat = await lirePremier<{ id_local: string }>('SELECT id_local FROM achat WHERE id = ?', achatId);
+  if (achat?.id_local) await marquerChangement('achat', achat.id_local);
 }
 
 /** Regle tout ou partie de ce qui reste du au fournisseur. */
@@ -329,8 +337,8 @@ export async function payerAchat(
   if (arrondi <= 0) throw new Error('Le montant doit etre positif.');
 
   await dansTransaction(async () => {
-    const a = await lirePremier<{ total: number; montant_paye: number; statut: string }>(
-      'SELECT total, montant_paye, statut FROM achat WHERE id = ?',
+    const a = await lirePremier<{ total: number; montant_paye: number; statut: string; id_local: string }>(
+      'SELECT total, montant_paye, statut, id_local FROM achat WHERE id = ?',
       achatId,
     );
     if (!a) throw new Error('Achat introuvable.');
@@ -345,8 +353,8 @@ export async function payerAchat(
     }
 
     await executer(
-      'UPDATE achat SET montant_paye = montant_paye + ? WHERE id = ?',
-      arrondi, achatId,
+      'UPDATE achat SET montant_paye = montant_paye + ?, date_modification = ? WHERE id = ?',
+      arrondi, maintenant(), achatId,
     );
     await executer(
       `INSERT INTO paiement_achat (id_local, achat_id, montant, mode_paiement, date_paiement)
@@ -354,6 +362,8 @@ export async function payerAchat(
       achatId, arrondi, mode, maintenant(),
     );
   });
+  const achat = await lirePremier<{ id_local: string }>('SELECT id_local FROM achat WHERE id = ?', achatId);
+  if (achat?.id_local) await marquerChangement('achat', achat.id_local);
 }
 
 export interface PaiementAchat {

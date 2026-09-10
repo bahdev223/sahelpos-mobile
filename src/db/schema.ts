@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 7;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -324,5 +324,30 @@ export const MIGRATIONS: string[][] = [
        ON sync_outbox(type_objet, id_local)`,
     `CREATE INDEX IF NOT EXISTS idx_sync_outbox_date
        ON sync_outbox(date_creation)`,
+  ],
+
+  // --- version 6 : achats repliques et diagnostic de synchronisation -------
+  //
+  // Un achat peut etre recu puis regle plusieurs heures plus tard. Sans une
+  // date de modification sur sa tete, le changement de paiement ne pourrait
+  // pas etre pousse de maniere rejouable vers le Web.
+  [
+    `ALTER TABLE achat ADD COLUMN date_modification TEXT`,
+    `UPDATE achat
+        SET date_modification = COALESCE(date_reception, date_achat)
+      WHERE date_modification IS NULL`,
+  ],
+
+  // --- version 7 : etat durable de la file de synchronisation -------------
+  //
+  // Une ligne ne disparait qu'apres l'accuse de reception du serveur. Son
+  // etat rend la reprise apres coupure lisible et evite de faire croire qu'une
+  // vente locale a ete perdue alors qu'elle attend simplement Internet.
+  [
+    `ALTER TABLE sync_outbox ADD COLUMN statut TEXT NOT NULL DEFAULT 'PENDING'`,
+    `UPDATE sync_outbox
+        SET statut = CASE WHEN derniere_erreur IS NULL THEN 'PENDING' ELSE 'FAILED' END`,
+    `CREATE INDEX IF NOT EXISTS idx_sync_outbox_statut_date
+       ON sync_outbox(statut, date_creation)`,
   ],
 ];

@@ -14,11 +14,12 @@
  * l'application redemande le code, ce qui est le comportement attendu d'une
  * caisse que plusieurs vendeurs se passent.
  */
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as Network from 'expo-network';
 
 import { obtenirBase } from '../src/db/database';
 import {
@@ -26,7 +27,12 @@ import {
   rafraichir as rafraichirAbonnement,
 } from '../src/services/abonnement';
 import { verifierStock } from '../src/services/notifications';
-import { bootstrapInitial, synchroniser } from '../src/services/synchronisation';
+import {
+  bootstrapInitial,
+  ecouterChangementSynchronisation,
+  lireEtatSynchronisation,
+  type EtatSynchronisation,
+} from '../src/services/synchronisation';
 import type { Role, Utilisateur } from '../src/domain/types';
 import type { LargeurPapier } from '../src/services/impression/escpos';
 import { Chargement, Erreur, couleurs } from '../src/ui/components';
@@ -41,6 +47,7 @@ export const CLES_PARAMETRES = {
   nom: 'boutique_nom',
   adresse: 'boutique_adresse',
   telephone: 'boutique_telephone',
+  logo: 'boutique_logo',
   devise: 'devise',
   piedDePage: 'recu_pied_de_page',
   largeurPapier: 'recu_largeur_papier',
@@ -50,6 +57,7 @@ export interface Boutique {
   nom: string;
   adresse: string | null;
   telephone: string | null;
+  logo: string | null;
   /** Symbole affiche apres les montants. Le CFA n'a pas de sous-unite. */
   devise: string;
   piedDePage: string | null;
@@ -60,6 +68,7 @@ export const BOUTIQUE_PAR_DEFAUT: Boutique = {
   nom: 'Ma boutique',
   adresse: null,
   telephone: null,
+  logo: null,
   devise: 'F',
   piedDePage: 'Merci de votre visite',
   largeurPapier: '58mm',
@@ -73,6 +82,12 @@ export interface ValeurSession {
   fermerSession: () => void;
   /** A appeler apres avoir modifie les parametres ou les comptes. */
   recharger: () => Promise<void>;
+  /** Change apres une synchronisation distante appliquee dans SQLite. */
+  revisionSynchronisation: number;
+  /** Etat durable, utile pour indiquer au commercant si le dernier pull a echoue. */
+  etatSynchronisation: EtatSynchronisation;
+  /** Synchronisation manuelle : le geste actualiser ne doit jamais rester local. */
+  synchroniserMaintenant: () => Promise<void>;
 }
 
 const ContexteSession = createContext<ValeurSession | null>(null);
@@ -124,6 +139,7 @@ function fabriquerBoutique(table: Record<string, string>): Boutique {
     nom: table[CLES_PARAMETRES.nom] || BOUTIQUE_PAR_DEFAUT.nom,
     adresse: table[CLES_PARAMETRES.adresse] || null,
     telephone: table[CLES_PARAMETRES.telephone] || null,
+    logo: table[CLES_PARAMETRES.logo] || null,
     devise: table[CLES_PARAMETRES.devise] || BOUTIQUE_PAR_DEFAUT.devise,
     piedDePage: table[CLES_PARAMETRES.piedDePage] || BOUTIQUE_PAR_DEFAUT.piedDePage,
     largeurPapier: largeur === '80mm' ? '80mm' : '58mm',
@@ -138,6 +154,21 @@ export default function DispositionRacine() {
   const [installe, setInstalle] = useState(false);
   const [boutique, setBoutique] = useState<Boutique>(BOUTIQUE_PAR_DEFAUT);
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
+  const [revisionSynchronisation, setRevisionSynchronisation] = useState(0);
+  const [etatSynchronisation, setEtatSynchronisation] = useState<EtatSynchronisation>({
+    derniereTentative: null,
+    dernierSucces: null,
+    derniereErreur: null,
+    dernierPush: null,
+    dernierPull: null,
+    enAttente: 0,
+    cursor: null,
+  });
+  // Toutes les sources (retour du reseau, reprise de l'app, ecriture locale
+  // et geste tirer-pour-actualiser) partagent cette meme promesse. Ainsi un
+  // rafraichissement manuel attend une synchro deja lancee au lieu de relire
+  // SQLite trop tot et de donner l'impression que rien ne s'est passe.
+  const synchronisationEnCours = useRef<Promise<void> | null>(null);
 
   const charger = useCallback(async () => {
     setEtat('chargement');
@@ -167,6 +198,10 @@ export default function DispositionRacine() {
     void charger();
   }, [charger]);
 
+  useEffect(() => {
+    void lireEtatSynchronisation().then(setEtatSynchronisation).catch(() => {});
+  }, []);
+
   // Renouvellement silencieux du droit d'acces.
   //
   // Il ne bloque RIEN : l'application demarre sur le droit deja installe, et
@@ -185,6 +220,52 @@ export default function DispositionRacine() {
     setUtilisateur(null);
   }, []);
 
+  /**
+   * Le premier pull peut finir APRES l'affichage de l'accueil. Sans ce signal,
+   * la caisse, le catalogue et le tableau de bord conserveraient leur lecture
+   * vide jusqu'a ce que la personne change elle-meme d'onglet. Chaque ecran
+   * ecoute donc `revisionSynchronisation` et relit SQLite des que le pull est
+   * applique.
+   */
+  const synchroniserDonnees = useCallback(async () => {
+    if (synchronisationEnCours.current) {
+      return synchronisationEnCours.current;
+    }
+
+    const execution = (async () => {
+      try {
+        const abonnement = await etatAbonnementCourant();
+        const boutiqueId = abonnement.droit?.boutique;
+        if (!boutiqueId) return;
+
+        await bootstrapInitial(boutiqueId);
+        await verifierStock();
+        // La synchronisation peut mettre a jour l'identite de la boutique. On
+        // relit ces seuls parametres sans repasser la racine en ecran de
+        // chargement et sans interrompre la vente en cours.
+        setBoutique(fabriquerBoutique(await lireParametres()));
+        setRevisionSynchronisation((precedente) => precedente + 1);
+      } catch {
+        // La caisse reste disponible hors ligne. L'erreur reste tout de meme
+        // lisible dans l'etat de synchronisation, au lieu d'etre perdue.
+      } finally {
+        setEtatSynchronisation(await lireEtatSynchronisation().catch(() => ({
+        derniereTentative: null, dernierSucces: null, derniereErreur: null,
+        dernierPush: null, dernierPull: null, enAttente: 0, cursor: null,
+        })));
+      }
+    })();
+
+    synchronisationEnCours.current = execution;
+    try {
+      await execution;
+    } finally {
+      if (synchronisationEnCours.current === execution) {
+        synchronisationEnCours.current = null;
+      }
+    }
+  }, [charger]);
+
   const valeur = useMemo<ValeurSession>(
     () => ({
       utilisateur,
@@ -193,36 +274,86 @@ export default function DispositionRacine() {
       ouvrirSession,
       fermerSession,
       recharger: charger,
+      revisionSynchronisation,
+      etatSynchronisation,
+      synchroniserMaintenant: synchroniserDonnees,
     }),
-    [utilisateur, boutique, installe, ouvrirSession, fermerSession, charger],
+    [
+      utilisateur,
+      boutique,
+      installe,
+      ouvrirSession,
+      fermerSession,
+      charger,
+      revisionSynchronisation,
+      etatSynchronisation,
+      synchroniserDonnees,
+    ],
   );
 
   const pileMontee = etat === 'pret' && installe && utilisateur !== null;
 
-  // Premier examen du stock a l'ouverture.
-  //
-  // Il rattrape ce qui s'est passe pendant que l'application etait fermee :
-  // un vendeur a vide un produit hier soir, le patron ouvre ce matin et doit
-  // le voir. L'autorisation systeme est demandee ici, une seule fois, et un
-  // refus n'empeche rien — la cloche dans l'application continue de compter.
+  // Premier examen du stock a l'ouverture, meme si l'appareil n'a pas encore
+  // de droit distant (mode hors connexion).
   useEffect(() => {
     if (!pileMontee) return;
     void verifierStock();
   }, [pileMontee]);
 
-  // Meme logique que l'abonnement : la synchronisation se tente quand la
-  // caisse est ouverte, mais une coupure reseau ne bloque jamais le comptoir.
+  // Une synchronisation finalisee reveille les ecrans qui lisent SQLite, ce
+  // qui evite le faux tableau de bord vide juste apres une connexion Web.
   useEffect(() => {
     if (!pileMontee) return;
-    void (async () => {
-      const etat = await etatAbonnementCourant();
-      if (etat.droit?.boutique) {
-        await bootstrapInitial(etat.droit.boutique);
-        return;
+    void synchroniserDonnees();
+  }, [pileMontee, synchroniserDonnees]);
+
+  // Le retour du reseau est un evenement distinct du retour au premier plan :
+  // un vendeur peut activer ses donnees mobiles sans quitter la caisse.
+  useEffect(() => {
+    if (!pileMontee) return;
+    const abonnement = Network.addNetworkStateListener((reseau) => {
+      if (reseau.isConnected && reseau.isInternetReachable !== false) {
+        void synchroniserDonnees();
       }
-      await synchroniser();
-    })().catch(() => {});
-  }, [pileMontee]);
+    });
+    void Network.getNetworkStateAsync().then((reseau) => {
+      if (reseau.isConnected && reseau.isInternetReachable !== false) {
+        void synchroniserDonnees();
+      }
+    }).catch(() => {});
+    return () => abonnement.remove();
+  }, [pileMontee, synchroniserDonnees]);
+
+  // Toute ecriture met l'objet dans la file SQLite puis reveille la racine.
+  // Le push n'est donc plus conditionne a un redemarrage ou a un changement
+  // d'onglet.
+  useEffect(() => {
+    if (!pileMontee) return;
+    return ecouterChangementSynchronisation(() => {
+      // Certains services marquent l'outbox dans leur transaction SQLite. On
+      // laisse le commit finir avant de lire cette file et de la pousser.
+      setTimeout(() => void synchroniserDonnees(), 250);
+    });
+  }, [pileMontee, synchroniserDonnees]);
+
+  // Filet de securite pour un reseau qui change d'etat sans emettre
+  // d'evenement natif (certains Android apres une coupure prolongée).
+  useEffect(() => {
+    if (!pileMontee) return;
+    const intervalle = setInterval(() => void synchroniserDonnees(), 120000);
+    return () => clearInterval(intervalle);
+  }, [pileMontee, synchroniserDonnees]);
+
+  // Quand le telephone revient de veille ou retrouve le premier plan, on
+  // relit le serveur. C'est ce cas qui etait laisse de cote : les mises a jour
+  // du Web existaient, mais le mobile restait sur son cache jusqu'a redemarrage.
+  useEffect(() => {
+    if (!pileMontee) return;
+    const abonnement = AppState.addEventListener('change', (etatApp) => {
+      if (etatApp === 'active') void synchroniserDonnees();
+    });
+    return () => abonnement.remove();
+  }, [pileMontee, synchroniserDonnees]);
 
   // L'aiguillage de la racine est fait par app/index.tsx, qui redirige vers
   // la caisse. Aucun effet de navigation ici : celui qui s'y trouvait

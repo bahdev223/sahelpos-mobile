@@ -1,105 +1,72 @@
-/**
- * Saisie d'un achat fournisseur.
- *
- * Le prix d'achat est saisi pour l'UNITE ACHETEE (le carton, le sac), pas pour
- * l'unite de base. C'est ainsi que le commercant lit sa facture. La conversion
- * vers l'unite de base est faite par le service, au moment de la reception.
- */
+/** Parcours mobile de creation d'un achat : informations, articles, reglement. */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+  Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 
-import {
-  Bouton,
-  Carte,
-  Champ,
-  ListeVide,
-  Montant,
-  Vignette,
-  couleurs,
-  espaces,
-  formaterMontant,
-  formaterQuantite,
-  rayons,
-} from '../../src/ui/components';
+import { ListeVide, Vignette, couleurs, formaterMontant, formaterQuantite } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { listerProduits, listerSousUnites } from '../../src/db/repositories/produit';
 import { listerFournisseurs, type Fournisseur } from '../../src/db/repositories/fournisseur';
-import {
-  calculerLigneAchat,
-  enregistrerAchat,
-  type ArticleAchat,
-} from '../../src/services/achat';
+import { useSession } from '../_layout';
+import { calculerLigneAchat, enregistrerAchat, type ArticleAchat, type ModePaiementAchat } from '../../src/services/achat';
 import type { Produit, SousUnite } from '../../src/domain/types';
 
-interface UniteChoisie {
-  nom: string;
-  facteur: number;
-  prixIndicatif: number;
-}
+type Etape = 1 | 2 | 3;
+interface Unite { nom: string; facteur: number; prixIndicatif: number }
+
+const dateAujourdhui = () => new Intl.DateTimeFormat('fr-FR', {
+  day: '2-digit', month: '2-digit', year: 'numeric',
+}).format(new Date());
 
 export default function EcranNouvelAchat() {
   const router = useRouter();
-
+  const { boutique } = useSession();
+  const [etape, setEtape] = useState<Etape>(1);
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [fournisseurId, setFournisseurId] = useState<number | null>(null);
   const [reference, setReference] = useState('');
+  const [note, setNote] = useState('');
   const [articles, setArticles] = useState<ArticleAchat[]>([]);
+  const [recevoirMaintenant, setRecevoirMaintenant] = useState(true);
+  const [montantPaye, setMontantPaye] = useState('');
+  const [modePaiement, setModePaiement] = useState<ModePaiementAchat>('especes');
+  const [saisiePaiement, setSaisiePaiement] = useState(false);
   const [enCours, setEnCours] = useState(false);
-
-  // --- selection d'un produit ---------------------------------------------
   const [choixOuvert, setChoixOuvert] = useState(false);
   const [recherche, setRecherche] = useState('');
   const [produits, setProduits] = useState<Produit[]>([]);
   const [produitChoisi, setProduitChoisi] = useState<Produit | null>(null);
-  const [unites, setUnites] = useState<UniteChoisie[]>([]);
-  const [uniteChoisie, setUniteChoisie] = useState<UniteChoisie | null>(null);
+  const [unites, setUnites] = useState<Unite[]>([]);
+  const [uniteChoisie, setUniteChoisie] = useState<Unite | null>(null);
   const [quantite, setQuantite] = useState('1');
   const [prix, setPrix] = useState('');
 
-  useEffect(() => {
-    listerFournisseurs().then(setFournisseurs).catch(() => setFournisseurs([]));
-  }, []);
-
+  useEffect(() => { listerFournisseurs().then(setFournisseurs).catch(() => setFournisseurs([])); }, []);
   useEffect(() => {
     if (!choixOuvert) return;
-    const minuteur = setTimeout(() => {
-      listerProduits({ recherche, limite: 60 })
-        .then(setProduits)
-        .catch(() => setProduits([]));
-    }, 200);
-    return () => clearTimeout(minuteur);
-  }, [recherche, choixOuvert]);
+    const timer = setTimeout(() => {
+      listerProduits({ recherche, limite: 60 }).then(setProduits).catch(() => setProduits([]));
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [choixOuvert, recherche]);
 
-  const total = useMemo(
-    () => articles.reduce((s, a) => s + calculerLigneAchat(a).total, 0),
-    [articles],
-  );
+  const fournisseur = fournisseurs.find((item) => item.id === fournisseurId) ?? null;
+  const total = useMemo(() => articles.reduce((s, item) => s + calculerLigneAchat(item).total, 0), [articles]);
+  const paye = Number(montantPaye.replace(',', '.')) || 0;
+  const reste = Math.max(0, total - paye);
 
-  const ouvrirProduit = useCallback(async (p: Produit) => {
-    setProduitChoisi(p);
-    const sousUnites: SousUnite[] = await listerSousUnites(p.id);
-    // L'unite de base d'abord, puis les conditionnements : on achete plus
-    // souvent au carton, mais l'unite reste la reference.
-    const liste: UniteChoisie[] = [
-      { nom: p.uniteBase, facteur: 1, prixIndicatif: p.prixAchat },
-      ...sousUnites.map((su) => ({
-        nom: su.nom,
-        facteur: su.facteur,
-        prixIndicatif: Math.round(p.prixAchat * su.facteur),
+  const ouvrirProduit = useCallback(async (produit: Produit) => {
+    const sousUnites: SousUnite[] = await listerSousUnites(produit.id);
+    const liste = [
+      { nom: produit.uniteBase, facteur: 1, prixIndicatif: produit.prixAchat },
+      ...sousUnites.map((item) => ({
+        nom: item.nom, facteur: item.facteur, prixIndicatif: Math.round(produit.prixAchat * item.facteur),
       })),
     ];
+    setProduitChoisi(produit);
     setUnites(liste);
     setUniteChoisie(liste[0]);
     setQuantite('1');
@@ -107,691 +74,203 @@ export default function EcranNouvelAchat() {
   }, []);
 
   const ajouterArticle = useCallback(() => {
-    if (!produitChoisi || !uniteChoisie) return;
     const q = Number(quantite.replace(',', '.'));
     const p = Number(prix.replace(',', '.'));
-    if (!Number.isFinite(q) || q <= 0) {
-      Alert.alert('Quantite invalide', 'Saisissez une quantite superieure a zero.');
+    if (!produitChoisi || !uniteChoisie || !Number.isFinite(q) || q <= 0 || !Number.isFinite(p) || p <= 0) {
+      Alert.alert('Article incomplet', 'Choisissez un produit, une unité, une quantité et un prix valides.');
       return;
     }
-    if (!Number.isFinite(p) || p <= 0) {
-      Alert.alert('Prix invalide', "Saisissez le prix paye pour une unite achetee.");
+    setArticles((liste) => [...liste, {
+      produitId: produitChoisi.id, libelle: produitChoisi.nom, unite: uniteChoisie.nom,
+      facteur: uniteChoisie.facteur, quantite: q, prixUnitaire: p,
+    }]);
+    setProduitChoisi(null); setRecherche(''); setChoixOuvert(false);
+  }, [prix, produitChoisi, quantite, uniteChoisie]);
+
+  const suivant = useCallback(async () => {
+    if (etape === 1) {
+      if (!fournisseurId) {
+        Alert.alert('Fournisseur requis', 'Choisissez le fournisseur avant de continuer.');
+        return;
+      }
+      setEtape(2);
       return;
     }
-    setArticles((liste) => [
-      ...liste,
-      {
-        produitId: produitChoisi.id,
-        libelle: produitChoisi.nom,
-        unite: uniteChoisie.nom,
-        facteur: uniteChoisie.facteur,
-        quantite: q,
-        prixUnitaire: p,
-      },
-    ]);
-    setProduitChoisi(null);
-    setChoixOuvert(false);
-    setRecherche('');
-  }, [produitChoisi, uniteChoisie, quantite, prix]);
-
-  const enregistrer = useCallback(
-    async (recevoirMaintenant: boolean) => {
-      if (articles.length === 0) {
-        Alert.alert('Achat vide', 'Ajoutez au moins un produit.');
+    if (etape === 2) {
+      if (!articles.length) {
+        Alert.alert('Aucun article', 'Ajoutez au moins un article à cet achat.');
         return;
       }
-      const paye = 0;
-      if (paye > total) {
-        Alert.alert(
-          'Montant trop eleve',
-          `Vous ne pouvez pas payer plus que le total de ${formaterMontant(total)}.`,
-        );
-        return;
-      }
+      setEtape(3);
+      return;
+    }
+    if (paye > total) {
+      Alert.alert('Montant trop élevé', `Le paiement ne peut pas dépasser ${formaterMontant(total, boutique.devise)}.`);
+      return;
+    }
+    setEnCours(true);
+    try {
+      const achat = await enregistrerAchat({
+        fournisseurId, reference: reference.trim(), articles, montantPaye: paye,
+        modePaiement, recevoirMaintenant,
+      });
+      Alert.alert(
+        recevoirMaintenant ? 'Achat reçu' : 'Achat enregistré',
+        recevoirMaintenant ? `${achat.numero} : la marchandise est entrée en stock.` : `${achat.numero} : achat en attente de réception.`,
+        [{ text: 'Voir', onPress: () => router.replace(`/achats/${achat.achatId}`) }],
+      );
+    } catch (erreur) {
+      Alert.alert('Enregistrement impossible', erreur instanceof Error ? erreur.message : 'Erreur inconnue.');
+    } finally { setEnCours(false); }
+  }, [articles, boutique.devise, etape, fournisseurId, modePaiement, paye, recevoirMaintenant, reference, router, total]);
 
-      setEnCours(true);
-      try {
-        const r = await enregistrerAchat({
-          fournisseurId,
-          reference,
-          articles,
-          montantPaye: paye,
-          recevoirMaintenant,
-        });
-        Alert.alert(
-          recevoirMaintenant ? 'Achat recu' : 'Achat enregistre',
-          recevoirMaintenant
-            ? `${r.numero} : la marchandise est entree en stock.`
-            : `${r.numero} : a recevoir quand la marchandise arrivera.`,
-          [{ text: 'Voir', onPress: () => router.replace(`/achats/${r.achatId}`) }],
-        );
-      } catch (e) {
-        Alert.alert(
-          'Enregistrement impossible',
-          e instanceof Error ? e.message : 'Erreur inconnue.',
-        );
-      } finally {
-        setEnCours(false);
-      }
-    },
-    [articles, fournisseurId, reference, total, router],
-  );
-
-  return (
-    <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
-      <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.barre}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={styles.boutonIcone}>
-          <Icone nom="retour" taille={23} couleur={couleurs.texte} />
-        </Pressable>
-        <Text style={styles.titrePage}>Nouvel achat</Text>
-        <Text style={styles.badgeBrouillon}>Brouillon</Text>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.contenu} showsVerticalScrollIndicator={false}>
-        <View style={styles.etapes}>
-          <Etape numero="1" titre="Infos" active />
-          <View style={styles.traitEtape} />
-          <Etape numero="2" titre="Articles" active={articles.length > 0} />
-          <View style={styles.traitEtape} />
-          <Etape numero="3" titre="Reglement" active={false} />
-        </View>
-
-        <View style={styles.hero}>
-          <View style={styles.heroIcone}>
-            <Icone nom="fournisseurs" taille={28} couleur={couleurs.primaire} />
-          </View>
-          <View>
-            <Text style={styles.heroTitre}>Achat de marchandise</Text>
-            <Text style={styles.heroSousTitre}>Ajoutez les produits, puis enregistrez.</Text>
-          </View>
-        </View>
-
-        <View style={styles.groupe}>
-          <Text style={styles.label}>Fournisseur</Text>
-          <View style={styles.fournisseurLigne}>
-            <Pressable
-              style={styles.select}
-              onPress={() => {
-                if (fournisseurs.length === 0) return;
-                const index = fournisseurs.findIndex((f) => f.id === fournisseurId);
-                const prochain = fournisseurs[(index + 1) % fournisseurs.length];
-                setFournisseurId(prochain?.id ?? null);
-              }}
-            >
-              <Icone nom="boutique" taille={24} couleur={couleurs.texteFaible} />
-              <Text style={styles.selectTexte}>
-                {fournisseurs.find((f) => f.id === fournisseurId)?.nom || '- Aucun -'}
-              </Text>
-              <Icone nom="chevron" taille={18} couleur={couleurs.texte} />
-            </Pressable>
-            <Pressable style={styles.boutonPlus} onPress={() => router.push('/fournisseurs')}>
-              <Icone nom="plus" taille={25} couleur="#fff" />
-            </Pressable>
-          </View>
-          <Text style={styles.info}>Identifiez la facture avant d'ajouter les produits.</Text>
-          <Champ
-            valeur={reference}
-            onChangeText={setReference}
-            label="Numero de facture"
-            placeholder="Facultatif"
-            style={styles.champCompact}
-          />
-        </View>
-
-        <View style={styles.resumeDeux}>
-          <View style={[styles.resumeCarte, styles.resumeVert]}>
-            <View style={styles.resumeIconeVert}>
-              <Icone nom="caisse" taille={24} couleur="#16a34a" />
-            </View>
-            <Text style={styles.resumeLibelle}>Total de l'achat</Text>
-            <Text style={styles.resumeValeur}>{formaterMontant(total, 'FCFA')}</Text>
-          </View>
-          <View style={[styles.resumeCarte, styles.resumeRouge]}>
-            <View style={styles.resumeIconeRouge}>
-              <Icone nom="argent" taille={24} couleur={couleurs.danger} />
-            </View>
-            <Text style={styles.resumeLibelle}>Reste a payer</Text>
-            <Text style={[styles.resumeValeur, styles.resumeDanger]}>{formaterMontant(0, 'FCFA')}</Text>
-          </View>
-        </View>
-
-        <View style={styles.optionBleue}>
-          <View style={styles.optionIcone}>
-            <Icone nom="stock" taille={25} couleur={couleurs.primaire} />
-          </View>
-          <View style={styles.optionTexte}>
-            <Text style={styles.optionTitre}>Marchandise arrivee</Text>
-            <Text style={styles.optionSousTitre}>Entree en stock immediate.</Text>
-          </View>
-          <View style={styles.switchActif}>
-            <View style={styles.switchBoule} />
-          </View>
-        </View>
-
-        <View style={styles.sectionArticles}>
-          <View style={styles.sectionTitreLigne}>
-            <View style={styles.sectionTitreGauche}>
-              <View style={styles.sectionIcone}>
-                <Icone nom="menu" taille={20} couleur={couleurs.texte} />
-              </View>
-              <Text style={styles.sectionTitre}>Articles ({articles.length})</Text>
-            </View>
-            <Pressable style={styles.boutonAjouter} onPress={() => setChoixOuvert(true)}>
-              <Icone nom="plus" taille={22} couleur="#fff" />
-              <Text style={styles.boutonAjouterTexte}>Ajouter</Text>
-            </Pressable>
-          </View>
-
-          {articles.length === 0 ? (
-            <View style={styles.videArticle}>
-              <Icone nom="stock" taille={48} couleur="#9aa8ba" />
-              <Text style={styles.videTitre}>Aucun article ajoute</Text>
-              <Text style={styles.videTexte}>Cliquez sur "Ajouter" pour commencer.</Text>
-            </View>
-          ) : (
-            articles.map((a, i) => {
-              const ligne = calculerLigneAchat(a);
-              return (
-                <View key={`${a.produitId}-${i}`} style={styles.article}>
-                  <View style={styles.articleGauche}>
-                    <Text style={styles.articleNom}>{a.libelle}</Text>
-                    <Text style={styles.articleDetail}>
-                      {formaterQuantite(a.quantite)} {a.unite} x {formaterMontant(a.prixUnitaire, 'FCFA')}
-                    </Text>
-                  </View>
-                  <View style={styles.articleDroite}>
-                    <Text style={styles.articleTotal}>{formaterMontant(ligne.total, 'FCFA')}</Text>
-                    <Pressable onPress={() => setArticles((liste) => liste.filter((_, j) => j !== i))}>
-                      <Text style={styles.retirerTexte}>Retirer</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              );
-            })
-          )}
-        </View>
-      </ScrollView>
-
-      <View style={styles.actionsBas}>
-        <Bouton titre="Annuler" onPress={() => router.back()} variante="secondaire" style={styles.actionSecondaire} />
-        <Bouton
-          titre="Suivant"
-          onPress={() => void enregistrer(true)}
-          enCours={enCours}
-          desactive={articles.length === 0}
-          style={styles.actionPrimaire}
-        />
-      </View>
-
-      {/* Choix du produit puis de l'unite et du prix. */}
-      <Modal
-        visible={choixOuvert}
-        animationType="slide"
-        onRequestClose={() => {
-          setChoixOuvert(false);
-          setProduitChoisi(null);
+  const retour = () => etape === 1 ? router.back() : setEtape((etape - 1) as Etape);
+  return <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
+    <Stack.Screen options={{ headerShown: false }} />
+    <View style={styles.header}>
+      <Pressable onPress={retour} style={styles.retour} hitSlop={10}><Icone nom="retour" taille={27} couleur="#061541" /></Pressable>
+      <Text style={styles.titre}>Nouvel achat</Text>
+      <View style={styles.brouillon}><Icone nom="document" taille={17} couleur={couleurs.primaire} /><Text style={styles.brouillonTexte}>Brouillon</Text></View>
+    </View>
+    <ScrollView contentContainerStyle={styles.contenu} showsVerticalScrollIndicator={false}>
+      <Progression etape={etape} />
+      {etape === 1 && <EtapeInformations
+        fournisseur={fournisseur} fournisseurs={fournisseurs} reference={reference} note={note}
+        onChoisir={() => {
+          if (!fournisseurs.length) return;
+          const index = fournisseurs.findIndex((item) => item.id === fournisseurId);
+          setFournisseurId(fournisseurs[(index + 1) % fournisseurs.length]?.id ?? null);
         }}
-      >
-        <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
-          <View style={styles.barre}>
-            <Pressable
-              onPress={() => {
-                setChoixOuvert(false);
-                setProduitChoisi(null);
-              }}
-              hitSlop={10}
-              style={styles.boutonIcone}
-            >
-              <Icone nom="retour" taille={23} couleur={couleurs.texte} />
-            </Pressable>
-            <Text style={styles.titrePage}>Ajouter un article</Text>
-          </View>
-
-          <ScrollView contentContainerStyle={styles.contenuModal} showsVerticalScrollIndicator={false}>
-            <Text style={styles.label}>Produit <Text style={styles.requis}>*</Text></Text>
-            <View style={styles.rechercheBoite}>
-              <Icone nom="recherche" taille={24} couleur={couleurs.texteFaible} />
-              <TextInput
-                value={recherche}
-                onChangeText={(valeur) => {
-                  setRecherche(valeur);
-                  setProduitChoisi(null);
-                }}
-                placeholder="Rechercher un produit..."
-                placeholderTextColor={couleurs.texteFaible}
-                autoFocus
-                style={styles.rechercheInput}
-              />
-              <Icone nom="chevron" taille={18} couleur={couleurs.texte} />
-            </View>
-
-            {produitChoisi ? (
-              <View style={styles.produitSelectionne}>
-                <Vignette chemin={produitChoisi.cheminImage} nom={produitChoisi.nom} taille={82} />
-                <View style={styles.produitSelectionneInfos}>
-                  <Text style={styles.produitSelectionneNom}>{produitChoisi.nom}</Text>
-                  <Text style={styles.detailModal}>Stock actuel : {formaterQuantite(produitChoisi.quantiteBase)}</Text>
-                  <Text style={styles.detailModal}>Code : {produitChoisi.codeBarre || '-'}</Text>
-                </View>
-              </View>
-            ) : (
-              <FlatList
-                data={produits.slice(0, 6)}
-                keyExtractor={(p) => String(p.id)}
-                scrollEnabled={false}
-                contentContainerStyle={produits.length === 0 ? styles.videRecherche : styles.listeProduits}
-                ListEmptyComponent={
-                  <ListeVide titre="Aucun produit" message="Creez d'abord vos produits dans le catalogue." />
-                }
-                renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => void ouvrirProduit(item)}
-                    style={({ pressed }) => [styles.produitLigne, pressed && styles.lignePressee]}
-                  >
-                    <Vignette chemin={item.cheminImage} nom={item.nom} taille={62} />
-                    <View style={styles.produitSelectionneInfos}>
-                      <Text style={styles.produitSelectionneNom}>{item.nom}</Text>
-                      <Text style={styles.detailModal}>
-                        Stock actuel : {formaterQuantite(item.quantiteBase)} {item.uniteBase}
-                      </Text>
-                      <Text style={styles.detailModal}>Code : {item.codeBarre || '-'}</Text>
-                    </View>
-                  </Pressable>
-                )}
-              />
-            )}
-
-            <Text style={styles.label}>Unite <Text style={styles.requis}>*</Text></Text>
-            <Pressable
-              style={styles.selectGrand}
-              onPress={() => {
-                if (unites.length === 0) return;
-                const index = unites.findIndex((u) => u.nom === uniteChoisie?.nom);
-                const prochain = unites[(index + 1) % unites.length];
-                setUniteChoisie(prochain ?? null);
-                setPrix(String(prochain?.prixIndicatif || ''));
-              }}
-            >
-              <Text style={styles.selectGrandTexte}>{uniteChoisie?.nom || 'Unite'}</Text>
-              <Icone nom="chevron" taille={18} couleur={couleurs.texte} />
-            </Pressable>
-
-            <View style={styles.champsDeux}>
-              <Champ
-                valeur={quantite}
-                onChangeText={setQuantite}
-                label="Quantite *"
-                clavier="numeric"
-                style={styles.champDeux}
-              />
-              <Champ
-                valeur={prix}
-                onChangeText={setPrix}
-                label="Prix unitaire (FCFA) *"
-                clavier="numeric"
-                aide="Prix du carton, pas de la piece."
-                style={styles.champDeux}
-              />
-            </View>
-
-            <View style={styles.totalModal}>
-              <Text style={styles.totalModalTitre}>Total ligne</Text>
-              <Text style={styles.totalModalValeur}>
-                {formaterMontant(
-                  (Number(quantite.replace(',', '.')) || 0) * (Number(prix.replace(',', '.')) || 0),
-                  'FCFA',
-                )}
-              </Text>
-            </View>
-
-            <Text style={styles.label}>Informations supplementaires (optionnel)</Text>
-            <View style={styles.note}>
-              <Icone nom="document" taille={24} couleur={couleurs.texteFaible} />
-              <Text style={styles.notePlaceholder}>Note sur cet article...</Text>
-            </View>
-
-            <Pressable
-              style={[styles.boutonModal, !produitChoisi && styles.boutonModalInactif]}
-              disabled={!produitChoisi}
-              onPress={ajouterArticle}
-            >
-              <Icone nom="plus" taille={21} couleur="#fff" />
-              <Text style={styles.boutonModalTexte}>Ajouter cet article</Text>
-            </Pressable>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
-    </SafeAreaView>
-  );
+        onNouveau={() => router.push('/fournisseurs')} onReference={setReference} onNote={setNote}
+      />}
+      {etape === 2 && <EtapeArticles
+        articles={articles} devise={boutique.devise} total={total} onAjouter={() => setChoixOuvert(true)}
+        onRetirer={(index) => setArticles((liste) => liste.filter((_, i) => i !== index))}
+      />}
+      {etape === 3 && <EtapeReglement
+        devise={boutique.devise} total={total} reste={reste} montantPaye={montantPaye}
+        modePaiement={modePaiement} saisiePaiement={saisiePaiement} recevoirMaintenant={recevoirMaintenant} note={note}
+        onAjouterPaiement={() => setSaisiePaiement((ouverte) => !ouverte)} onMontant={setMontantPaye}
+        onMode={() => setModePaiement((mode) => mode === 'especes' ? 'mobile_money' : 'especes')}
+        onReception={() => setRecevoirMaintenant((active) => !active)} onNote={setNote}
+      />}
+    </ScrollView>
+    <View style={styles.pied}>
+      <Pressable onPress={retour} style={styles.annuler}><Text style={styles.annulerTexte}>Annuler</Text></Pressable>
+      <Pressable onPress={() => void suivant()} disabled={enCours} style={[styles.suivant, enCours && styles.desactive]}>
+        {etape === 3 && <Icone nom="coche" taille={20} couleur="#fff" epaisseur={3} />}
+        <Text style={styles.suivantTexte}>{enCours ? 'Enregistrement...' : etape === 3 ? 'Enregistrer l’achat' : 'Suivant'}</Text>
+        {etape !== 3 && <Icone nom="chevron" taille={20} couleur="#fff" />}
+      </Pressable>
+    </View>
+    <AjoutArticle
+      visible={choixOuvert} recherche={recherche} produits={produits} produit={produitChoisi}
+      unite={uniteChoisie} unites={unites} quantite={quantite} prix={prix} devise={boutique.devise}
+      onFermer={() => { setChoixOuvert(false); setProduitChoisi(null); }}
+      onRecherche={(valeur) => { setRecherche(valeur); setProduitChoisi(null); }}
+      onProduit={(produit) => void ouvrirProduit(produit)}
+      onUnite={() => {
+        if (!unites.length) return;
+        const index = unites.findIndex((item) => item.nom === uniteChoisie?.nom);
+        const prochaine = unites[(index + 1) % unites.length];
+        setUniteChoisie(prochaine ?? null); setPrix(String(prochaine?.prixIndicatif || ''));
+      }}
+      onQuantite={setQuantite} onPrix={setPrix} onAjouter={ajouterArticle}
+    />
+  </SafeAreaView>;
 }
 
-function Etape({ numero, titre, active }: { numero: string; titre: string; active: boolean }) {
-  return (
-    <View style={styles.etape}>
-      <View style={[styles.etapeBulle, active && styles.etapeBulleActive]}>
-        <Text style={[styles.etapeNumero, active && styles.etapeNumeroActive]}>{numero}</Text>
-      </View>
-      <Text style={[styles.etapeTitre, active && styles.etapeTitreActive]}>{titre}</Text>
-    </View>
-  );
+function Progression({ etape }: { etape: Etape }) {
+  const elements: Array<{ n: Etape; texte: string }> = [
+    { n: 1, texte: 'Informations' }, { n: 2, texte: 'Articles' }, { n: 3, texte: 'Règlement' },
+  ];
+  return <View style={styles.progression}>{elements.map((item, index) => <View style={styles.progressionElement} key={item.n}>
+    {index > 0 && <View style={[styles.trait, etape > item.n && styles.traitActif]} />}
+    <View style={[styles.bulle, etape >= item.n && styles.bulleActive]}>{etape > item.n ? <Icone nom="coche" taille={18} couleur="#fff" epaisseur={3} /> : <Text style={[styles.bulleTexte, etape >= item.n && styles.bulleTexteActif]}>{item.n}</Text>}</View>
+    <Text style={[styles.etapeTexte, etape === item.n && styles.etapeTexteActif]}>{item.texte}</Text>
+  </View>)}</View>;
+}
+
+function EtapeInformations({ fournisseur, fournisseurs, reference, note, onChoisir, onNouveau, onReference, onNote }: {
+  fournisseur: Fournisseur | null; fournisseurs: Fournisseur[]; reference: string; note: string;
+  onChoisir: () => void; onNouveau: () => void; onReference: (texte: string) => void; onNote: (texte: string) => void;
+}) {
+  return <View style={styles.ecran}>
+    <View style={styles.hero}><View style={styles.heroIcone}><Icone nom="fournisseurs" taille={31} couleur={couleurs.primaire} /></View><View style={styles.heroTexte}><Text style={styles.heroTitre}>Achat de marchandise</Text><Text style={styles.heroSousTitre}>Enregistrez vos achats fournisseur pour mettre à jour votre stock.</Text></View></View>
+    <View style={styles.groupe}><Text style={styles.label}>Fournisseur <Text style={styles.requis}>*</Text></Text><View style={styles.fournisseurLigne}><Pressable style={styles.selecteur} onPress={onChoisir}><Icone nom="boutique" taille={24} couleur="#0c2857" /><Text style={[styles.selecteurTexte, !fournisseur && styles.placeholder]}>{fournisseur?.nom || (fournisseurs.length ? 'Choisir un fournisseur' : 'Aucun fournisseur')}</Text><Icone nom="chevron" taille={18} couleur="#0c2857" /></Pressable><Pressable style={styles.plus} onPress={onNouveau}><Icone nom="plus" taille={27} couleur="#fff" /></Pressable></View></View>
+    <Champ label="Numéro de facture" valeur={reference} onChange={onReference} placeholder="FAC-2025-001" />
+    <View style={styles.groupe}><Text style={styles.label}>Date d’achat <Text style={styles.requis}>*</Text></Text><View style={styles.lecture}><Icone nom="document" taille={23} couleur="#0c2857" /><Text style={styles.lectureTexte}>{dateAujourdhui()}</Text><Icone nom="chevron" taille={18} couleur="#0c2857" /></View></View>
+    <Champ label="Notes (optionnel)" valeur={note} onChange={onNote} placeholder="Une remarque..." />
+  </View>;
+}
+
+function Champ({ label, valeur, onChange, placeholder }: { label: string; valeur: string; onChange: (valeur: string) => void; placeholder: string }) {
+  return <View style={styles.groupe}><Text style={styles.label}>{label}</Text><View style={styles.saisie}><Icone nom="document" taille={23} couleur="#0c2857" /><TextInput value={valeur} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="#7185aa" style={styles.input} /></View></View>;
+}
+
+function EtapeArticles({ articles, devise, total, onAjouter, onRetirer }: { articles: ArticleAchat[]; devise: string; total: number; onAjouter: () => void; onRetirer: (index: number) => void }) {
+  return <View style={styles.ecran}>
+    <View style={styles.recherche}><Icone nom="recherche" taille={23} couleur="#09245b" /><Text style={styles.rechercheTexte}>Rechercher un produit...</Text><View style={styles.scan}><Icone nom="codeBarres" taille={21} couleur="#09245b" /></View></View>
+    <View style={styles.filtres}><Filtre titre="Tous" actif /><Filtre titre="Alimentaire" /><Filtre titre="Boisson" /><Filtre titre="Hygiène" /><Filtre titre="Autre" /></View>
+    <View style={styles.titreSection}><Text style={styles.titreSectionTexte}>Articles ({articles.length})</Text><Pressable onPress={onAjouter} style={styles.ajouter}><Icone nom="plus" taille={20} couleur={couleurs.primaire} /><Text style={styles.ajouterTexte}>Ajouter</Text></Pressable></View>
+    {articles.length === 0 ? <View style={styles.vide}><Icone nom="stock" taille={45} couleur="#a2afc1" /><Text style={styles.videTitre}>Aucun article ajouté</Text><Text style={styles.videTexte}>Appuyez sur « Ajouter » pour choisir vos produits.</Text></View> : articles.map((article, index) => <CarteArticle key={`${article.produitId}-${index}`} article={article} devise={devise} onRetirer={() => onRetirer(index)} />)}
+    <View style={styles.resumeArticles}><View><Text style={styles.resumeLegende}>Total</Text><Text style={styles.resumeValeur}>{formaterMontant(total, devise)}</Text></View><View style={styles.compteur}><Text style={styles.resumeLegende}>Articles</Text><Text style={styles.resumeValeur}>{articles.length}</Text></View></View>
+  </View>;
+}
+
+function Filtre({ titre, actif = false }: { titre: string; actif?: boolean }) { return <View style={[styles.filtre, actif && styles.filtreActif]}><Text style={[styles.filtreTexte, actif && styles.filtreTexteActif]}>{titre}</Text></View>; }
+
+function CarteArticle({ article, devise, onRetirer }: { article: ArticleAchat; devise: string; onRetirer: () => void }) {
+  const ligne = calculerLigneAchat(article);
+  return <View style={styles.carteArticle}><View style={styles.miniature}><Icone nom="stock" taille={26} couleur={couleurs.primaire} /></View><View style={styles.articleCentre}><Text numberOfLines={1} style={styles.articleNom}>{article.libelle}</Text><Text style={styles.articleMeta}>{article.unite}</Text><Text style={styles.articleMeta}>Prix d’achat : {formaterMontant(article.prixUnitaire, devise)}</Text><View style={styles.quantite}><View style={styles.quantiteBouton}><Icone nom="moins" taille={14} couleur={couleurs.primaire} /></View><Text style={styles.quantiteTexte}>{formaterQuantite(article.quantite)}</Text><View style={styles.quantiteBouton}><Icone nom="plus" taille={14} couleur={couleurs.primaire} /></View></View></View><View style={styles.articleDroite}><Pressable onPress={onRetirer} style={styles.corbeille}><Icone nom="corbeille" taille={18} couleur="#ec3047" /></Pressable><Text style={styles.articleMontant}>{formaterMontant(ligne.total, devise)}</Text></View></View>;
+}
+
+function EtapeReglement({ devise, total, reste, montantPaye, modePaiement, saisiePaiement, recevoirMaintenant, note, onAjouterPaiement, onMontant, onMode, onReception, onNote }: {
+  devise: string; total: number; reste: number; montantPaye: string; modePaiement: ModePaiementAchat; saisiePaiement: boolean; recevoirMaintenant: boolean; note: string;
+  onAjouterPaiement: () => void; onMontant: (valeur: string) => void; onMode: () => void; onReception: () => void; onNote: (valeur: string) => void;
+}) {
+  const paye = Number(montantPaye.replace(',', '.')) || 0;
+  const libelleMode = modePaiement === 'mobile_money' ? 'Mobile Money' : 'Espèces';
+  return <View style={styles.ecran}>
+    <View style={styles.totaux}><BlocTotal titre="Total de l’achat" valeur={formaterMontant(total, devise)} vert /><BlocTotal titre="Reste à payer" valeur={formaterMontant(reste, devise)} /></View>
+    <View style={styles.titreSection}><Text style={styles.titreSectionTexte}>Paiements</Text><Pressable onPress={onAjouterPaiement} style={styles.ajouter}><Icone nom="plus" taille={20} couleur={couleurs.primaire} /><Text style={styles.ajouterTexte}>Ajouter un paiement</Text></Pressable></View>
+    {saisiePaiement && <View style={styles.saisiePaiement}><Pressable onPress={onMode} style={styles.selectMode}><Text style={styles.selectModeTexte}>{libelleMode}</Text><Icone nom="chevron" taille={17} couleur="#08245b" /></Pressable><TextInput value={montantPaye} onChangeText={onMontant} keyboardType="numeric" placeholder="Montant payé" placeholderTextColor="#7185aa" style={styles.inputPaiement} /></View>}
+    {paye > 0 ? <View style={styles.paiementLigne}><View style={styles.paiementIcone}><Icone nom="argent" taille={22} couleur="#0b9c4e" /></View><View style={styles.paiementInfos}><Text style={styles.paiementTitre}>{libelleMode}</Text><Text style={styles.paiementDate}>{dateAujourdhui()}</Text></View><Text style={styles.paiementMontant}>{formaterMontant(paye, devise)}</Text></View> : <View style={styles.aucunPaiement}><Text style={styles.aucunPaiementTexte}>Aucun paiement ajouté</Text></View>}
+    <View style={styles.resteBandeau}><Text style={styles.resteTexte}>Reste à payer</Text><Text style={styles.resteMontant}>{formaterMontant(reste, devise)}</Text></View>
+    <Pressable onPress={onReception} style={styles.reception}><View style={styles.receptionIcone}><Icone nom="stock" taille={26} couleur={couleurs.primaire} /></View><View style={styles.receptionInfos}><Text style={styles.receptionTitre}>Marchandise arrivée</Text><Text style={styles.receptionSous}>Entrée en stock immédiate.</Text></View><View style={[styles.switch, recevoirMaintenant && styles.switchActif]}><View style={[styles.switchBoule, recevoirMaintenant && styles.switchBouleActive]} /></View></Pressable>
+    <Champ label="Note (optionnel)" valeur={note} onChange={onNote} placeholder="Une note sur ce règlement..." />
+  </View>;
+}
+
+function BlocTotal({ titre, valeur, vert = false }: { titre: string; valeur: string; vert?: boolean }) { return <View style={[styles.blocTotal, vert ? styles.totalVert : styles.totalRouge]}><View style={[styles.totalIcone, vert ? styles.totalIconeVerte : styles.totalIconeRouge]}><Icone nom={vert ? 'caisse' : 'argent'} taille={22} couleur={vert ? '#08944a' : '#e5263c'} /></View><Text style={styles.totalTitre}>{titre}</Text><Text style={[styles.totalMontant, !vert && styles.totalMontantRouge]}>{valeur}</Text></View>; }
+
+function AjoutArticle({ visible, recherche, produits, produit, unite, unites, quantite, prix, devise, onFermer, onRecherche, onProduit, onUnite, onQuantite, onPrix, onAjouter }: {
+  visible: boolean; recherche: string; produits: Produit[]; produit: Produit | null; unite: Unite | null; unites: Unite[]; quantite: string; prix: string; devise: string;
+  onFermer: () => void; onRecherche: (valeur: string) => void; onProduit: (produit: Produit) => void; onUnite: () => void; onQuantite: (valeur: string) => void; onPrix: (valeur: string) => void; onAjouter: () => void;
+}) {
+  const total = (Number(quantite.replace(',', '.')) || 0) * (Number(prix.replace(',', '.')) || 0);
+  return <Modal visible={visible} animationType="slide" onRequestClose={onFermer}><SafeAreaView style={styles.page} edges={['top', 'bottom']}><View style={styles.header}><Pressable onPress={onFermer} style={styles.retour}><Icone nom="retour" taille={27} couleur="#061541" /></Pressable><Text style={styles.titre}>Ajouter un article</Text><View style={styles.placeholderHeader} /></View><ScrollView contentContainerStyle={styles.modalContenu} showsVerticalScrollIndicator={false}><View style={styles.recherche}><Icone nom="recherche" taille={23} couleur="#09245b" /><TextInput value={recherche} onChangeText={onRecherche} autoFocus placeholder="Rechercher un produit..." placeholderTextColor="#7185aa" style={styles.inputRecherche} /></View>{produit ? <View style={styles.produitChoisi}><Vignette chemin={produit.cheminImage} nom={produit.nom} taille={70} /><View style={styles.produitChoisiInfo}><Text style={styles.articleNom}>{produit.nom}</Text><Text style={styles.articleMeta}>Stock actuel : {formaterQuantite(produit.quantiteBase)} {produit.uniteBase}</Text></View></View> : <FlatList data={produits} scrollEnabled={false} keyExtractor={(item) => String(item.id)} contentContainerStyle={styles.listeProduits} ListEmptyComponent={<ListeVide titre="Aucun produit" message="Créez d’abord vos produits dans le catalogue." />} renderItem={({ item }) => <Pressable onPress={() => onProduit(item)} style={styles.produitLigne}><Vignette chemin={item.cheminImage} nom={item.nom} taille={56} /><View style={styles.produitChoisiInfo}><Text style={styles.articleNom}>{item.nom}</Text><Text style={styles.articleMeta}>{item.categorie || item.uniteBase}</Text></View><Icone nom="chevron" taille={18} couleur="#09245b" /></Pressable>} />}{produit && <><Text style={styles.label}>Unité <Text style={styles.requis}>*</Text></Text><Pressable onPress={onUnite} style={styles.lecture}><Text style={styles.lectureTexte}>{unite?.nom || 'Unité'}</Text><Icone nom="chevron" taille={18} couleur="#0c2857" /></Pressable><View style={styles.deuxChamps}><View style={styles.demiChamp}><Text style={styles.label}>Quantité <Text style={styles.requis}>*</Text></Text><TextInput value={quantite} onChangeText={onQuantite} keyboardType="numeric" style={styles.inputSimple} /></View><View style={styles.demiChamp}><Text style={styles.label}>Prix unitaire ({devise}) <Text style={styles.requis}>*</Text></Text><TextInput value={prix} onChangeText={onPrix} keyboardType="numeric" style={styles.inputSimple} /></View></View><View style={styles.totalLigne}><Text style={styles.totalLigneTitre}>Total ligne</Text><Text style={styles.totalLigneValeur}>{formaterMontant(total, devise)}</Text></View><Pressable onPress={onAjouter} style={styles.ajouterArticle}><Icone nom="plus" taille={22} couleur="#fff" /><Text style={styles.ajouterArticleTexte}>Ajouter cet article</Text></Pressable></>}</ScrollView></SafeAreaView></Modal>;
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#fbfdff' },
-  barre: {
-    minHeight: 66,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5ebf3',
-    backgroundColor: '#fff',
-  },
-  boutonIcone: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  titrePage: { flex: 1, fontSize: 24, fontWeight: '900', color: '#07152f' },
-  badgeBrouillon: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 12,
-    backgroundColor: '#eaf3ff',
-    color: couleurs.primaire,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  contenu: { padding: 18, paddingBottom: 112, gap: 18 },
-  contenuModal: { padding: 22, paddingBottom: 36, gap: 18 },
-  etapes: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    gap: 10,
-    paddingTop: 4,
-  },
-  etape: { alignItems: 'center', width: 68 },
-  etapeBulle: {
-    width: 36,
-    height: 36,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#d8e0eb',
-  },
-  etapeBulleActive: { backgroundColor: couleurs.primaire },
-  etapeNumero: { color: '#64748b', fontWeight: '900', fontSize: 15 },
-  etapeNumeroActive: { color: '#fff' },
-  etapeTitre: { marginTop: 7, color: couleurs.texteFaible, fontWeight: '700', fontSize: 13 },
-  etapeTitreActive: { color: '#07152f' },
-  traitEtape: {
-    width: 70,
-    height: 2,
-    borderRadius: 999,
-    marginTop: 17,
-    backgroundColor: '#dde5ee',
-  },
-  hero: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    minHeight: 94,
-    padding: 16,
-    borderRadius: 14,
-    backgroundColor: '#eef6ff',
-  },
-  heroIcone: {
-    width: 56,
-    height: 56,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#dbeafe',
-  },
-  heroTitre: { fontSize: 20, fontWeight: '900', color: '#07152f' },
-  heroSousTitre: { marginTop: 4, fontSize: 15, color: couleurs.texteFaible },
-  groupe: { gap: 8 },
-  label: { fontSize: 16, fontWeight: '800', color: '#334155' },
-  requis: { color: couleurs.danger },
-  fournisseurLigne: { flexDirection: 'row', gap: 12, alignItems: 'center' },
-  select: {
-    flex: 1,
-    minHeight: 58,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-    borderColor: '#d7e0ea',
-    borderRadius: 12,
-    backgroundColor: '#fff',
-  },
-  selectTexte: { flex: 1, color: '#07152f', fontSize: 18, fontWeight: '700' },
-  boutonPlus: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: couleurs.primaire,
-  },
-  info: { color: couleurs.texteFaible, fontSize: 13 },
-  champCompact: { marginBottom: 0 },
-  resumeDeux: { flexDirection: 'row', gap: 18 },
-  resumeCarte: {
-    flex: 1,
-    minHeight: 150,
-    padding: 18,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e6edf5',
-  },
-  resumeVert: { backgroundColor: '#f1fff8' },
-  resumeRouge: { backgroundColor: '#fff6f7' },
-  resumeIconeVert: {
-    width: 44,
-    height: 44,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#dcfce7',
-  },
-  resumeIconeRouge: {
-    width: 44,
-    height: 44,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ffe3e8',
-  },
-  resumeLibelle: { marginTop: 16, color: couleurs.texteFaible, fontSize: 15, fontWeight: '800' },
-  resumeValeur: { marginTop: 8, color: '#07152f', fontSize: 24, fontWeight: '900' },
-  resumeDanger: { color: couleurs.danger },
-  optionBleue: {
-    minHeight: 84,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 16,
-    borderRadius: 14,
-    backgroundColor: '#eef6ff',
-  },
-  optionIcone: {
-    width: 50,
-    height: 50,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#dbeafe',
-  },
-  optionTexte: { flex: 1 },
-  optionTitre: { color: '#07152f', fontSize: 18, fontWeight: '900' },
-  optionSousTitre: { color: couleurs.texteFaible, fontSize: 14, marginTop: 3 },
-  switchActif: {
-    width: 58,
-    height: 34,
-    borderRadius: 999,
-    padding: 3,
-    alignItems: 'flex-end',
-    backgroundColor: couleurs.primaire,
-  },
-  switchBoule: { width: 28, height: 28, borderRadius: 999, backgroundColor: '#fff' },
-  sectionArticles: { gap: 14 },
-  sectionTitreLigne: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  sectionTitreGauche: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  sectionIcone: {
-    width: 40,
-    height: 40,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
-  },
-  sectionTitre: { color: '#07152f', fontSize: 22, fontWeight: '900' },
-  boutonAjouter: {
-    minHeight: 50,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-    paddingHorizontal: 18,
-    borderRadius: 12,
-    backgroundColor: couleurs.primaire,
-  },
-  boutonAjouterTexte: { color: '#fff', fontSize: 17, fontWeight: '900' },
-  videArticle: {
-    minHeight: 176,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 18,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e1e8f0',
-    backgroundColor: '#fff',
-  },
-  videTitre: { marginTop: 14, fontSize: 16, fontWeight: '900', color: couleurs.texteFaible },
-  videTexte: { marginTop: 8, fontSize: 14, color: couleurs.texteFaible, textAlign: 'center' },
-  article: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-    padding: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e1e8f0',
-    backgroundColor: '#fff',
-  },
-  articleGauche: { flex: 1 },
-  articleDroite: { alignItems: 'flex-end', gap: 8 },
-  articleNom: { fontSize: 16, color: '#07152f', fontWeight: '900' },
-  articleDetail: { fontSize: 13, color: couleurs.texteFaible, marginTop: 4 },
-  articleTotal: { fontSize: 16, fontWeight: '900', color: couleurs.primaire },
-  retirerTexte: { fontSize: 13, color: couleurs.danger, fontWeight: '800' },
-  actionsBas: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    gap: 14,
-    padding: 18,
-    paddingBottom: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#e5ebf3',
-    backgroundColor: '#fff',
-  },
-  actionSecondaire: { flex: 0.8 },
-  actionPrimaire: { flex: 1.2 },
-  rechercheBoite: {
-    minHeight: 62,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#d7e0ea',
-    borderRadius: 12,
-    backgroundColor: '#fff',
-  },
-  rechercheInput: { flex: 1, minHeight: 58, color: '#07152f', fontSize: 18 },
-  produitSelectionne: {
-    flexDirection: 'row',
-    gap: 16,
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e1e8f0',
-    backgroundColor: '#fff',
-  },
-  produitSelectionneInfos: { flex: 1, gap: 3 },
-  produitSelectionneNom: { fontSize: 18, fontWeight: '900', color: '#07152f' },
-  detailModal: { fontSize: 15, color: couleurs.texteFaible, marginTop: 2 },
-  listeProduits: { gap: 10 },
-  videRecherche: { minHeight: 180, justifyContent: 'center' },
-  produitLigne: {
-    minHeight: 86,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e1e8f0',
-    backgroundColor: '#fff',
-  },
-  lignePressee: { opacity: 0.7 },
-  selectGrand: {
-    minHeight: 62,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    borderWidth: 1,
-    borderColor: '#d7e0ea',
-    borderRadius: 12,
-    backgroundColor: '#fff',
-  },
-  selectGrandTexte: { color: '#07152f', fontSize: 18, fontWeight: '700' },
-  champsDeux: { flexDirection: 'row', gap: 18 },
-  champDeux: { flex: 1, marginBottom: 0 },
-  totalModal: {
-    minHeight: 116,
-    justifyContent: 'center',
-    padding: 20,
-    borderRadius: 14,
-    backgroundColor: '#eaf4ff',
-  },
-  totalModalTitre: { fontSize: 18, fontWeight: '900', color: '#07152f' },
-  totalModalValeur: { marginTop: 10, fontSize: 32, fontWeight: '900', color: couleurs.primaire },
-  note: {
-    minHeight: 88,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#d7e0ea',
-    borderRadius: 12,
-    backgroundColor: '#fff',
-  },
-  notePlaceholder: { color: couleurs.texteFaible, fontSize: 17 },
-  boutonModal: {
-    minHeight: 72,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    borderRadius: 12,
-    backgroundColor: couleurs.primaire,
-  },
-  boutonModalInactif: { opacity: 0.45 },
-  boutonModalTexte: { color: '#fff', fontSize: 20, fontWeight: '900' },
+  header: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 17, borderBottomWidth: 1, borderBottomColor: '#edf1f6', backgroundColor: '#fff' },
+  retour: { width: 35, height: 35, alignItems: 'center', justifyContent: 'center' }, titre: { flex: 1, color: '#061541', fontSize: 21, fontWeight: '900', textAlign: 'center' }, placeholderHeader: { width: 35 },
+  brouillon: { minHeight: 37, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, borderRadius: 11, backgroundColor: '#eef5ff' }, brouillonTexte: { color: couleurs.primaire, fontSize: 13, fontWeight: '800' },
+  contenu: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 105 }, modalContenu: { padding: 18, paddingBottom: 36, gap: 16 },
+  progression: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, marginBottom: 24 }, progressionElement: { width: 92, alignItems: 'center', position: 'relative' }, trait: { position: 'absolute', top: 20, right: 72, width: 73, height: 2, backgroundColor: '#dce5f1' }, traitActif: { backgroundColor: couleurs.primaire }, bulle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#e6edf6' }, bulleActive: { backgroundColor: couleurs.primaire }, bulleTexte: { color: '#617594', fontSize: 16, fontWeight: '900' }, bulleTexteActif: { color: '#fff' }, etapeTexte: { marginTop: 8, color: '#627696', fontSize: 13, fontWeight: '700', textAlign: 'center' }, etapeTexteActif: { color: '#061541', fontWeight: '900' },
+  ecran: { gap: 18 }, hero: { minHeight: 130, flexDirection: 'row', alignItems: 'center', gap: 16, padding: 18, borderRadius: 15, backgroundColor: '#edf6ff' }, heroIcone: { width: 66, height: 66, alignItems: 'center', justifyContent: 'center', borderRadius: 33, backgroundColor: '#dcecff' }, heroTexte: { flex: 1 }, heroTitre: { color: '#061541', fontSize: 18, fontWeight: '900' }, heroSousTitre: { marginTop: 7, color: '#5c7298', fontSize: 15, lineHeight: 22 },
+  groupe: { gap: 8 }, label: { color: '#10224a', fontSize: 16, fontWeight: '800' }, requis: { color: '#ed3048' }, fournisseurLigne: { flexDirection: 'row', gap: 11 }, selecteur: { flex: 1, minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: '#d2ddeb', borderRadius: 12, backgroundColor: '#fff' }, selecteurTexte: { flex: 1, color: '#10224a', fontSize: 16, fontWeight: '800' }, placeholder: { color: '#7185aa', fontWeight: '500' }, plus: { width: 60, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: couleurs.primaire },
+  saisie: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: '#d2ddeb', borderRadius: 12, backgroundColor: '#fff' }, input: { flex: 1, minHeight: 55, color: '#10224a', fontSize: 16 }, lecture: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: '#d2ddeb', borderRadius: 12, backgroundColor: '#fff' }, lectureTexte: { flex: 1, color: '#10224a', fontSize: 16 },
+  recherche: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 14, borderWidth: 1, borderColor: '#d4dfed', borderRadius: 12, backgroundColor: '#fff' }, rechercheTexte: { flex: 1, color: '#7185aa', fontSize: 15 }, scan: { width: 49, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: '#dfe7f1' }, inputRecherche: { flex: 1, minHeight: 51, color: '#10224a', fontSize: 16 },
+  filtres: { flexDirection: 'row', gap: 7, flexWrap: 'wrap' }, filtre: { minHeight: 39, justifyContent: 'center', paddingHorizontal: 13, borderRadius: 12, backgroundColor: '#edf2f8' }, filtreActif: { backgroundColor: couleurs.primaire }, filtreTexte: { color: '#587096', fontSize: 13, fontWeight: '800' }, filtreTexteActif: { color: '#fff' },
+  titreSection: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, titreSectionTexte: { flexShrink: 1, color: '#061541', fontSize: 20, fontWeight: '900' }, ajouter: { minHeight: 41, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, borderWidth: 1, borderColor: '#cfe0fe', borderRadius: 12, backgroundColor: '#f6faff' }, ajouterTexte: { color: couleurs.primaire, fontSize: 13, fontWeight: '900' },
+  vide: { minHeight: 180, alignItems: 'center', justifyContent: 'center', padding: 22, borderWidth: 1, borderColor: '#e1e8f2', borderRadius: 14, backgroundColor: '#fff' }, videTitre: { marginTop: 12, color: '#536a8f', fontSize: 16, fontWeight: '900' }, videTexte: { marginTop: 5, color: '#7185a5', fontSize: 14, textAlign: 'center' },
+  carteArticle: { minHeight: 128, flexDirection: 'row', gap: 11, padding: 12, borderWidth: 1, borderColor: '#e0e8f2', borderRadius: 14, backgroundColor: '#fff' }, miniature: { width: 61, height: 75, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#eef5ff' }, articleCentre: { flex: 1 }, articleNom: { color: '#071a43', fontSize: 16, fontWeight: '900' }, articleMeta: { marginTop: 3, color: '#63779a', fontSize: 13 }, quantite: { height: 34, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', marginTop: 9, borderRadius: 8, backgroundColor: '#f0f6ff' }, quantiteBouton: { width: 33, alignItems: 'center' }, quantiteTexte: { minWidth: 29, textAlign: 'center', color: '#092158', fontSize: 15, fontWeight: '800' }, articleDroite: { alignItems: 'flex-end', justifyContent: 'space-between' }, corbeille: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#fff0f2' }, articleMontant: { color: '#061541', fontSize: 16, fontWeight: '900' },
+  resumeArticles: { minHeight: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 13, borderTopWidth: 1, borderTopColor: '#e4ebf4' }, compteur: { minWidth: 80, paddingLeft: 19, borderLeftWidth: 1, borderLeftColor: '#e4ebf4' }, resumeLegende: { color: '#607595', fontSize: 13 }, resumeValeur: { marginTop: 3, color: '#061541', fontSize: 20, fontWeight: '900' },
+  totaux: { flexDirection: 'row', gap: 12 }, blocTotal: { flex: 1, minHeight: 150, padding: 16, borderRadius: 15, borderWidth: 1 }, totalVert: { borderColor: '#d9f4e4', backgroundColor: '#f0fff7' }, totalRouge: { borderColor: '#ffdce1', backgroundColor: '#fff5f6' }, totalIcone: { width: 43, height: 43, alignItems: 'center', justifyContent: 'center', borderRadius: 22 }, totalIconeVerte: { backgroundColor: '#d9fae7' }, totalIconeRouge: { backgroundColor: '#ffe0e6' }, totalTitre: { marginTop: 13, color: '#5f7192', fontSize: 14, fontWeight: '800' }, totalMontant: { marginTop: 8, color: '#061541', fontSize: 22, fontWeight: '900' }, totalMontantRouge: { color: '#e42139' },
+  saisiePaiement: { flexDirection: 'row', alignItems: 'center', gap: 9, padding: 10, borderWidth: 1, borderColor: '#d5e2f5', borderRadius: 13, backgroundColor: '#f8fbff' }, selectMode: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 6 }, selectModeTexte: { color: '#10224a', fontSize: 14, fontWeight: '900' }, inputPaiement: { flex: 1, minHeight: 42, paddingHorizontal: 10, borderWidth: 1, borderColor: '#ccdaeb', borderRadius: 9, backgroundColor: '#fff', color: '#10224a', fontSize: 16 }, paiementLigne: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 11, padding: 11, borderWidth: 1, borderColor: '#e0e8f2', borderRadius: 13, backgroundColor: '#fff' }, paiementIcone: { width: 43, height: 43, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: '#dff8e9' }, paiementInfos: { flex: 1 }, paiementTitre: { color: '#10224a', fontSize: 15, fontWeight: '900' }, paiementDate: { marginTop: 3, color: '#6980a5', fontSize: 13 }, paiementMontant: { color: '#061541', fontSize: 16, fontWeight: '900' }, aucunPaiement: { minHeight: 64, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e1e8f1', borderRadius: 13, backgroundColor: '#fff' }, aucunPaiementTexte: { color: '#7185a5', fontSize: 14, fontWeight: '700' }, resteBandeau: { minHeight: 53, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, borderRadius: 11, backgroundColor: '#fff0f2' }, resteTexte: { color: '#e42139', fontSize: 15, fontWeight: '900' }, resteMontant: { color: '#e42139', fontSize: 17, fontWeight: '900' },
+  reception: { minHeight: 90, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, backgroundColor: '#edf6ff' }, receptionIcone: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 25, backgroundColor: '#dceaff' }, receptionInfos: { flex: 1 }, receptionTitre: { color: '#061541', fontSize: 16, fontWeight: '900' }, receptionSous: { marginTop: 3, color: '#647a9d', fontSize: 13 }, switch: { width: 52, height: 30, padding: 3, borderRadius: 15, backgroundColor: '#cad7e6' }, switchActif: { backgroundColor: couleurs.primaire }, switchBoule: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff' }, switchBouleActive: { alignSelf: 'flex-end' },
+  pied: { position: 'absolute', left: 0, right: 0, bottom: 0, minHeight: 80, flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14, borderTopWidth: 1, borderTopColor: '#e5ecf4', backgroundColor: '#fff' }, annuler: { flex: 0.75, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#f2f5fa' }, annulerTexte: { color: '#142957', fontSize: 16, fontWeight: '900' }, suivant: { flex: 1.55, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderRadius: 12, backgroundColor: couleurs.primaire }, suivantTexte: { color: '#fff', fontSize: 17, fontWeight: '900' }, desactive: { opacity: 0.6 },
+  produitChoisi: { flexDirection: 'row', alignItems: 'center', gap: 13, padding: 13, borderWidth: 1, borderColor: '#e0e8f2', borderRadius: 13, backgroundColor: '#fff' }, produitChoisiInfo: { flex: 1 }, listeProduits: { gap: 9 }, produitLigne: { minHeight: 76, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 9, borderWidth: 1, borderColor: '#e0e8f2', borderRadius: 12, backgroundColor: '#fff' }, deuxChamps: { flexDirection: 'row', gap: 12 }, demiChamp: { flex: 1, gap: 7 }, inputSimple: { minHeight: 54, paddingHorizontal: 13, borderWidth: 1, borderColor: '#d2ddeb', borderRadius: 11, backgroundColor: '#fff', color: '#10224a', fontSize: 17 }, totalLigne: { minHeight: 97, justifyContent: 'center', padding: 17, borderRadius: 13, backgroundColor: '#edf5ff' }, totalLigneTitre: { color: '#10224a', fontSize: 16, fontWeight: '900' }, totalLigneValeur: { marginTop: 7, color: couleurs.primaire, fontSize: 29, fontWeight: '900' }, ajouterArticle: { minHeight: 62, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderRadius: 12, backgroundColor: couleurs.primaire }, ajouterArticleTexte: { color: '#fff', fontSize: 18, fontWeight: '900' },
 });

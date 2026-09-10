@@ -7,7 +7,7 @@
  * legerement differentes selon le depot qui les a servis.
  */
 import { obtenirBase } from '../database';
-import nacl from 'tweetnacl';
+import { getRandomBytes } from 'expo-crypto';
 
 /** SQLite ne connait pas le booleen : il stocke 0 ou 1. */
 export function versBooleen(valeur: unknown): boolean {
@@ -47,16 +47,18 @@ export function maintenant(): string {
  * consequence ; des lors qu'on replique, c'est la garantie centrale du
  * systeme.
  *
- * `nacl.randomBytes` s'appuie sur le generateur du systeme, pas sur
- * `Math.random`. La dependance est deja presente pour verifier les licences :
- * elle n'ajoute rien au poids de l'application.
+ * `getRandomBytes` s'appuie sur le generateur securise du systeme Android,
+ * pas sur `Math.random`. TweetNaCl, qui sert a verifier les licences, ne
+ * branche pas lui-meme ce generateur dans React Native : appeler
+ * `nacl.randomBytes` ici provoquait l'erreur « no PRNG » au moment precis ou
+ * l'on voulait enregistrer un produit, un achat ou une vente.
  *
  * Format : 32 caracteres hexadecimaux minuscules, identique a ce que produit
  * `lower(hex(randomblob(16)))` cote SQLite, pour que les identifiants creees
  * par les deux chemins soient indiscernables.
  */
 export function genererIdLocal(): string {
-  const octets = nacl.randomBytes(16);
+  const octets = getRandomBytes(16);
   let sortie = '';
   for (let i = 0; i < octets.length; i++) {
     sortie += octets[i].toString(16).padStart(2, '0');

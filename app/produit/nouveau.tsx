@@ -43,9 +43,10 @@ import { marquerChangement } from '../../src/services/synchronisation';
 // Le theme n'est plus defini ici : un fichier d'ecran n'a pas a etre la
 // source des couleurs de l'application. Il vient de src/ui/theme.
 import { C } from '../../src/ui/theme';
-import { BandeauEtat, uriImage } from '../../src/ui/components';
+import { BandeauEtat, formaterMontant, uriImage } from '../../src/ui/components';
 import { couleurs } from '../../src/ui/theme';
 import { Icone } from '../../src/ui/icones';
+import { useSession } from '../_layout';
 export { C };
 
 // --------------------------------------------------------------------------
@@ -256,18 +257,19 @@ export function validerSaisie(saisie: SaisieProduit, creation: boolean): {
     sousUnites.push({ nom: nomSu, facteur, prix: Math.round(prix) });
   });
 
+  const categorie = saisie.categorie.trim();
+  if (categorie === '') erreurs.champs.categorie = 'La catégorie est obligatoire.';
   const enErreur =
     Object.keys(erreurs.champs).length > 0 || Object.keys(erreurs.sousUnites).length > 0;
   if (enErreur || prixVente === null) return { erreurs, valide: null };
 
-  const categorie = saisie.categorie.trim();
   const codeBarre = saisie.codeBarre.trim();
 
   return {
     erreurs,
     valide: {
       nom,
-      categorie: categorie === '' ? null : categorie,
+      categorie,
       // Chaine vide interdite : la colonne est UNIQUE, et SQLite accepte
       // plusieurs NULL mais une seule chaine vide.
       codeBarre: codeBarre === '' ? null : codeBarre,
@@ -568,6 +570,8 @@ function ModaleCamera(p: {
 export interface ProprietesFormulaire {
   saisieInitiale: SaisieProduit;
   creation: boolean;
+  /** Incremente par l'en-tete pour ouvrir la camera sans dupliquer l'etat. */
+  demandeScan?: number;
   /** Rendu sous le formulaire : suppression, stock courant, etc. */
   complement?: React.ReactNode;
   libelleValider: string;
@@ -576,6 +580,7 @@ export interface ProprietesFormulaire {
 }
 
 export function FormulaireProduit(p: ProprietesFormulaire) {
+  const { boutique } = useSession();
   const [saisie, setSaisie] = useState<SaisieProduit>(p.saisieInitiale);
   const [erreurs, setErreurs] = useState<Erreurs>({ champs: {}, sousUnites: {} });
   const [categories, setCategories] = useState<string[]>([]);
@@ -702,8 +707,8 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
       const confirme = await new Promise<boolean>((resoudre) => {
         Alert.alert(
           'Marge nulle ou negative',
-          `Le prix de vente (${formaterFrancs(valide.prixUnitaire)}) ne couvre pas le prix ` +
-            `d'achat (${formaterFrancs(valide.prixAchat)}). Perte de ${formaterFrancs(perte)} ` +
+          `Le prix de vente (${formaterMontant(valide.prixUnitaire, boutique.devise)}) ne couvre pas le prix ` +
+            `d'achat (${formaterMontant(valide.prixAchat, boutique.devise)}). Perte de ${formaterMontant(perte, boutique.devise)} ` +
             'par unite vendue. Enregistrer quand meme ?',
           [
             { text: 'Corriger', style: 'cancel', onPress: () => resoudre(false) },
@@ -722,9 +727,39 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
     } finally {
       setEnregistrement(false);
     }
-  }, [p, saisie]);
+  }, [boutique.devise, p, saisie]);
 
   const apercu = uriImage(saisie.cheminImage);
+
+  return (
+    <FormulaireProduitMobile
+      p={p}
+      saisie={saisie}
+      erreurs={erreurs}
+      categories={categories}
+      uniteLibre={uniteLibre}
+      uniteMenuOuvert={uniteMenuOuvert}
+      apercu={apercu}
+      camera={camera}
+      enregistrement={enregistrement}
+      erreurGlobale={erreurGlobale}
+      devise={boutique.devise}
+      modifier={modifier}
+      modifierSousUnite={modifierSousUnite}
+      supprimerSousUnite={supprimerSousUnite}
+      ajouterSousUnite={ajouterSousUnite}
+      setUniteLibre={setUniteLibre}
+      setUniteMenuOuvert={setUniteMenuOuvert}
+      setCamera={setCamera}
+      onPhoto={surPhoto}
+      onGalerie={surGalerie}
+      onRetirerPhoto={() => {
+        effacerPhoto(saisie.cheminImage);
+        modifier('cheminImage', null);
+      }}
+      onEnregistrer={() => void enregistrer()}
+    />
+  );
 
   return (
     <KeyboardAvoidingView
@@ -743,7 +778,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
 
           <View style={s.ligneImage}>
             {apercu ? (
-              <Image source={{ uri: apercu }} style={s.apercuImage} resizeMode="cover" />
+              <Image source={{ uri: apercu! }} style={s.apercuImage} resizeMode="cover" />
             ) : (
               <View style={[s.apercuImage, s.apercuVide]}>
                 <Text style={s.apercuVideTexte}>Pas de photo</Text>
@@ -1036,12 +1071,518 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
   );
 }
 
+interface ProprietesFormulaireMobile {
+  p: ProprietesFormulaire;
+  saisie: SaisieProduit;
+  erreurs: Erreurs;
+  categories: string[];
+  uniteLibre: boolean;
+  uniteMenuOuvert: boolean;
+  apercu: string | null;
+  camera: 'code-barre' | 'photo' | null;
+  enregistrement: boolean;
+  erreurGlobale: string | null;
+  devise: string;
+  modifier: <K extends keyof SaisieProduit>(cle: K, valeur: SaisieProduit[K]) => void;
+  modifierSousUnite: (index: number, cle: keyof SaisieSousUnite, valeur: string) => void;
+  supprimerSousUnite: (index: number) => void;
+  ajouterSousUnite: () => void;
+  setUniteLibre: (valeur: boolean) => void;
+  setUniteMenuOuvert: (valeur: boolean) => void;
+  setCamera: (valeur: 'code-barre' | 'photo' | null) => void;
+  onPhoto: (uri: string) => Promise<void>;
+  onGalerie: () => Promise<void>;
+  onRetirerPhoto: () => void;
+  onEnregistrer: () => void;
+}
+
+/** La composition mobile validee : les details restent accessibles, sans noyer la saisie. */
+function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
+  const [menuCategorieOuvert, setMenuCategorieOuvert] = useState(false);
+  const [menuPhotoOuvert, setMenuPhotoOuvert] = useState(false);
+  const [nouvelleCategorie, setNouvelleCategorie] = useState('');
+
+  useEffect(() => {
+    if (props.p.demandeScan) props.setCamera('code-barre');
+  }, [props.p.demandeScan, props.setCamera]);
+
+  const choisirCategorie = useCallback(
+    (categorie: string) => {
+      props.modifier('categorie', categorie);
+      setMenuCategorieOuvert(false);
+      setNouvelleCategorie('');
+    },
+    [props],
+  );
+
+  const ajouterCategorieLibre = useCallback(() => {
+    const categorie = nouvelleCategorie.trim();
+    if (categorie) choisirCategorie(categorie);
+  }, [choisirCategorie, nouvelleCategorie]);
+
+  return (
+    <KeyboardAvoidingView style={m.plein} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView
+        style={m.defilement}
+        contentContainerStyle={m.contenu}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {props.erreurGlobale ? (
+          <View style={m.banniereErreur}>
+            <Text style={m.banniereErreurTexte}>{props.erreurGlobale}</Text>
+          </View>
+        ) : null}
+
+        <View style={m.carteIdentite}>
+          <Pressable
+            style={[m.zonePhoto, props.apercu ? m.zonePhotoRemplie : null]}
+            onPress={() => setMenuPhotoOuvert(true)}
+            accessibilityLabel="Ajouter une photo"
+          >
+            {props.apercu ? (
+              <Image source={{ uri: props.apercu! }} style={m.photo} resizeMode="cover" />
+            ) : (
+              <>
+                <Icone nom="appareilPhoto" taille={24} couleur={couleurs.primaire} />
+                <Text style={m.zonePhotoTexte}>Ajouter une image</Text>
+              </>
+            )}
+          </Pressable>
+
+          <View style={m.identiteChamps}>
+            <ChampMobile
+              libelle="Nom du produit"
+              obligatoire
+              valeur={props.saisie.nom}
+              onChangeText={(valeur) => props.modifier('nom', valeur)}
+              indication="Ex : Riz Royal 50 kg"
+              erreur={props.erreurs.champs.nom}
+            />
+            <View style={m.champMobile}>
+              <LibelleMobile texte="Catégorie" obligatoire />
+              <Pressable
+                style={[m.selecteur, props.erreurs.champs.categorie ? m.selecteurErreur : null]}
+                onPress={() => setMenuCategorieOuvert(true)}
+              >
+                <Icone nom="etiquette" taille={21} couleur={couleurs.texte} />
+                <Text
+                  style={[m.selecteurTexte, !props.saisie.categorie && m.selecteurIndication]}
+                  numberOfLines={1}
+                >
+                  {props.saisie.categorie || 'Choisir une catégorie'}
+                </Text>
+                <Icone nom="chevron" taille={18} couleur={couleurs.texte} />
+              </Pressable>
+              {props.erreurs.champs.categorie ? (
+                <Text style={m.messageErreur}>{props.erreurs.champs.categorie}</Text>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        <View style={m.carteMobile}>
+          <View style={m.titreCarteMobile}>
+            <PastilleMobile nom="argent" fond={couleurs.succesDouce} couleur={couleurs.succesFonce} />
+            <Text style={m.titreCarteTexte}>Prix ({props.devise})</Text>
+            <View style={m.puceExplication}>
+              <Text style={m.puceExplicationTexte} numberOfLines={1}>Prix/unité</Text>
+            </View>
+          </View>
+          <View style={m.ligneChamps}>
+            <View style={m.champDemi}>
+              <ChampMobile
+                libelle="Prix d’achat"
+                valeur={props.saisie.prixAchat}
+                onChangeText={(valeur) => props.modifier('prixAchat', valeur)}
+                indication="0"
+                clavier="numeric"
+                erreur={props.erreurs.champs.prixAchat}
+              />
+            </View>
+            <View style={m.champDemi}>
+              <ChampMobile
+                libelle="Prix de vente"
+                obligatoire
+                valeur={props.saisie.prixUnitaire}
+                onChangeText={(valeur) => props.modifier('prixUnitaire', valeur)}
+                indication="0"
+                clavier="numeric"
+                erreur={props.erreurs.champs.prixUnitaire}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={m.carteRangee}>
+          <PastilleMobile nom="stock" />
+          <LibelleMobile texte="Unité de base" obligatoire style={m.libelleRangee} />
+          <Pressable
+            style={[m.selecteur, m.selecteurUnite, props.erreurs.champs.uniteBase ? m.selecteurErreur : null]}
+            onPress={() => props.setUniteMenuOuvert(true)}
+          >
+            <Text style={m.selecteurTexte} numberOfLines={1}>
+              {props.uniteLibre ? 'Autre unité' : props.saisie.uniteBase || 'Choisir'}
+            </Text>
+            <Icone nom="chevron" taille={18} couleur={couleurs.texte} />
+          </Pressable>
+          {props.uniteLibre ? (
+            <View style={m.champUniteLibre}>
+              <ChampMobile
+                libelle="Nom de l’unité"
+                valeur={props.saisie.uniteBase}
+                onChangeText={(valeur) => props.modifier('uniteBase', valeur)}
+                indication="Ex : Bidon"
+                erreur={props.erreurs.champs.uniteBase}
+              />
+            </View>
+          ) : props.erreurs.champs.uniteBase ? (
+            <Text style={m.messageErreur}>{props.erreurs.champs.uniteBase}</Text>
+          ) : null}
+        </View>
+
+        <View style={m.carteRangee}>
+          <PastilleMobile nom="catalogue" />
+          <View style={m.rangeeTexte}>
+            <Text style={m.titreRangee}>Sous-unités</Text>
+            <Text style={m.sousTitreRangee}>Ex : 1 carton = 50 pièces</Text>
+          </View>
+          <Pressable style={m.boutonAjouter} onPress={props.ajouterSousUnite}>
+            <Icone nom="plus" taille={22} couleur={couleurs.primaire} />
+            <Text style={m.boutonAjouterTexte}>Ajouter</Text>
+          </Pressable>
+          {props.saisie.sousUnites.map((ligne, index) => (
+            <View key={ligne.cle} style={m.sousUniteMobile}>
+              <TextInput
+                style={[m.saisieMobile, m.sousUniteNom]}
+                value={ligne.nom}
+                onChangeText={(valeur) => props.modifierSousUnite(index, 'nom', valeur)}
+                placeholder="Carton"
+                placeholderTextColor={couleurs.texteEteint}
+              />
+              <TextInput
+                style={[m.saisieMobile, m.sousUniteNombre]}
+                value={ligne.facteur}
+                onChangeText={(valeur) => props.modifierSousUnite(index, 'facteur', valeur)}
+                placeholder="x50"
+                placeholderTextColor={couleurs.texteEteint}
+                keyboardType="numeric"
+              />
+              <TextInput
+                style={[m.saisieMobile, m.sousUnitePrix]}
+                value={ligne.prix}
+                onChangeText={(valeur) => props.modifierSousUnite(index, 'prix', valeur)}
+                placeholder="Prix"
+                placeholderTextColor={couleurs.texteEteint}
+                keyboardType="numeric"
+              />
+              <Pressable
+                style={m.boutonRetirerMobile}
+                onPress={() => props.supprimerSousUnite(index)}
+                accessibilityLabel="Retirer cette sous-unité"
+              >
+                <Icone nom="corbeille" taille={18} couleur={couleurs.danger} />
+              </Pressable>
+              {props.erreurs.sousUnites[index] ? (
+                <Text style={m.messageErreur}>{props.erreurs.sousUnites[index]}</Text>
+              ) : null}
+            </View>
+          ))}
+        </View>
+
+        <View style={m.carteRangee}>
+          <PastilleMobile nom="codeBarres" />
+          <Text style={m.titreRangee}>Code-barres</Text>
+          <View style={[m.selecteur, m.selecteurCode]}>
+            <TextInput
+              style={[m.saisieSansBord, !props.saisie.codeBarre && m.selecteurIndication]}
+              value={props.saisie.codeBarre}
+              onChangeText={(valeur) => props.modifier('codeBarre', valeur)}
+              placeholder="Optionnel"
+              placeholderTextColor={couleurs.texteEteint}
+              autoCapitalize="none"
+            />
+            <Pressable
+              onPress={() => props.setCamera('code-barre')}
+              accessibilityLabel="Scanner le code-barres"
+              hitSlop={8}
+            >
+              <Icone nom="codeBarres" taille={23} couleur={couleurs.primaire} />
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={m.carteStock}>
+          <View style={m.stockEntete}>
+            <PastilleMobile nom="stock" fond={couleurs.surfaceDouce} couleur={couleurs.texte} />
+            <View style={m.rangeeTexte}>
+              <Text style={m.titreRangee}>Gestion du stock</Text>
+              <Text style={m.sousTitreRangee}>Suivre les quantités et être alerté.</Text>
+            </View>
+            <Switch
+              value={props.saisie.gestionStock}
+              onValueChange={(valeur) => props.modifier('gestionStock', valeur)}
+              trackColor={{ false: couleurs.bordure, true: couleurs.primaire }}
+              thumbColor={couleurs.surface}
+            />
+          </View>
+          {props.saisie.gestionStock ? (
+            <View style={m.ligneChamps}>
+              <View style={m.champDemi}>
+                <ChampMobile
+                  libelle="Stock minimum (alerte)"
+                  valeur={props.saisie.stockMin}
+                  onChangeText={(valeur) => props.modifier('stockMin', valeur)}
+                  indication="0"
+                  clavier="numeric"
+                  erreur={props.erreurs.champs.stockMin}
+                />
+              </View>
+              {props.p.creation ? (
+                <View style={m.champDemi}>
+                  <ChampMobile
+                    libelle="Stock initial"
+                    valeur={props.saisie.stockInitial}
+                    onChangeText={(valeur) => props.modifier('stockInitial', valeur)}
+                    indication="0"
+                    clavier="numeric"
+                    erreur={props.erreurs.champs.stockInitial}
+                  />
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+          {!props.p.creation ? (
+            <View style={m.produitActif}>
+              <Text style={m.titreRangee}>Produit actif</Text>
+              <Switch
+                value={props.saisie.actif}
+                onValueChange={(valeur) => props.modifier('actif', valeur)}
+                trackColor={{ false: couleurs.bordure, true: couleurs.primaire }}
+                thumbColor={couleurs.surface}
+              />
+            </View>
+          ) : null}
+        </View>
+
+        {props.p.complement}
+      </ScrollView>
+
+      <View style={m.actionsFixes}>
+        <Pressable style={m.boutonAnnulerMobile} onPress={props.p.onAnnuler} disabled={props.enregistrement}>
+          <Text style={m.boutonAnnulerMobileTexte}>Annuler</Text>
+        </Pressable>
+        <Pressable
+          style={[m.boutonCreerMobile, props.enregistrement ? m.boutonDesactiveMobile : null]}
+          onPress={props.onEnregistrer}
+          disabled={props.enregistrement}
+        >
+          {props.enregistrement ? (
+            <ActivityIndicator color={couleurs.texteInverse} />
+          ) : (
+            <>
+              <Icone nom="coche" taille={22} couleur={couleurs.texteInverse} />
+              <Text style={m.boutonCreerMobileTexte}>{props.p.libelleValider}</Text>
+            </>
+          )}
+        </Pressable>
+      </View>
+
+      <Modal
+        visible={menuCategorieOuvert}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuCategorieOuvert(false)}
+      >
+        <Pressable style={m.voileMenu} onPress={() => setMenuCategorieOuvert(false)}>
+          <View style={m.menuCategorie} onStartShouldSetResponder={() => true}>
+            <Text style={m.menuTitre}>Choisir une catégorie</Text>
+            <ScrollView style={m.menuListe} keyboardShouldPersistTaps="handled">
+              {props.categories.map((categorie) => (
+                <Pressable
+                  key={categorie}
+                  style={m.menuOption}
+                  onPress={() => choisirCategorie(categorie)}
+                >
+                  <Text style={m.menuOptionTexte}>{categorie}</Text>
+                  {props.saisie.categorie === categorie ? (
+                    <Icone nom="coche" taille={18} couleur={couleurs.primaire} />
+                  ) : null}
+                </Pressable>
+              ))}
+            </ScrollView>
+            <View style={m.nouvelleCategorie}>
+              <TextInput
+                style={m.saisieSansBord}
+                value={nouvelleCategorie}
+                onChangeText={setNouvelleCategorie}
+                placeholder="Nouvelle catégorie"
+                placeholderTextColor={couleurs.texteEteint}
+              />
+              <Pressable style={m.boutonAjouterCategorie} onPress={ajouterCategorieLibre}>
+                <Text style={m.boutonAjouterCategorieTexte}>Ajouter</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={menuPhotoOuvert}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuPhotoOuvert(false)}
+      >
+        <Pressable style={m.voileMenu} onPress={() => setMenuPhotoOuvert(false)}>
+          <View style={m.menuPhoto} onStartShouldSetResponder={() => true}>
+            <Text style={m.menuTitre}>Image du produit</Text>
+            <Pressable
+              style={m.menuOption}
+              onPress={() => {
+                setMenuPhotoOuvert(false);
+                void props.onGalerie();
+              }}
+            >
+              <Text style={m.menuOptionTexte}>Choisir dans la galerie</Text>
+              <Icone nom="image" taille={20} couleur={couleurs.primaire} />
+            </Pressable>
+            <Pressable
+              style={m.menuOption}
+              onPress={() => {
+                setMenuPhotoOuvert(false);
+                props.setCamera('photo');
+              }}
+            >
+              <Text style={m.menuOptionTexte}>Prendre une photo</Text>
+              <Icone nom="appareilPhoto" taille={20} couleur={couleurs.primaire} />
+            </Pressable>
+            {props.saisie.cheminImage ? (
+              <Pressable
+                style={m.menuOption}
+                onPress={() => {
+                  setMenuPhotoOuvert(false);
+                  props.onRetirerPhoto();
+                }}
+              >
+                <Text style={m.menuOptionDanger}>Retirer l'image</Text>
+                <Icone nom="corbeille" taille={20} couleur={couleurs.danger} />
+              </Pressable>
+            ) : null}
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={props.uniteMenuOuvert}
+        transparent
+        animationType="fade"
+        onRequestClose={() => props.setUniteMenuOuvert(false)}
+      >
+        <Pressable style={m.voileMenu} onPress={() => props.setUniteMenuOuvert(false)}>
+          <View style={m.menuCategorie} onStartShouldSetResponder={() => true}>
+            <Text style={m.menuTitre}>Unité de base</Text>
+            {[...UNITES_BASE, 'Autre'].map((unite) => (
+              <Pressable
+                key={unite}
+                style={m.menuOption}
+                onPress={() => {
+                  if (unite === 'Autre') {
+                    props.setUniteLibre(true);
+                    props.modifier('uniteBase', '');
+                  } else {
+                    props.setUniteLibre(false);
+                    props.modifier('uniteBase', unite);
+                  }
+                  props.setUniteMenuOuvert(false);
+                }}
+              >
+                <Text style={m.menuOptionTexte}>{unite}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+
+      <ModaleCamera
+        visible={props.camera !== null}
+        mode={props.camera ?? 'code-barre'}
+        onFermer={() => props.setCamera(null)}
+        onCodeBarre={(code) => {
+          props.setCamera(null);
+          props.modifier('codeBarre', code);
+        }}
+        onPhoto={(uri) => void props.onPhoto(uri)}
+      />
+    </KeyboardAvoidingView>
+  );
+}
+
+function ChampMobile({
+  libelle,
+  obligatoire,
+  valeur,
+  onChangeText,
+  indication,
+  clavier,
+  erreur,
+}: {
+  libelle: string;
+  obligatoire?: boolean;
+  valeur: string;
+  onChangeText: (valeur: string) => void;
+  indication: string;
+  clavier?: 'default' | 'numeric';
+  erreur?: string;
+}) {
+  return (
+    <View style={m.champMobile}>
+      <LibelleMobile texte={libelle} obligatoire={obligatoire} />
+      <View style={[m.saisieEncadree, erreur ? m.selecteurErreur : null]}>
+        <TextInput
+          style={m.saisieSansBord}
+          value={valeur}
+          onChangeText={onChangeText}
+          placeholder={indication}
+          placeholderTextColor={couleurs.texteEteint}
+          keyboardType={clavier === 'numeric' ? 'numeric' : 'default'}
+        />
+      </View>
+      {erreur ? <Text style={m.messageErreur}>{erreur}</Text> : null}
+    </View>
+  );
+}
+
+function LibelleMobile({ texte, obligatoire, style }: { texte: string; obligatoire?: boolean; style?: object }) {
+  return (
+    <Text style={[m.libelleMobile, style]}>
+      {texte}{obligatoire ? <Text style={m.asterisque}> *</Text> : null}
+    </Text>
+  );
+}
+
+function PastilleMobile({
+  nom,
+  fond = couleurs.primaireDouce,
+  couleur = couleurs.primaire,
+}: {
+  nom: Parameters<typeof Icone>[0]['nom'];
+  fond?: string;
+  couleur?: string;
+}) {
+  return (
+    <View style={[m.pastilleMobile, { backgroundColor: fond }]}>
+      <Icone nom={nom} taille={23} couleur={couleur} />
+    </View>
+  );
+}
+
 // --------------------------------------------------------------------------
 // Ecran
 // --------------------------------------------------------------------------
 
 export default function NouveauProduit() {
   const router = useRouter();
+  const [demandeScan, setDemandeScan] = useState(0);
 
   const valider = useCallback(
     async (valide: ProduitValide) => {
@@ -1054,17 +1595,26 @@ export default function NouveauProduit() {
   return (
     <View style={s.plein}>
       <BandeauEtat />
-      <View style={s.entete}>
-        <Pressable onPress={() => router.back()} style={s.retour}>
-          <Icone nom="retour" taille={17} couleur={couleurs.primaire} />
-          <Text style={s.retourTexte}>Retour</Text>
+        <View style={m.enteteNouveauProduit}>
+          <Pressable onPress={() => router.back()} style={m.retourNouveauProduit} accessibilityLabel="Retour">
+          <Icone nom="retour" taille={23} couleur={couleurs.texte} />
+          </Pressable>
+          <View style={m.titresNouveauProduit}>
+          <Text style={m.titreNouveauProduit}>Nouveau produit</Text>
+          </View>
+        <Pressable
+          style={m.scanEntete}
+          onPress={() => setDemandeScan((precedente) => precedente + 1)}
+          accessibilityLabel="Scanner un code-barres"
+        >
+          <Icone nom="codeBarres" taille={22} couleur={couleurs.primaire} />
         </Pressable>
-        <Text style={s.titre}>Nouveau produit</Text>
       </View>
       <FormulaireProduit
         saisieInitiale={saisieVide()}
         creation
-        libelleValider="Creer le produit"
+        demandeScan={demandeScan}
+        libelleValider="Créer le produit"
         onValider={valider}
         onAnnuler={() => router.back()}
       />
@@ -1289,4 +1839,267 @@ export const s = StyleSheet.create({
     flex: 1,
   },
   boutonFantomeTexte: { color: '#FFFFFF', fontWeight: '600', fontSize: 15 },
+});
+
+/** Styles propres au formulaire mobile compact de création/modification. */
+const m = StyleSheet.create({
+  plein: { flex: 1, backgroundColor: couleurs.fond },
+  defilement: { flex: 1 },
+  contenu: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 100, gap: 10 },
+  enteteNouveauProduit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: couleurs.surface,
+  },
+  retourNouveauProduit: {
+    width: 32,
+    height: 38,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  titresNouveauProduit: { flex: 1, minWidth: 0 },
+  titreNouveauProduit: { color: couleurs.texte, fontSize: 19, lineHeight: 24, fontWeight: '800' },
+  sousTitreNouveauProduit: {
+    color: couleurs.texteFaible,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  scanEntete: {
+    width: 38,
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: couleurs.primaireDouce,
+    backgroundColor: '#f4f8ff',
+  },
+  banniereErreur: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: couleurs.dangerBordure,
+    backgroundColor: couleurs.dangerDouce,
+  },
+  banniereErreurTexte: { color: couleurs.dangerFonce, fontSize: 13, lineHeight: 18 },
+  carteIdentite: {
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  zonePhoto: {
+    width: '100%',
+    height: 76,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: couleurs.primaireBordure,
+    backgroundColor: '#fbfdff',
+    overflow: 'hidden',
+  },
+  zonePhotoRemplie: { borderStyle: 'solid', padding: 0 },
+  photo: { width: '100%', height: '100%' },
+  zonePhotoTexte: { color: couleurs.texteFaible, fontSize: 13, textAlign: 'center' },
+  identiteChamps: { width: '100%', gap: 9 },
+  carteMobile: {
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  titreCarteMobile: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pastilleMobile: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titreCarteTexte: { flex: 1, color: couleurs.texte, fontSize: 16, fontWeight: '800' },
+  puceExplication: {
+    maxWidth: 88,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: couleurs.surfaceDouce,
+  },
+  puceExplicationTexte: { color: couleurs.texteFaible, fontSize: 11, fontWeight: '600' },
+  ligneChamps: { flexDirection: 'row', gap: 10 },
+  champDemi: { flex: 1, minWidth: 0 },
+  champMobile: { gap: 4 },
+  libelleMobile: { color: couleurs.texte, fontSize: 13, lineHeight: 17, fontWeight: '700' },
+  asterisque: { color: couleurs.danger },
+  saisieEncadree: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: couleurs.primaireBordure,
+    backgroundColor: couleurs.surface,
+  },
+  saisieSansBord: { flex: 1, minWidth: 0, color: couleurs.texte, fontSize: 15, paddingVertical: 6 },
+  selecteur: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: couleurs.primaireBordure,
+    backgroundColor: couleurs.surface,
+  },
+  selecteurErreur: { borderColor: couleurs.danger },
+  selecteurTexte: { flex: 1, minWidth: 0, color: couleurs.texte, fontSize: 15 },
+  selecteurIndication: { color: couleurs.texteEteint },
+  messageErreur: { color: couleurs.dangerFonce, fontSize: 11, lineHeight: 15 },
+  carteRangee: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  libelleRangee: { flex: 1, minWidth: 0 },
+  selecteurUnite: { width: '100%' },
+  champUniteLibre: { width: '100%' },
+  rangeeTexte: { flex: 1, minWidth: 0 },
+  titreRangee: { color: couleurs.texte, fontSize: 15, lineHeight: 19, fontWeight: '800' },
+  sousTitreRangee: { color: couleurs.texteFaible, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  boutonAjouter: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: couleurs.primaireBordure,
+    backgroundColor: '#f4f8ff',
+  },
+  boutonAjouterTexte: { color: couleurs.primaire, fontSize: 14, fontWeight: '700' },
+  sousUniteMobile: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  saisieMobile: {
+    minHeight: 42,
+    paddingHorizontal: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: couleurs.primaireBordure,
+    color: couleurs.texte,
+    fontSize: 14,
+  },
+  sousUniteNom: { flex: 1, minWidth: 92 },
+  sousUniteNombre: { width: 54 },
+  sousUnitePrix: { width: 62 },
+  boutonRetirerMobile: { width: 38, minHeight: 42, alignItems: 'center', justifyContent: 'center' },
+  selecteurCode: { flex: 1, minWidth: 145 },
+  carteStock: {
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  stockEntete: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  produitActif: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: couleurs.bordure,
+    paddingTop: 12,
+  },
+  actionsFixes: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  boutonAnnulerMobile: {
+    minHeight: 48,
+    flex: 0.8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 11,
+    backgroundColor: couleurs.surfaceDouce,
+  },
+  boutonAnnulerMobileTexte: { color: couleurs.texte, fontSize: 16, fontWeight: '700' },
+  boutonCreerMobile: {
+    minHeight: 48,
+    flex: 1.65,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 11,
+    backgroundColor: couleurs.primaire,
+  },
+  boutonDesactiveMobile: { opacity: 0.55 },
+  boutonCreerMobileTexte: { color: couleurs.texteInverse, fontSize: 16, fontWeight: '800' },
+  voileMenu: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+  },
+  menuCategorie: {
+    maxHeight: '70%',
+    gap: 6,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: couleurs.surface,
+  },
+  menuPhoto: {
+    gap: 4,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: couleurs.surface,
+  },
+  menuTitre: { color: couleurs.texte, fontSize: 18, fontWeight: '800', paddingHorizontal: 4, paddingVertical: 4 },
+  menuListe: { maxHeight: 260 },
+  menuOption: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    borderRadius: 10,
+  },
+  menuOptionTexte: { color: couleurs.texte, fontSize: 16 },
+  menuOptionDanger: { color: couleurs.danger, fontSize: 16, fontWeight: '600' },
+  nouvelleCategorie: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: couleurs.bordure,
+  },
+  boutonAjouterCategorie: { paddingHorizontal: 10, paddingVertical: 8 },
+  boutonAjouterCategorieTexte: { color: couleurs.primaire, fontSize: 14, fontWeight: '800' },
 });

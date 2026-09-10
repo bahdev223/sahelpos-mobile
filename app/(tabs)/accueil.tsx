@@ -17,6 +17,7 @@
 import { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
 import { useSession } from '../_layout';
 import {
@@ -91,7 +92,7 @@ type Etat =
 
 export default function EcranAccueil() {
   const router = useRouter();
-  const { utilisateur, boutique } = useSession();
+  const { utilisateur, boutique, revisionSynchronisation, synchroniserMaintenant } = useSession();
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [rafraichit, setRafraichit] = useState(false);
   // La cloche porte « ce que je n'ai pas encore vu », et non « ce qui va mal
@@ -151,12 +152,13 @@ export default function EcranAccueil() {
       return () => {
         vivant = false;
       };
-    }, [charger]),
+    }, [charger, revisionSynchronisation]),
   );
 
   const surRafraichir = useCallback(async () => {
     setRafraichit(true);
     try {
+      await synchroniserMaintenant();
       await charger();
     } catch {
       // Silencieux : le tirage vers le bas est un geste d'impatience, pas une
@@ -164,7 +166,7 @@ export default function EcranAccueil() {
     } finally {
       setRafraichit(false);
     }
-  }, [charger]);
+  }, [charger, synchroniserMaintenant]);
 
   if (etat.phase === 'chargement') {
     return (
@@ -179,12 +181,13 @@ export default function EcranAccueil() {
 
   return (
     <View style={s.plein}>
-      <BandeauEtat />
+      <StatusBar style="light" />
+      <BandeauEtat fond={couleurs.primaire} />
       <View style={s.entete}>
-        <BoutonMenu />
+        <BoutonMenu couleur={couleurs.texteInverse} />
         <View style={s.marque}>
           <Text style={s.marqueNom}>Sahel<Text style={s.marqueAccent}>POS</Text></Text>
-          <Text style={s.marqueBoutique} numberOfLines={1}>{boutique.nom}</Text>
+          <Text style={s.marqueBoutique}>Ma boutique</Text>
         </View>
         <Pressable
           onPress={() => router.push('/notifications')}
@@ -192,7 +195,7 @@ export default function EcranAccueil() {
           style={s.cloche}
           accessibilityLabel="Notifications"
         >
-          <Icone nom="cloche" taille={22} couleur={couleurs.texte} />
+          <Icone nom="cloche" taille={22} couleur={couleurs.texteInverse} />
           {nonLues > 0 ? (
             <View style={s.pointCloche}>
               <Text style={s.pointClocheTexte}>{nonLues > 9 ? '9+' : nonLues}</Text>
@@ -235,7 +238,7 @@ export default function EcranAccueil() {
         <View style={s.tuiles}>
           <TuileCompacte
             icone="graphique"
-            libelle="Benefice"
+            libelle="Bénéfice"
             valeur={formaterMontant(d.benefice, boutique.devise)}
             detail={
               d.chiffreAffaires > 0
@@ -246,16 +249,14 @@ export default function EcranAccueil() {
             fond={couleurs.succesDouce}
             onPress={() => router.push('/tableau-de-bord')}
           />
-          {d.afficherDepenses ? (
-            <TuileCompacte
-              icone="argent"
-              libelle="Depenses"
-              valeur={formaterMontant(0, boutique.devise)}
-              detail="Aujourd'hui"
-              teinte={couleurs.danger}
-              fond={couleurs.dangerDouce}
-            />
-          ) : null}
+          <TuileCompacte
+            icone="argent"
+            libelle="Dépenses"
+            valeur={formaterMontant(0, boutique.devise)}
+            detail="Aujourd'hui"
+            teinte={couleurs.danger}
+            fond={couleurs.dangerDouce}
+          />
         </View>
 
         <View style={s.tuiles}>
@@ -264,14 +265,18 @@ export default function EcranAccueil() {
               <Icone nom="stock" taille={23} couleur={couleurs.primaire} />
             </View>
             <View style={s.raccourciTextes}>
-              <Text style={s.raccourciTitre}>Stock a surveiller</Text>
-              <Text style={s.raccourciValeur}>{d.alertes.length} produits</Text>
+              <Text style={s.raccourciTitre} numberOfLines={2}>
+                Stock à surveiller
+              </Text>
+              <Text style={s.raccourciValeur} numberOfLines={1} adjustsFontSizeToFit>
+                {d.alertes.length} produits
+              </Text>
             </View>
             <Icone nom="chevron" taille={18} couleur={couleurs.texteFaible} />
           </Pressable>
           <TuileCompacte
             icone="clients"
-            libelle="Creances clients"
+            libelle="Créances clients"
             valeur={formaterMontant(d.resteDu, boutique.devise)}
             detail={d.resteDu > 0 ? 'A suivre' : 'Aucune en cours'}
             teinte={couleurs.primaire}
@@ -291,7 +296,7 @@ export default function EcranAccueil() {
         ) : null}
 
         <View style={s.sectionEntete}>
-          <Text style={s.sectionTitre}>Dernieres ventes</Text>
+          <Text style={s.sectionTitre}>Ventes récentes</Text>
           <Pressable onPress={() => router.push('/ventes')} hitSlop={8}>
             <Text style={s.lienVoirTout}>Voir tout</Text>
           </Pressable>
@@ -347,37 +352,40 @@ export default function EcranAccueil() {
           </View>
         )}
 
+        <View style={s.sectionEntete}>
+          <Text style={s.sectionTitre}>Produits en alerte</Text>
+          <Pressable onPress={() => router.push('/stock/alertes')} hitSlop={8}>
+            <Text style={s.lienVoirTout}>Voir tout</Text>
+          </Pressable>
+        </View>
         {d.alertes.length > 0 ? (
-          <>
-            <View style={s.sectionEntete}>
-              <Text style={s.sectionTitre}>Produits en alerte</Text>
-              <Pressable onPress={() => router.push('/stock/alertes')} hitSlop={8}>
-                <Text style={s.lienVoirTout}>Voir tout</Text>
-              </Pressable>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.alertesVisuelles}>
-              {d.alertes.slice(0, 8).map((produit) => (
-                <Pressable
-                  key={produit.id}
-                  onPress={() =>
-                    router.push({ pathname: '/produit/[id]', params: { id: String(produit.id) } })
-                  }
-                  style={({ pressed }) => [s.alerteCarte, pressed && s.lignePressee]}
-                >
-                  <Vignette chemin={produit.cheminImage} nom={produit.nom} taille={76} />
-                  <View style={s.alerteBadge}>
-                    <Text style={s.alerteBadgeTexte}>
-                      {formaterQuantite(produit.quantiteBase)}
-                    </Text>
-                  </View>
-                  <Text style={s.alerteNom} numberOfLines={2}>
-                    {produit.nom}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.alertesVisuelles}>
+            {d.alertes.slice(0, 8).map((produit) => (
+              <Pressable
+                key={produit.id}
+                onPress={() =>
+                  router.push({ pathname: '/produit/[id]', params: { id: String(produit.id) } })
+                }
+                style={({ pressed }) => [s.alerteCarte, pressed && s.lignePressee]}
+              >
+                <Vignette chemin={produit.cheminImage} nom={produit.nom} taille={76} />
+                <View style={s.alerteBadge}>
+                  <Text style={s.alerteBadgeTexte}>
+                    {formaterQuantite(produit.quantiteBase)}
                   </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </>
-        ) : null}
+                </View>
+                <Text style={s.alerteNom} numberOfLines={2}>
+                  {produit.nom}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : (
+          <Pressable style={s.alerteVide} onPress={() => router.push('/stock/alertes')}>
+            <Icone nom="stock" taille={20} couleur={couleurs.texteEteint} />
+            <Text style={s.alerteVideTexte}>Aucun produit en alerte</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </View>
   );
@@ -458,14 +466,14 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: espaces.s,
     paddingHorizontal: 18,
-    paddingTop: 16,
-    paddingBottom: 24,
+    paddingTop: 4,
+    paddingBottom: 10,
     backgroundColor: couleurs.primaire,
   },
   marque: { flex: 1, minWidth: 0 },
   marqueNom: { color: couleurs.texteInverse, fontSize: 20, fontWeight: '900' },
   marqueAccent: { color: couleurs.accent },
-  marqueBoutique: { color: 'rgba(255,255,255,0.82)', fontSize: 13, marginTop: -1 },
+  marqueBoutique: { color: 'rgba(255,255,255,0.82)', fontSize: 11, marginTop: 0 },
   enteteTitre: { flex: 1, fontSize: 18, fontWeight: '700', color: couleurs.texteInverse },
   cloche: { padding: 7 },
   pointCloche: {
@@ -482,22 +490,28 @@ const s = StyleSheet.create({
   },
   pointClocheTexte: { fontSize: 10, fontWeight: '700', color: couleurs.texteInverse },
 
-  contenu: { padding: 16, paddingTop: 0, paddingBottom: espaces.xxl },
+  contenu: { padding: 16, paddingTop: 12, paddingBottom: espaces.xxl },
   carteBienvenue: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: espaces.s,
-    marginTop: -16,
-    paddingTop: 16,
+    marginTop: 0,
+    paddingTop: 14,
     paddingHorizontal: 16,
     paddingBottom: 14,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     backgroundColor: couleurs.surface,
   },
-  salut: { fontSize: 17, fontWeight: '900', color: couleurs.texte },
-  sousSalut: { fontSize: 12, color: couleurs.texteFaible, marginTop: 1, textTransform: 'capitalize' },
+  salut: { fontSize: 17, lineHeight: 22, fontWeight: '900', color: couleurs.texte },
+  sousSalut: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: couleurs.texteFaible,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
   selectJour: {
     minHeight: 40,
     flexDirection: 'row',
@@ -509,7 +523,7 @@ const s = StyleSheet.create({
     borderColor: couleurs.bordure,
     backgroundColor: couleurs.surface,
   },
-  selectJourTexte: { color: couleurs.texte, fontSize: 13, fontWeight: '700' },
+  selectJourTexte: { color: couleurs.texte, fontSize: 13, lineHeight: 18, fontWeight: '700' },
   caCarte: {
     minHeight: 104,
     flexDirection: 'row',
@@ -620,27 +634,28 @@ const s = StyleSheet.create({
     marginTop: espaces.m,
   },
   raccourciSimple: {
-    width: '47.5%',
+    width: '48%',
     flexGrow: 1,
-    minHeight: 82,
+    minWidth: 0,
+    minHeight: 92,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: espaces.s,
-    padding: espaces.m,
+    gap: 6,
+    padding: 10,
     borderRadius: rayons.m,
     borderWidth: 1,
     borderColor: couleurs.bordure,
     backgroundColor: couleurs.surface,
   },
   raccourciIcone: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
+    width: 36,
+    height: 36,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
   raccourciTextes: { flex: 1, minWidth: 0 },
-  raccourciValeur: { color: couleurs.texte, fontSize: 15, fontWeight: '900', marginTop: 2 },
+  raccourciValeur: { color: couleurs.texte, fontSize: 13, fontWeight: '900', marginTop: 2 },
   raccourci: {
     flex: 1,
     gap: 2,
@@ -655,7 +670,7 @@ const s = StyleSheet.create({
     borderColor: couleurs.bordure,
   },
   raccourciPresse: { backgroundColor: couleurs.primaireDouce },
-  raccourciTitre: { fontSize: 15, fontWeight: '700', color: couleurs.texte },
+  raccourciTitre: { fontSize: 12, lineHeight: 15, fontWeight: '700', color: couleurs.texte },
   raccourciDetail: { fontSize: 12, color: couleurs.texteFaible },
 
   sectionEntete: {
@@ -715,6 +730,18 @@ const s = StyleSheet.create({
   },
   alerteBadgeTexte: { color: couleurs.texteInverse, fontSize: 11, fontWeight: '900' },
   alerteNom: { marginTop: 7, color: couleurs.texte, fontSize: 12, fontWeight: '800', lineHeight: 15 },
+  alerteVide: {
+    minHeight: 74,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: espaces.s,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    borderStyle: 'dashed',
+    backgroundColor: couleurs.surface,
+  },
+  alerteVideTexte: { color: couleurs.texteFaible, fontSize: 13, fontWeight: '600' },
 
   vide: {
     alignItems: 'center',

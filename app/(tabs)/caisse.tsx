@@ -250,7 +250,7 @@ interface VenteTerminee {
 type EtatListe = 'chargement' | 'pret' | 'erreur';
 
 export default function EcranCaisse() {
-  const { boutique, utilisateur } = useSession();
+  const { boutique, utilisateur, revisionSynchronisation } = useSession();
 
   const [recherche, setRecherche] = useState('');
   const [categorie, setCategorie] = useState<string | null>(null);
@@ -329,7 +329,7 @@ export default function EcranCaisse() {
   useFocusEffect(
     useCallback(() => {
       void charger(termeCourant.current);
-    }, [charger]),
+    }, [charger, revisionSynchronisation]),
   );
 
   const ouvrirChoix = useCallback(async (produit: Produit) => {
@@ -733,13 +733,12 @@ function BarrePanier({
             ? 'Panier vide'
             : `${nbArticles} ligne${nbArticles > 1 ? 's' : ''} - modifier`}
         </Text>
-        <Montant valeur={total} devise={devise} taille="geant" />
+        <Montant valeur={total} devise={devise} taille="grand" />
       </Pressable>
       <Bouton
         titre="Encaisser"
         onPress={onEncaisser}
         desactive={vide}
-        grand
         style={styles.boutonEncaisser}
       />
     </View>
@@ -1036,7 +1035,7 @@ function ModalePanier({
           {alerte ? <Text style={styles.refusCompact}>{alerte}</Text> : null}
           <View style={styles.piedPanierTotal}>
             <Text style={styles.zoneTotalLibelle}>Total</Text>
-            <Montant valeur={total} devise={devise} taille="geant" />
+            <Montant valeur={total} devise={devise} taille="grand" />
           </View>
           <View style={styles.piedPanierBoutons}>
             <Bouton
@@ -1303,7 +1302,7 @@ function ModalePaiement({
           >
             <View style={styles.blocTotal}>
               <Text style={styles.zoneTotalLibelle}>Total a payer</Text>
-              <Montant valeur={total} devise={devise} taille="geant" />
+              <Montant valeur={total} devise={devise} taille="grand" />
             </View>
 
             <Text style={styles.sousLabel}>Mode de paiement</Text>
@@ -1357,7 +1356,7 @@ function ModalePaiement({
                   <Montant
                     valeur={monnaie}
                     devise={devise}
-                    taille="geant"
+                    taille="grand"
                     couleur={couleurs.primaire}
                   />
                 </View>
@@ -1698,7 +1697,7 @@ const styles = StyleSheet.create({
     color: couleurs.texteFaible,
     marginBottom: 2,
   },
-  boutonEncaisser: { minWidth: 140 },
+  boutonEncaisser: { minWidth: 104 },
 
   enteteModale: {
     flexDirection: 'row',
@@ -1710,7 +1709,7 @@ const styles = StyleSheet.create({
     borderBottomColor: couleurs.bordure,
     backgroundColor: couleurs.surface,
   },
-  titreModale: { flex: 1, fontSize: 19, fontWeight: '800', color: couleurs.texte },
+  titreModale: { flex: 1, fontSize: 17, fontWeight: '800', color: couleurs.texte },
   fermer: {
     minHeight: CIBLE_MIN,
     minWidth: CIBLE_MIN + 24,
@@ -1834,9 +1833,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: espaces.m,
   },
-  lignePanierNom: { flex: 1, fontSize: 16, fontWeight: '700', color: couleurs.texte },
+  lignePanierNom: { flex: 1, fontSize: 14, fontWeight: '700', color: couleurs.texte },
   lignePanierDetail: {
-    fontSize: 14,
+    fontSize: 12,
     color: couleurs.texteFaible,
     marginTop: espaces.xs,
   },
