@@ -14,7 +14,7 @@
  * qui est parti aujourd'hui. Le mois est dans le tableau de bord, ouvert une
  * fois par semaine.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -95,6 +95,7 @@ export default function EcranAccueil() {
   const { utilisateur, boutique, revisionSynchronisation, synchroniserMaintenant } = useSession();
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [rafraichit, setRafraichit] = useState(false);
+  const derniereLectureValide = useRef<Donnees | null>(null);
   // La cloche porte « ce que je n'ai pas encore vu », et non « ce qui va mal
   // en ce moment » : les deux different des qu'une alerte a ete lue.
   const [nonLues, setNonLues] = useState(0);
@@ -107,17 +108,19 @@ export default function EcranAccueil() {
       listerVentes({ limite: 5 }),
       etatAbonnementCourant(),
     ]);
+    const donnees: Donnees = {
+      chiffreAffaires: totaux.chiffreAffaires,
+      nbVentes: totaux.nbVentes,
+      benefice: totaux.benefice,
+      resteDu: totaux.resteDu,
+      alertes,
+      dernieres,
+      afficherDepenses: autorise(abonnement, 'tresorerie'),
+    };
+    derniereLectureValide.current = donnees;
     setEtat({
       phase: 'pret',
-      donnees: {
-        chiffreAffaires: totaux.chiffreAffaires,
-        nbVentes: totaux.nbVentes,
-        benefice: totaux.benefice,
-        resteDu: totaux.resteDu,
-        alertes,
-        dernieres,
-        afficherDepenses: autorise(abonnement, 'tresorerie'),
-      },
+      donnees,
     });
   }, []);
 
@@ -130,22 +133,15 @@ export default function EcranAccueil() {
           // Le compteur est relu a chaque retour sur l'accueil : le
           // commercant vient peut-etre de lire ses notifications.
           if (vivant) setNonLues(await compterNonLues());
-        } catch {
-          // L'accueil ne doit jamais bloquer l'acces a la caisse : en cas
-          // d'echec de lecture on affiche des zeros plutot qu'un ecran rouge.
+        } catch (erreur) {
+          // Une lecture locale ratee ne veut PAS dire que la caisse est vide.
+          // On garde le dernier tableau coherent plutot que de remplacer les
+          // montants reels par des zeros, ce qui est plus dangereux qu'un
+          // avertissement visible.
           if (vivant) {
-            setEtat({
-              phase: 'pret',
-              donnees: {
-                chiffreAffaires: 0,
-                nbVentes: 0,
-                benefice: 0,
-                resteDu: 0,
-                alertes: [],
-                dernieres: [],
-                afficherDepenses: false,
-              },
-            });
+            if (derniereLectureValide.current) {
+              setEtat({ phase: 'pret', donnees: derniereLectureValide.current });
+            }
           }
         }
       })();

@@ -161,6 +161,8 @@ export default function DispositionRacine() {
     derniereErreur: null,
     dernierPush: null,
     dernierPull: null,
+    dernierNombrePush: null,
+    dernierNombrePull: null,
     enAttente: 0,
     cursor: null,
   });
@@ -245,13 +247,11 @@ export default function DispositionRacine() {
         // chargement et sans interrompre la vente en cours.
         setBoutique(fabriquerBoutique(await lireParametres()));
         setRevisionSynchronisation((precedente) => precedente + 1);
-      } catch {
-        // La caisse reste disponible hors ligne. L'erreur reste tout de meme
-        // lisible dans l'etat de synchronisation, au lieu d'etre perdue.
       } finally {
         setEtatSynchronisation(await lireEtatSynchronisation().catch(() => ({
         derniereTentative: null, dernierSucces: null, derniereErreur: null,
-        dernierPush: null, dernierPull: null, enAttente: 0, cursor: null,
+        dernierPush: null, dernierPull: null, dernierNombrePush: null,
+        dernierNombrePull: null, enAttente: 0, cursor: null,
         })));
       }
     })();
@@ -265,6 +265,13 @@ export default function DispositionRacine() {
       }
     }
   }, [charger]);
+
+  // Les synchronisations declenchees par le systeme ne doivent jamais creer
+  // de rejet non gere. Le geste manuel, lui, conserve l'erreur : l'ecran qui
+  // l'a demande ne doit pas afficher un faux succes.
+  const synchroniserSansBruit = useCallback(() => {
+    void synchroniserDonnees().catch(() => {});
+  }, [synchroniserDonnees]);
 
   const valeur = useMemo<ValeurSession>(
     () => ({
@@ -304,8 +311,8 @@ export default function DispositionRacine() {
   // qui evite le faux tableau de bord vide juste apres une connexion Web.
   useEffect(() => {
     if (!pileMontee) return;
-    void synchroniserDonnees();
-  }, [pileMontee, synchroniserDonnees]);
+    synchroniserSansBruit();
+  }, [pileMontee, synchroniserSansBruit]);
 
   // Le retour du reseau est un evenement distinct du retour au premier plan :
   // un vendeur peut activer ses donnees mobiles sans quitter la caisse.
@@ -313,16 +320,16 @@ export default function DispositionRacine() {
     if (!pileMontee) return;
     const abonnement = Network.addNetworkStateListener((reseau) => {
       if (reseau.isConnected && reseau.isInternetReachable !== false) {
-        void synchroniserDonnees();
+        synchroniserSansBruit();
       }
     });
     void Network.getNetworkStateAsync().then((reseau) => {
       if (reseau.isConnected && reseau.isInternetReachable !== false) {
-        void synchroniserDonnees();
+        synchroniserSansBruit();
       }
     }).catch(() => {});
     return () => abonnement.remove();
-  }, [pileMontee, synchroniserDonnees]);
+  }, [pileMontee, synchroniserSansBruit]);
 
   // Toute ecriture met l'objet dans la file SQLite puis reveille la racine.
   // Le push n'est donc plus conditionne a un redemarrage ou a un changement
@@ -332,17 +339,17 @@ export default function DispositionRacine() {
     return ecouterChangementSynchronisation(() => {
       // Certains services marquent l'outbox dans leur transaction SQLite. On
       // laisse le commit finir avant de lire cette file et de la pousser.
-      setTimeout(() => void synchroniserDonnees(), 250);
+      setTimeout(synchroniserSansBruit, 250);
     });
-  }, [pileMontee, synchroniserDonnees]);
+  }, [pileMontee, synchroniserSansBruit]);
 
   // Filet de securite pour un reseau qui change d'etat sans emettre
   // d'evenement natif (certains Android apres une coupure prolongée).
   useEffect(() => {
     if (!pileMontee) return;
-    const intervalle = setInterval(() => void synchroniserDonnees(), 120000);
+    const intervalle = setInterval(synchroniserSansBruit, 120000);
     return () => clearInterval(intervalle);
-  }, [pileMontee, synchroniserDonnees]);
+  }, [pileMontee, synchroniserSansBruit]);
 
   // Quand le telephone revient de veille ou retrouve le premier plan, on
   // relit le serveur. C'est ce cas qui etait laisse de cote : les mises a jour
@@ -350,10 +357,10 @@ export default function DispositionRacine() {
   useEffect(() => {
     if (!pileMontee) return;
     const abonnement = AppState.addEventListener('change', (etatApp) => {
-      if (etatApp === 'active') void synchroniserDonnees();
+      if (etatApp === 'active') synchroniserSansBruit();
     });
     return () => abonnement.remove();
-  }, [pileMontee, synchroniserDonnees]);
+  }, [pileMontee, synchroniserSansBruit]);
 
   // L'aiguillage de la racine est fait par app/index.tsx, qui redirige vers
   // la caisse. Aucun effet de navigation ici : celui qui s'y trouvait

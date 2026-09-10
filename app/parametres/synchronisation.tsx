@@ -54,7 +54,9 @@ export default function EcranSynchronisation() {
         <Ligne titre="Dernier succès" valeur={dateLisible(etatSynchronisation.dernierSucces)} />
         <Ligne titre="Dernière tentative" valeur={dateLisible(etatSynchronisation.derniereTentative)} />
         <Ligne titre="Dernier push" valeur={dateLisible(etatSynchronisation.dernierPush)} />
+        <Ligne titre="Objets envoyes" valeur={etatSynchronisation.dernierNombrePush === null ? 'Jamais' : String(etatSynchronisation.dernierNombrePush)} />
         <Ligne titre="Dernier pull" valeur={dateLisible(etatSynchronisation.dernierPull)} />
+        <Ligne titre="Objets recus" valeur={etatSynchronisation.dernierNombrePull === null ? 'Jamais' : String(etatSynchronisation.dernierNombrePull)} />
         <Ligne titre="Opérations en attente" valeur={String(etatSynchronisation.enAttente)} />
         <Ligne titre="Curseur" valeur={etatSynchronisation.cursor ?? 'Initialisation'} />
         {enErreur ? <View style={styles.erreur}><Text style={styles.erreurTitre}>À vérifier</Text><Text style={styles.erreurTexte}>{etatSynchronisation.derniereErreur}</Text></View> : null}

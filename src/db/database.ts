@@ -13,7 +13,9 @@ import { MIGRATIONS, SCHEMA_VERSION } from './schema';
 const NOM_BASE = 'sahelpos.db';
 
 let base: SQLite.SQLiteDatabase | null = null;
+let baseNative: SQLite.SQLiteDatabase | null = null;
 let ouverture: Promise<SQLite.SQLiteDatabase> | null = null;
+let reprise: Promise<void> | null = null;
 
 /** Retourne la base, en l'ouvrant et en la migrant au premier appel. */
 export async function obtenirBase(): Promise<SQLite.SQLiteDatabase> {
@@ -36,6 +38,12 @@ export async function obtenirBase(): Promise<SQLite.SQLiteDatabase> {
 }
 
 async function ouvrirEtMigrer(): Promise<SQLite.SQLiteDatabase> {
+  const db = await ouvrirNativeEtMigrer();
+  baseNative = db;
+  return facadeResiliente();
+}
+
+async function ouvrirNativeEtMigrer(): Promise<SQLite.SQLiteDatabase> {
   const db = await SQLite.openDatabaseAsync(NOM_BASE);
 
   // Sans cette ligne, SQLite ignore les ON DELETE CASCADE declares au schema.
@@ -46,6 +54,57 @@ async function ouvrirEtMigrer(): Promise<SQLite.SQLiteDatabase> {
 
   await migrer(db);
   return db;
+}
+
+/** Certaines versions Android peuvent perdre le handle natif apres une mise
+ * en veille ou une pression memoire. Cette erreur du bridge ne signifie pas
+ * que les donnees SQLite sont perdues : on rouvre le handle et on rejoue UNE
+ * fois la requete. Les autres erreurs SQL restent visibles normalement. */
+function erreurHandleNatif(erreur: unknown): boolean {
+  const texte = erreur instanceof Error ? `${erreur.name} ${erreur.message}` : String(erreur);
+  return /NativeDatabase|prepareAsync|NullPointerException/i.test(texte);
+}
+
+async function reparerHandleNatif(): Promise<void> {
+  if (reprise) return reprise;
+  reprise = (async () => {
+    const precedente = baseNative;
+    baseNative = null;
+    try {
+      await precedente?.closeAsync();
+    } catch {
+      // Le handle est justement invalide : il n'est plus utilisable ni
+      // necessaire pour retrouver le fichier SQLite persistant.
+    }
+    baseNative = await ouvrirNativeEtMigrer();
+  })();
+  try {
+    await reprise;
+  } finally {
+    reprise = null;
+  }
+}
+
+function facadeResiliente(): SQLite.SQLiteDatabase {
+  return new Proxy({} as SQLite.SQLiteDatabase, {
+    get(_cible, propriete) {
+      const native = baseNative as unknown as Record<PropertyKey, unknown> | null;
+      const valeur = native?.[propriete];
+      if (typeof valeur !== 'function') return valeur;
+
+      return async (...argumentsMethode: unknown[]) => {
+        try {
+          return await Reflect.apply(valeur, baseNative, argumentsMethode);
+        } catch (erreur) {
+          if (!erreurHandleNatif(erreur)) throw erreur;
+          await reparerHandleNatif();
+          const remplacee = (baseNative as unknown as Record<PropertyKey, unknown>)[propriete];
+          if (typeof remplacee !== 'function') throw erreur;
+          return Reflect.apply(remplacee, baseNative, argumentsMethode);
+        }
+      };
+    },
+  });
 }
 
 async function migrer(db: SQLite.SQLiteDatabase): Promise<void> {
@@ -74,7 +133,8 @@ async function migrer(db: SQLite.SQLiteDatabase): Promise<void> {
 /** A n'utiliser que dans les tests : referme et oublie la base ouverte. */
 export async function fermerBase(): Promise<void> {
   if (ouverture) await ouverture;
-  if (!base) return;
-  await base.closeAsync();
+  if (!baseNative) return;
+  await baseNative.closeAsync();
+  baseNative = null;
   base = null;
 }

@@ -26,6 +26,8 @@ const CLE_DERNIER_SUCCES = 'sync.dernier_succes';
 const CLE_DERNIERE_ERREUR = 'sync.derniere_erreur';
 const CLE_DERNIER_PUSH = 'sync.dernier_push';
 const CLE_DERNIER_PULL = 'sync.dernier_pull';
+const CLE_DERNIER_NOMBRE_PUSH = 'sync.dernier_nombre_push';
+const CLE_DERNIER_NOMBRE_PULL = 'sync.dernier_nombre_pull';
 const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
 
 type TypeObjet = 'produit' | 'client' | 'fournisseur' | 'vente' | 'mouvement' | 'achat' | 'boutique';
@@ -196,6 +198,8 @@ export interface EtatSynchronisation {
   derniereErreur: string | null;
   dernierPush: string | null;
   dernierPull: string | null;
+  dernierNombrePush: number | null;
+  dernierNombrePull: number | null;
   enAttente: number;
   cursor: string | null;
 }
@@ -249,12 +253,14 @@ export async function marquerBoutiqueModifiee(): Promise<void> {
 }
 
 export async function lireEtatSynchronisation(): Promise<EtatSynchronisation> {
-  const [derniereTentative, dernierSucces, derniereErreur, dernierPush, dernierPull, cursor, attente] = await Promise.all([
+  const [derniereTentative, dernierSucces, derniereErreur, dernierPush, dernierPull, dernierNombrePush, dernierNombrePull, cursor, attente] = await Promise.all([
     lireParam(CLE_DERNIERE_TENTATIVE),
     lireParam(CLE_DERNIER_SUCCES),
     lireParam(CLE_DERNIERE_ERREUR),
     lireParam(CLE_DERNIER_PUSH),
     lireParam(CLE_DERNIER_PULL),
+    lireParam(CLE_DERNIER_NOMBRE_PUSH),
+    lireParam(CLE_DERNIER_NOMBRE_PULL),
     lireParam(CLE_CURSOR),
     lirePremier<{ n: number }>("SELECT COUNT(*) AS n FROM sync_outbox WHERE statut != 'SYNCED'"),
   ]);
@@ -264,6 +270,8 @@ export async function lireEtatSynchronisation(): Promise<EtatSynchronisation> {
     derniereErreur: derniereErreur || null,
     dernierPush: dernierPush || null,
     dernierPull: dernierPull || null,
+    dernierNombrePush: dernierNombrePush === '' ? null : nombre(dernierNombrePush),
+    dernierNombrePull: dernierNombrePull === '' ? null : nombre(dernierNombrePull),
     enAttente: attente?.n ?? 0,
     cursor: cursor || null,
   };
@@ -343,6 +351,8 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
       aSuivre = Boolean(pull.has_more);
     } while (aSuivre);
     await ecrireParam(CLE_DERNIER_PULL, maintenant());
+    await ecrireParam(CLE_DERNIER_NOMBRE_PUSH, String(pousses));
+    await ecrireParam(CLE_DERNIER_NOMBRE_PULL, String(recus));
     await ecrireParam(CLE_DERNIER_SUCCES, maintenant());
     await ecrireParam(CLE_DERNIERE_ERREUR, '');
     return { pousses, recus, cursor };

@@ -20,7 +20,6 @@ import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import {
   Carte,
   Chargement,
-  Erreur,
   Montant,
   couleurs,
   espaces,
@@ -64,10 +63,8 @@ export default function EcranTableauDeBord() {
   const [stock, setStock] = useState<ValeurStock | null>(null);
   const [chargement, setChargement] = useState(true);
   const [rafraichit, setRafraichit] = useState(false);
-  const [erreur, setErreur] = useState<string | null>(null);
 
   const charger = useCallback(async () => {
-    setErreur(null);
     try {
       const j = bornesJour();
       const m = bornesMois();
@@ -83,8 +80,10 @@ export default function EcranTableauDeBord() {
       setMeilleurs(tops);
       setAlertes(alertesStock);
       setStock(valeur);
-    } catch (e) {
-      setErreur(e instanceof Error ? e.message : 'Lecture des chiffres impossible.');
+    } catch {
+      // Une lecture ponctuelle ne remet jamais les chiffres a zero et ne
+      // remplace jamais le tableau par un ecran d'erreur. Les valeurs deja
+      // lues restent intactes; le handle SQLite resilient rejoue la requete.
     } finally {
       setChargement(false);
       setRafraichit(false);
@@ -93,19 +92,16 @@ export default function EcranTableauDeBord() {
 
   useFocusEffect(
     useCallback(() => {
-      setChargement(true);
-      charger();
-    }, [charger]),
+      // Les chiffres deja affiches restent a l'ecran pendant une relecture.
+      // Une requete SQLite transitoirement indisponible ne doit jamais vider
+      // le tableau de bord ni faire apparaitre des montants a zero.
+      if (!jour || !mois || !stock) setChargement(true);
+      void charger();
+    }, [charger, jour, mois, stock]),
   );
 
-  if (chargement) return <Chargement message="Calcul des chiffres..." />;
-  if (erreur) {
-    return (
-      <SafeAreaView style={styles.page} edges={['bottom']}>
-        <Stack.Screen options={{ headerShown: true, title: 'Tableau de bord' }} />
-        <Erreur message={erreur} onReessayer={charger} />
-      </SafeAreaView>
-    );
+  if (chargement || !jour || !mois || !stock) {
+    return <Chargement message="Calcul des chiffres..." />;
   }
 
   return (
