@@ -13,6 +13,7 @@ import { obtenirBase } from '../db/database';
 import { genererIdLocal } from '../db/repositories/base';
 import type { LigneVente, ModePaiement, Produit } from '../domain/types';
 import { exigerEcriture } from './abonnement';
+import { verifierAccesCaisse } from './auth';
 import { verifierStock } from './notifications';
 import { marquerChangement } from './synchronisation';
 
@@ -83,6 +84,7 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
   // Le verrou est ici et non dans l'ecran : un bouton grise se
   // contourne, une fonction qui refuse d'ecrire, non.
   await exigerEcriture();
+  await verifierAccesCaisse(demande.utilisateurId);
 
   if (demande.articles.length === 0) {
     throw new Error('Le panier est vide.');

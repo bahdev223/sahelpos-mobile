@@ -103,9 +103,9 @@ export default function EcranAccueil() {
   const charger = useCallback(async () => {
     const jour = bornesJour();
     const [totaux, alertes, dernieres, abonnement] = await Promise.all([
-      totauxPeriode(jour.debut, jour.fin),
+      totauxPeriode(jour.debut, jour.fin, utilisateur?.role === 'vendeur' ? utilisateur.id : undefined),
       listerAlertesStock(),
-      listerVentes({ limite: 5 }),
+      listerVentes({ limite: 5, utilisateurId: utilisateur?.role === 'vendeur' ? utilisateur.id : undefined }),
       etatAbonnementCourant(),
     ]);
     const donnees: Donnees = {
@@ -122,7 +122,7 @@ export default function EcranAccueil() {
       phase: 'pret',
       donnees,
     });
-  }, []);
+  }, [utilisateur]);
 
   useFocusEffect(
     useCallback(() => {

@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -349,5 +349,12 @@ export const MIGRATIONS: string[][] = [
         SET statut = CASE WHEN derniere_erreur IS NULL THEN 'PENDING' ELSE 'FAILED' END`,
     `CREATE INDEX IF NOT EXISTS idx_sync_outbox_statut_date
        ON sync_outbox(statut, date_creation)`,
+  ],
+
+  // --- version 8 : vendeurs synchronises et horaires de caisse ------------
+  [
+    // Les colonnes sont ajoutees par `reparerSchemaVendeurs` : cette operation
+    // est idempotente, meme si une ancienne version a avance user_version sans
+    // avoir termine sa migration.
   ],
 ];

@@ -26,6 +26,7 @@ export interface FiltreVente {
   debut?: string;
   fin?: string;
   clientId?: number;
+  utilisateurId?: number;
   statut?: StatutVente;
   modePaiement?: ModePaiement;
   recherche?: string;
@@ -47,6 +48,10 @@ export async function listerVentes(filtre: FiltreVente = {}): Promise<VenteResum
   if (filtre.clientId) {
     conditions.push('v.client_id = ?');
     params.push(filtre.clientId);
+  }
+  if (filtre.utilisateurId) {
+    conditions.push('v.utilisateur_id = ?');
+    params.push(filtre.utilisateurId);
   }
   if (filtre.statut) {
     conditions.push('v.statut = ?');
@@ -107,7 +112,7 @@ export interface TotauxPeriode {
   resteDu: number;
 }
 
-export async function totauxPeriode(debut: string, fin: string): Promise<TotauxPeriode> {
+export async function totauxPeriode(debut: string, fin: string, utilisateurId?: number): Promise<TotauxPeriode> {
   const l = await lirePremier<{
     n: number;
     ca: number | null;
@@ -117,9 +122,11 @@ export async function totauxPeriode(debut: string, fin: string): Promise<TotauxP
     `SELECT COUNT(*) AS n, SUM(total) AS ca, SUM(montant_paye) AS paye,
             SUM(benefice_total) AS benef
      FROM vente
-     WHERE date_vente >= ? AND date_vente <= ? AND statut <> 'annulee'`,
+     WHERE date_vente >= ? AND date_vente <= ? AND statut <> 'annulee'
+       ${utilisateurId ? 'AND utilisateur_id = ?' : ''}`,
     debut,
     fin,
+    ...(utilisateurId ? [utilisateurId] : []),
   );
 
   const ca = Math.round(l?.ca ?? 0);

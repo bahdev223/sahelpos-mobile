@@ -57,7 +57,7 @@ export function EcranConnexion() {
     try {
       const db = await obtenirBase();
       const lignes = await db.getAllAsync<CompteAffiche>(
-        `SELECT id, login, nom, role FROM utilisateur
+        `SELECT id, id_local, login, nom, role, caisse_ouvre_a, caisse_ferme_a FROM utilisateur
          WHERE actif = 1 ORDER BY role = 'admin' DESC, nom, login`,
       );
       setComptes(lignes);
@@ -102,11 +102,14 @@ export function EcranConnexion() {
       const db = await obtenirBase();
       const ligne = await db.getFirstAsync<{
         id: number;
+        id_local: string;
         login: string;
         nom: string | null;
         role: string;
+        caisse_ouvre_a: string | null;
+        caisse_ferme_a: string | null;
       }>(
-        `SELECT id, login, nom, role FROM utilisateur
+        `SELECT id, id_local, login, nom, role, caisse_ouvre_a, caisse_ferme_a FROM utilisateur
          WHERE id = ? AND code_pin = ? AND actif = 1`,
         compteChoisi,
         pin,
@@ -121,10 +124,13 @@ export function EcranConnexion() {
 
       const compte: Utilisateur = {
         id: ligne.id,
+        idLocal: ligne.id_local,
         login: ligne.login,
         nom: ligne.nom,
         role: enRole(ligne.role),
         actif: true,
+        caisseOuvreA: ligne.caisse_ouvre_a,
+        caisseFermeA: ligne.caisse_ferme_a,
       };
       ouvrirSession(compte);
     } catch (erreur) {

@@ -90,8 +90,11 @@ export interface Client {
 
 export interface Utilisateur {
   id: number;
+  idLocal: string;
   login: string;
   nom: string | null;
   role: Role;
   actif: boolean;
+  caisseOuvreA: string | null;
+  caisseFermeA: string | null;
 }

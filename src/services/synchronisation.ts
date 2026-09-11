@@ -30,7 +30,7 @@ const CLE_DERNIER_NOMBRE_PUSH = 'sync.dernier_nombre_push';
 const CLE_DERNIER_NOMBRE_PULL = 'sync.dernier_nombre_pull';
 const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
 
-type TypeObjet = 'produit' | 'client' | 'fournisseur' | 'vente' | 'mouvement' | 'achat' | 'boutique';
+type TypeObjet = 'produit' | 'client' | 'fournisseur' | 'vente' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
 
 interface LigneOutbox {
   type_objet: TypeObjet;
@@ -90,6 +90,7 @@ interface LigneVenteSync {
 interface VenteSync {
   id_local: string;
   numero: string;
+  vendeur_id_local?: string | null;
   client_id_local?: string | null;
   date_vente: string;
   total: number | string;
@@ -168,6 +169,17 @@ interface BoutiqueSync {
   date_modification?: string | null;
 }
 
+interface UtilisateurSync {
+  id_local: string;
+  login: string;
+  nom: string | null;
+  role: string;
+  actif: boolean | number;
+  caisse_ouvre_a?: string | null;
+  caisse_ferme_a?: string | null;
+  date_modification?: string | null;
+}
+
 interface PullSync {
   cursor: string;
   has_more?: boolean;
@@ -177,6 +189,7 @@ interface PullSync {
   ventes: VenteSync[];
   mouvements?: MouvementSync[];
   achats?: AchatSync[];
+  utilisateurs?: UtilisateurSync[];
   boutique?: BoutiqueSync;
 }
 
@@ -464,8 +477,18 @@ async function construirePayload(pending: LigneOutbox[]) {
     ventes: await lireVentes(ids('vente')),
     mouvements: await lireMouvements(ids('mouvement')),
     achats: await lireAchats(ids('achat')),
+    utilisateurs: await lireUtilisateurs(ids('utilisateur')),
     boutique: ids('boutique').length > 0 ? await lireBoutique() : undefined,
   };
+}
+
+async function lireUtilisateurs(ids: string[]): Promise<UtilisateurSync[]> {
+  if (ids.length === 0) return [];
+  return lireTout<UtilisateurSync>(
+    `SELECT id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a, date_modification
+       FROM utilisateur WHERE id_local IN (${placeholders(ids)})`,
+    ...ids,
+  );
 }
 
 async function lireProduits(ids: string[]): Promise<ProduitSync[]> {
@@ -515,10 +538,12 @@ async function lireVentes(ids: string[]): Promise<VenteSync[]> {
   if (ids.length === 0) return [];
   const ventes = await lireTout<VenteSync & { id: number }>(
     `SELECT v.id, v.id_local, v.numero, c.id_local AS client_id_local,
+            u.id_local AS vendeur_id_local,
             v.date_vente, v.total, v.montant_paye, v.mode_paiement,
             v.statut, v.benefice_total
        FROM vente v
        LEFT JOIN client c ON c.id = v.client_id
+       LEFT JOIN utilisateur u ON u.id = v.utilisateur_id
       WHERE v.id_local IN (${placeholders(ids)})`,
     ...ids,
   );
@@ -626,6 +651,10 @@ async function appliquerPull(pull: PullSync): Promise<number> {
       await appliquerAchat(achat);
       recus++;
     }
+    for (const utilisateur of pull.utilisateurs ?? []) {
+      await appliquerUtilisateur(utilisateur);
+      recus++;
+    }
     if (pull.boutique) {
       await appliquerBoutique(pull.boutique);
       recus++;
@@ -636,6 +665,22 @@ async function appliquerPull(pull: PullSync): Promise<number> {
     await ecrireParam(CLE_CURSOR, pull.cursor);
   });
   return recus;
+}
+
+async function appliquerUtilisateur(u: UtilisateurSync): Promise<void> {
+  await executer(
+    `INSERT INTO utilisateur (id_local, login, nom, code_pin, role, actif,
+                              caisse_ouvre_a, caisse_ferme_a, date_creation, date_modification)
+     VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id_local) DO UPDATE SET
+       login = excluded.login, nom = excluded.nom, role = excluded.role,
+       actif = excluded.actif, caisse_ouvre_a = excluded.caisse_ouvre_a,
+       caisse_ferme_a = excluded.caisse_ferme_a,
+       date_modification = excluded.date_modification`,
+    u.id_local, u.login, u.nom ?? u.login, u.role || 'vendeur', u.actif ? 1 : 0,
+    u.caisse_ouvre_a ?? null, u.caisse_ferme_a ?? null,
+    u.date_modification ?? maintenant(), u.date_modification ?? maintenant(),
+  );
 }
 
 async function appliquerProduit(p: ProduitSync): Promise<void> {
@@ -759,11 +804,14 @@ async function appliquerVente(v: VenteSync): Promise<void> {
         v.client_id_local,
       )
     : null;
+  const vendeur = v.vendeur_id_local
+    ? await lirePremier<{ id: number }>('SELECT id FROM utilisateur WHERE id_local = ?', v.vendeur_id_local)
+    : null;
   const venteId = existe?.id ?? (await executer(
-    `INSERT INTO vente (id_local, numero, client_id, date_vente, total,
+    `INSERT INTO vente (id_local, numero, client_id, utilisateur_id, date_vente, total,
                         montant_paye, mode_paiement, statut, benefice_total)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    v.id_local, v.numero, client?.id ?? null, v.date_vente, nombre(v.total),
+    v.id_local, v.numero, client?.id ?? null, vendeur?.id ?? null, v.date_vente, nombre(v.total),
     nombre(v.montant_paye), v.mode_paiement, v.statut, nombre(v.benefice_total),
   )).lastInsertRowId;
   if (existe) {

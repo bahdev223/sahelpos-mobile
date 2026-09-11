@@ -22,6 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { obtenirBase } from '../src/db/database';
+import { genererIdLocal } from '../src/db/repositories/base';
 import type { Utilisateur } from '../src/domain/types';
 import {
   connecterCompteMobile,
@@ -233,11 +234,13 @@ export function EcranDemarrage() {
 
       await db.withTransactionAsync(async () => {
         const insertion = await db.runAsync(
-          `INSERT INTO utilisateur (login, nom, code_pin, role, actif, date_creation)
-           VALUES (?, ?, ?, 'admin', 1, ?)`,
+          `INSERT INTO utilisateur (id_local, login, nom, code_pin, role, actif, date_creation, date_modification)
+           VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)`,
+          genererIdLocal(),
           identifiant,
           nomAdmin.trim() || identifiant,
           pin,
+          maintenant,
           maintenant,
         );
         cree.id = insertion.lastInsertRowId;
@@ -245,10 +248,13 @@ export function EcranDemarrage() {
 
       const compte: Utilisateur = {
         id: cree.id,
+        idLocal: '',
         login: identifiant,
         nom: nomAdmin.trim() || identifiant,
         role: 'admin',
         actif: true,
+        caisseOuvreA: null,
+        caisseFermeA: null,
       };
 
       await recharger();

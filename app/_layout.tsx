@@ -130,7 +130,11 @@ export async function ecrireParametres(valeurs: Record<string, string>): Promise
 }
 
 export function enRole(valeur: string | null): Role {
-  return valeur === 'admin' || valeur === 'gerant' ? valeur : 'vendeur';
+  return valeur === 'admin' || valeur === 'patron'
+    ? 'admin'
+    : valeur === 'gerant'
+      ? 'gerant'
+      : 'vendeur';
 }
 
 function fabriquerBoutique(table: Record<string, string>): Boutique {

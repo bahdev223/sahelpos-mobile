@@ -50,6 +50,8 @@ export default function EcranUtilisateurs() {
   const [nom, setNom] = useState('');
   const [pin, setPin] = useState('');
   const [role, setRole] = useState<Role>('vendeur');
+  const [caisseOuvreA, setCaisseOuvreA] = useState('');
+  const [caisseFermeA, setCaisseFermeA] = useState('');
   const [enCours, setEnCours] = useState(false);
 
   const charger = useCallback(async () => {
@@ -72,11 +74,20 @@ export default function EcranUtilisateurs() {
   const creer = useCallback(async () => {
     setEnCours(true);
     try {
-      await creerUtilisateur({ login, nom, pin, role });
+      if ((caisseOuvreA || caisseFermeA) && (!/^\d{2}:\d{2}$/.test(caisseOuvreA) || !/^\d{2}:\d{2}$/.test(caisseFermeA))) {
+        throw new Error("Indiquez les deux horaires au format 08:00.");
+      }
+      await creerUtilisateur({
+        login, nom, pin, role,
+        caisseOuvreA: caisseOuvreA || null,
+        caisseFermeA: caisseFermeA || null,
+      });
       setLogin('');
       setNom('');
       setPin('');
       setRole('vendeur');
+      setCaisseOuvreA('');
+      setCaisseFermeA('');
       setOuvert(false);
       await charger();
     } catch (e) {
@@ -150,6 +161,9 @@ export default function EcranUtilisateurs() {
                   {u.login} · {LIBELLE_ROLE[u.role]}
                   {u.actif ? '' : ' · desactive'}
                 </Text>
+                {u.caisseOuvreA && u.caisseFermeA ? (
+                  <Text style={styles.horaire}>Caisse : {u.caisseOuvreA} - {u.caisseFermeA}</Text>
+                ) : null}
               </View>
               <View style={styles.ligneActions}>
                 <Pressable onPress={() => changerCode(u)} style={styles.action}>
@@ -207,6 +221,13 @@ export default function EcranUtilisateurs() {
               );
             })}
 
+            {role === 'vendeur' ? (
+              <View style={styles.horaires}>
+                <Champ valeur={caisseOuvreA} onChangeText={setCaisseOuvreA} label="Caisse ouverte a" placeholder="08:00" />
+                <Champ valeur={caisseFermeA} onChangeText={setCaisseFermeA} label="Caisse ferme a" placeholder="18:00" />
+              </View>
+            ) : null}
+
             <View style={styles.feuilleActions}>
               <Bouton titre="Annuler" onPress={() => setOuvert(false)} variante="secondaire" />
               <Bouton titre="Creer" onPress={() => void creer()} enCours={enCours} />
@@ -235,6 +256,7 @@ const styles = StyleSheet.create({
   nom: { fontSize: 15, fontWeight: '600', color: couleurs.texte },
   nomInactif: { color: couleurs.texteFaible },
   detail: { fontSize: 12, color: couleurs.texteFaible, marginTop: 2 },
+  horaire: { fontSize: 12, color: couleurs.primaire, marginTop: 3 },
   ligneActions: { flexDirection: 'row', gap: espaces.s },
   action: { minHeight: 44, justifyContent: 'center', paddingHorizontal: espaces.s },
   actionTexte: { fontSize: 13, fontWeight: '600', color: couleurs.texteFaible },
@@ -270,5 +292,6 @@ const styles = StyleSheet.create({
   choixTitre: { fontSize: 15, fontWeight: '600', color: couleurs.texte },
   choixTitreActif: { color: couleurs.primaire },
   choixDetail: { fontSize: 12, color: couleurs.texteFaible, marginTop: 2 },
+  horaires: { flexDirection: 'row', gap: espaces.s },
   feuilleActions: { flexDirection: 'row', gap: espaces.s, marginTop: espaces.m },
 });

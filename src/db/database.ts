@@ -113,6 +113,10 @@ async function migrer(db: SQLite.SQLiteDatabase): Promise<void> {
   );
   const versionActuelle = ligne?.user_version ?? 0;
 
+  // Cette reparation reste executee meme si user_version est deja a jour. Cela
+  // protege les bases issues d'une build qui avait marque la version trop tot.
+  await reparerSchemaVendeurs(db);
+
   if (versionActuelle >= SCHEMA_VERSION) return;
 
   for (let v = versionActuelle; v < SCHEMA_VERSION; v++) {
@@ -128,6 +132,51 @@ async function migrer(db: SQLite.SQLiteDatabase): Promise<void> {
   // PRAGMA n'accepte pas de parametre lie : la valeur vient d'une constante
   // du code, jamais d'une saisie utilisateur.
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
+}
+
+/**
+ * Rend la migration des vendeurs rejouable sans jamais effacer la base.
+ * SQLite ne propose pas ADD COLUMN IF NOT EXISTS sur toutes les versions
+ * Android supportees, donc on inspecte la table avant chaque ALTER TABLE.
+ */
+async function reparerSchemaVendeurs(db: SQLite.SQLiteDatabase): Promise<void> {
+  const colonnes = new Set(
+    (await db.getAllAsync<{ name: string }>('PRAGMA table_info(utilisateur)'))
+      .map((colonne) => colonne.name),
+  );
+
+  await db.withTransactionAsync(async () => {
+    if (!colonnes.has('id_local')) {
+      await db.execAsync('ALTER TABLE utilisateur ADD COLUMN id_local TEXT');
+      colonnes.add('id_local');
+    }
+    if (!colonnes.has('caisse_ouvre_a')) {
+      await db.execAsync('ALTER TABLE utilisateur ADD COLUMN caisse_ouvre_a TEXT');
+      colonnes.add('caisse_ouvre_a');
+    }
+    if (!colonnes.has('caisse_ferme_a')) {
+      await db.execAsync('ALTER TABLE utilisateur ADD COLUMN caisse_ferme_a TEXT');
+      colonnes.add('caisse_ferme_a');
+    }
+    if (!colonnes.has('date_modification')) {
+      await db.execAsync('ALTER TABLE utilisateur ADD COLUMN date_modification TEXT');
+      colonnes.add('date_modification');
+    }
+
+    await db.execAsync(
+      `UPDATE utilisateur
+          SET id_local = lower(hex(randomblob(16)))
+        WHERE id_local IS NULL OR id_local = ''`,
+    );
+    await db.execAsync(
+      `UPDATE utilisateur
+          SET date_modification = date_creation
+        WHERE date_modification IS NULL OR date_modification = ''`,
+    );
+    await db.execAsync(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_utilisateur_id_local ON utilisateur(id_local)',
+    );
+  });
 }
 
 /** A n'utiliser que dans les tests : referme et oublie la base ouverte. */

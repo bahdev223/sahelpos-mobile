@@ -15,12 +15,14 @@ import * as Crypto from 'expo-crypto';
 
 import {
   executer,
+  genererIdLocal,
   lirePremier,
   lireTout,
   maintenant,
   versBooleen,
 } from '../db/repositories/base';
 import type { Role, Utilisateur } from '../domain/types';
+import { marquerChangement } from './synchronisation';
 
 const SEL = 'SahelPOS360::pin::v1';
 
@@ -45,26 +47,32 @@ function verifierFormatPin(pin: string): void {
 
 interface LigneUtilisateur {
   id: number;
+  id_local: string;
   login: string;
   nom: string | null;
   role: string;
   actif: number;
+  caisse_ouvre_a: string | null;
+  caisse_ferme_a: string | null;
 }
 
 function versUtilisateur(l: LigneUtilisateur): Utilisateur {
   return {
     id: l.id,
+    idLocal: l.id_local,
     login: l.login,
     nom: l.nom,
     role: l.role as Role,
     actif: versBooleen(l.actif),
+    caisseOuvreA: l.caisse_ouvre_a,
+    caisseFermeA: l.caisse_ferme_a,
   };
 }
 
 export async function listerUtilisateurs(actifsSeulement = false): Promise<Utilisateur[]> {
   const ou = actifsSeulement ? ' WHERE actif = 1' : '';
   const lignes = await lireTout<LigneUtilisateur>(
-    `SELECT id, login, nom, role, actif FROM utilisateur${ou} ORDER BY nom, login`,
+    `SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a FROM utilisateur${ou} ORDER BY nom, login`,
   );
   return lignes.map(versUtilisateur);
 }
@@ -82,6 +90,8 @@ export interface SaisieUtilisateur {
   pin: string;
   role: Role;
   actif?: boolean;
+  caisseOuvreA?: string | null;
+  caisseFermeA?: string | null;
 }
 
 export async function creerUtilisateur(saisie: SaisieUtilisateur): Promise<number> {
@@ -98,21 +108,28 @@ export async function creerUtilisateur(saisie: SaisieUtilisateur): Promise<numbe
   }
 
   const r = await executer(
-    `INSERT INTO utilisateur (login, nom, code_pin, role, actif, date_creation)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO utilisateur (id_local, login, nom, code_pin, role, actif, caisse_ouvre_a, caisse_ferme_a, date_creation, date_modification)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    genererIdLocal(),
     login,
     saisie.nom?.trim() || login,
     await hacher(saisie.pin),
     saisie.role,
     saisie.actif === false ? 0 : 1,
+    saisie.caisseOuvreA ?? null,
+    saisie.caisseFermeA ?? null,
+    maintenant(),
     maintenant(),
   );
-  return r.lastInsertRowId;
+  const id = r.lastInsertRowId;
+  const cree = await lirePremier<{ id_local: string }>('SELECT id_local FROM utilisateur WHERE id = ?', id);
+  if (cree?.id_local) await marquerChangement('utilisateur', cree.id_local);
+  return id;
 }
 
 export async function modifierUtilisateur(
   id: number,
-  modifications: { nom?: string; role?: Role; actif?: boolean; pin?: string },
+  modifications: { nom?: string; role?: Role; actif?: boolean; pin?: string; caisseOuvreA?: string | null; caisseFermeA?: string | null },
 ): Promise<void> {
   const champs: string[] = [];
   const params: unknown[] = [];
@@ -134,13 +151,26 @@ export async function modifierUtilisateur(
     champs.push('code_pin = ?');
     params.push(await hacher(modifications.pin));
   }
+  if (modifications.caisseOuvreA !== undefined) {
+    champs.push('caisse_ouvre_a = ?');
+    params.push(modifications.caisseOuvreA);
+  }
+  if (modifications.caisseFermeA !== undefined) {
+    champs.push('caisse_ferme_a = ?');
+    params.push(modifications.caisseFermeA);
+  }
   if (champs.length === 0) return;
+
+  champs.push('date_modification = ?');
+  params.push(maintenant());
 
   await executer(
     `UPDATE utilisateur SET ${champs.join(', ')} WHERE id = ?`,
     ...params,
     id,
   );
+  const modifie = await lirePremier<{ id_local: string }>('SELECT id_local FROM utilisateur WHERE id = ?', id);
+  if (modifie?.id_local) await marquerChangement('utilisateur', modifie.id_local);
 }
 
 /**
@@ -165,12 +195,12 @@ export async function desactiverUtilisateur(id: number): Promise<void> {
       );
     }
   }
-  await executer('UPDATE utilisateur SET actif = 0 WHERE id = ?', id);
+  await modifierUtilisateur(id, { actif: false });
 }
 
 export async function connecter(login: string, pin: string): Promise<Utilisateur> {
   const l = await lirePremier<LigneUtilisateur & { code_pin: string }>(
-    'SELECT id, login, nom, role, actif, code_pin FROM utilisateur WHERE login = ?',
+    'SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a, code_pin FROM utilisateur WHERE login = ?',
     login.trim(),
   );
 
@@ -186,6 +216,22 @@ export async function connecter(login: string, pin: string): Promise<Utilisateur
   }
 
   return versUtilisateur(l);
+}
+
+/** L'horaire bride l'encaissement, jamais la consultation de l'historique. */
+export async function verifierAccesCaisse(utilisateurId: number | null | undefined): Promise<void> {
+  if (!utilisateurId) return;
+  const compte = await lirePremier<{ actif: number; caisse_ouvre_a: string | null; caisse_ferme_a: string | null }>(
+    'SELECT actif, caisse_ouvre_a, caisse_ferme_a FROM utilisateur WHERE id = ?', utilisateurId,
+  );
+  if (!compte || !versBooleen(compte.actif)) throw new PinInvalide('Ce compte est desactive.');
+  const debut = compte.caisse_ouvre_a;
+  const fin = compte.caisse_ferme_a;
+  if (!debut || !fin) return;
+  const maintenantLocal = new Date();
+  const heure = `${String(maintenantLocal.getHours()).padStart(2, '0')}:${String(maintenantLocal.getMinutes()).padStart(2, '0')}`;
+  const dansCreneau = debut <= fin ? heure >= debut && heure < fin : heure >= debut || heure < fin;
+  if (!dansCreneau) throw new PinInvalide(`La caisse est ouverte de ${debut} a ${fin} pour ce vendeur.`);
 }
 
 /** Ce que chaque role a le droit de faire. */
