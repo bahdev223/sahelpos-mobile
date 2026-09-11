@@ -59,7 +59,7 @@ import {
   type StatutInventaire,
 } from './index';
 import {
-  BARRE_HORIZONTALE, BandeauEtat, couleurs } from '../../src/ui/components';
+  BARRE_HORIZONTALE, BandeauEtat, Vignette, couleurs } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 
 /** Codes lisibles par la camera. Les memes que la fiche produit. */
@@ -98,6 +98,7 @@ interface LigneComptage {
   nom: string;
   categorie: string | null;
   code_barre: string | null;
+  chemin_image: string | null;
   unite_base: string;
   stock_theorique: number;
   stock_physique: number | null;
@@ -125,7 +126,7 @@ async function chargerFiche(identifiant: number): Promise<Fiche | null> {
   const lignes = await db.getAllAsync<LigneComptage>(
     `SELECT li.id, li.produit_id, li.stock_theorique, li.stock_physique,
             li.ecart, li.valeur_ecart, li.prix_achat,
-            p.nom, p.categorie, p.code_barre, p.unite_base
+            p.nom, p.categorie, p.code_barre, p.chemin_image, p.unite_base
        FROM ligne_inventaire li
        JOIN produit p ON p.id = li.produit_id
       WHERE li.inventaire_id = ?
@@ -975,13 +976,16 @@ function LigneInventaire(p: {
 
   return (
     <View style={[sl.carte, analyse.invalide ? sl.carteEnErreur : null]}>
-      <Text style={sl.nom} numberOfLines={2}>
-        {ligne.nom}
-      </Text>
-      <Text style={sl.meta} numberOfLines={1}>
-        {(ligne.categorie ?? '').trim() === '' ? 'Sans categorie' : ligne.categorie}
-        {ligne.code_barre ? ` - ${ligne.code_barre}` : ''}
-      </Text>
+      <View style={sl.identite}>
+        <Vignette chemin={ligne.chemin_image} nom={ligne.nom} taille={52} />
+        <View style={sl.identiteTextes}>
+          <Text style={sl.nom} numberOfLines={2}>{ligne.nom}</Text>
+          <Text style={sl.meta} numberOfLines={1}>
+            {(ligne.categorie ?? '').trim() === '' ? 'Sans categorie' : ligne.categorie}
+            {ligne.code_barre ? ` - ${ligne.code_barre}` : ''}
+          </Text>
+        </View>
+      </View>
 
       <View style={sl.ligneChiffres}>
         <View style={sl.blocTheorique}>
@@ -1223,6 +1227,8 @@ const sl = StyleSheet.create({
     padding: 12,
     gap: 6,
   },
+  identite: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  identiteTextes: { flex: 1, minWidth: 0 },
   carteEnErreur: { borderColor: C.rouge, borderWidth: 1 },
   nom: { fontSize: 15, fontWeight: '700', color: C.texte },
   meta: { fontSize: 12, color: C.texteFaible },

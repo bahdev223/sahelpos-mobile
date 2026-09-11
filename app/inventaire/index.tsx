@@ -36,9 +36,13 @@ import { obtenirBase } from '../../src/db/database';
 import { useSession } from '../_layout';
 import { C, formaterFrancs, formaterQuantite, s } from '../produit/nouveau';
 import {
-  BARRE_HORIZONTALE, BandeauEtat } from '../../src/ui/components';
+  BARRE_HORIZONTALE, BandeauEtat, Vignette } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { couleurs } from '../../src/ui/theme';
+import {
+  chargerProduitsStock,
+  type ProduitStock,
+} from '../(tabs)/stock';
 
 // --------------------------------------------------------------------------
 // Regles partagees
@@ -214,19 +218,18 @@ export async function creerInventaire(utilisateurNom: string | null): Promise<nu
 // Ecran
 // --------------------------------------------------------------------------
 
-type Filtre = 'tous' | 'BROUILLON' | 'VALIDE' | 'ANNULE';
+type Filtre = 'tous' | 'nonComptes' | 'ecarts';
 
 const FILTRES: { cle: Filtre; libelle: string }[] = [
   { cle: 'tous', libelle: 'Tous' },
-  { cle: 'BROUILLON', libelle: 'En cours' },
-  { cle: 'VALIDE', libelle: 'Valides' },
-  { cle: 'ANNULE', libelle: 'Annules' },
+  { cle: 'nonComptes', libelle: 'Non comptes' },
+  { cle: 'ecarts', libelle: 'Ecarts' },
 ];
 
 type Etat =
   | { phase: 'chargement' }
   | { phase: 'erreur'; message: string }
-  | { phase: 'pret'; inventaires: LigneListeInventaire[] };
+  | { phase: 'pret'; inventaires: LigneListeInventaire[]; produits: ProduitStock[] };
 
 export default function ListeInventaires() {
   const router = useRouter();
@@ -240,8 +243,11 @@ export default function ListeInventaires() {
   const charger = useCallback(async (silencieux: boolean) => {
     if (!silencieux) setEtat({ phase: 'chargement' });
     try {
-      const inventaires = await chargerInventaires();
-      setEtat({ phase: 'pret', inventaires });
+      const [inventaires, produits] = await Promise.all([
+        chargerInventaires(),
+        chargerProduitsStock(),
+      ]);
+      setEtat({ phase: 'pret', inventaires, produits });
     } catch (erreur) {
       setEtat({ phase: 'erreur', message: messageErreur(erreur) });
     }
@@ -261,6 +267,7 @@ export default function ListeInventaires() {
   }, [charger]);
 
   const inventaires = etat.phase === 'pret' ? etat.inventaires : [];
+  const produits = etat.phase === 'pret' ? etat.produits : [];
 
   const ouvrir = useCallback(
     (identifiant: number) => {
@@ -303,31 +310,41 @@ export default function ListeInventaires() {
   }, [creer, inventaires, ouvrir]);
 
   const statistiques = useMemo(() => {
-    let enCours = 0;
-    let valides = 0;
-    let valeur = 0;
-    for (const i of inventaires) {
-      const statut = enStatut(i.statut);
-      if (statut === 'BROUILLON') enCours++;
-      if (statut === 'VALIDE') {
-        valides++;
-        valeur += i.valeur_ecarts;
-      }
-    }
-    return { total: inventaires.length, enCours, valides, valeur };
-  }, [inventaires]);
+    const enCours = inventaires.find((i) => enStatut(i.statut) === 'BROUILLON');
+    const comptes = enCours?.nb_comptes ?? 0;
+    return {
+      total: produits.length,
+      comptes,
+      restants: Math.max(0, produits.length - comptes),
+      ecarts: enCours?.nb_ecarts ?? 0,
+    };
+  }, [inventaires, produits]);
 
-  const filtres = useMemo(() => {
+  const produitsFiltres = useMemo(() => {
     const terme = recherche.trim().toLowerCase();
-    return inventaires.filter((i) => {
-      if (filtre !== 'tous' && enStatut(i.statut) !== filtre) return false;
+    return produits.filter((produit) => {
+      if (filtre === 'ecarts' && produit.quantite_base <= 0) return false;
+      if (filtre === 'nonComptes' && statistiques.comptes >= produits.length) return false;
       if (terme === '') return true;
       return (
-        i.numero.toLowerCase().includes(terme) ||
-        (i.utilisateur_nom ?? '').toLowerCase().includes(terme)
+        produit.nom.toLowerCase().includes(terme) ||
+        (produit.categorie ?? '').toLowerCase().includes(terme) ||
+        (produit.code_barre ?? '').toLowerCase().includes(terme)
       );
     });
-  }, [filtre, inventaires, recherche]);
+  }, [filtre, produits, recherche, statistiques.comptes]);
+
+  const ouvrirProduit = useCallback(
+    (_produit: ProduitStock) => {
+      const enCours = inventaires.find((i) => enStatut(i.statut) === 'BROUILLON');
+      if (enCours) {
+        ouvrir(enCours.id);
+        return;
+      }
+      void demanderCreation();
+    },
+    [demanderCreation, inventaires, ouvrir],
+  );
 
   return (
     <View style={s.plein}>
@@ -339,7 +356,7 @@ export default function ListeInventaires() {
             <Text style={s.retourTexte}>Retour</Text>
           </Pressable>
         ) : null}
-        <Text style={s.titre}>Inventaires</Text>
+        <Text style={s.titre}>Inventaire</Text>
       </View>
 
       {etat.phase === 'chargement' ? (
@@ -357,35 +374,30 @@ export default function ListeInventaires() {
         </View>
       ) : (
         <FlatList
-          data={filtres}
-          keyExtractor={(i) => String(i.id)}
-          contentContainerStyle={filtres.length === 0 ? sl.listeVide : sl.liste}
+          data={produitsFiltres}
+          keyExtractor={(produit) => String(produit.id)}
+          contentContainerStyle={produitsFiltres.length === 0 ? sl.listeVide : sl.liste}
           keyboardShouldPersistTaps="handled"
           refreshControl={
             <RefreshControl refreshing={rafraichissement} onRefresh={rafraichir} />
           }
           ListHeaderComponent={
             <View style={sl.tete}>
+              <View style={sl.intro}>
+                <View style={sl.introIcone}>
+                  <Icone nom="stock" taille={28} couleur={C.accent} />
+                </View>
+                <View style={sl.introTextes}>
+                  <Text style={sl.introTitre}>Inventaire general</Text>
+                  <Text style={sl.introAide}>
+                    Verifiez les quantites reelles pour comparer avec le stock theorique.
+                  </Text>
+                </View>
+              </View>
               <View style={sl.cartesStats}>
-                <CarteStat titre="Inventaires" valeur={String(statistiques.total)} />
-                <CarteStat
-                  titre="En cours"
-                  valeur={String(statistiques.enCours)}
-                  couleur={statistiques.enCours > 0 ? C.orange : C.texte}
-                />
-                <CarteStat titre="Valides" valeur={String(statistiques.valides)} />
-                <CarteStat
-                  titre="Ecarts cumules"
-                  valeur={formaterEcartFrancs(statistiques.valeur)}
-                  couleur={
-                    Math.abs(statistiques.valeur) < 1
-                      ? C.texte
-                      : statistiques.valeur < 0
-                        ? C.rouge
-                        : C.orange
-                  }
-                  aide="Inventaires valides"
-                />
+                <CarteStat titre="Total produits" valeur={String(statistiques.total)} couleur={C.vert} />
+                <CarteStat titre="Comptes" valeur={String(statistiques.comptes)} couleur={C.vert} />
+                <CarteStat titre="Restants" valeur={String(statistiques.restants)} couleur={C.accent} />
               </View>
 
               <View style={[s.zoneSaisie, sl.recherche]}>
@@ -393,7 +405,7 @@ export default function ListeInventaires() {
                   style={s.saisie}
                   value={recherche}
                   onChangeText={setRecherche}
-                  placeholder="Numero ou responsable"
+                  placeholder="Rechercher un produit, un code..."
                   placeholderTextColor={C.texteFaible}
                   autoCapitalize="characters"
                   autoCorrect={false}
@@ -426,12 +438,11 @@ export default function ListeInventaires() {
           }
           ListEmptyComponent={
             <View style={sl.centre}>
-              {inventaires.length === 0 ? (
+              {produits.length === 0 ? (
                 <>
-                  <Text style={sl.centreTitre}>Aucun inventaire</Text>
+                  <Text style={sl.centreTitre}>Aucun produit a compter</Text>
                   <Text style={sl.centreTexte}>
-                    Un inventaire compare le stock reel de vos produits a celui de la caisse, et
-                    corrige la difference. Ouvrez-en un quand la boutique est calme.
+                    Ajoutez d abord des produits au catalogue pour commencer un inventaire.
                   </Text>
                 </>
               ) : (
@@ -451,7 +462,7 @@ export default function ListeInventaires() {
             </View>
           }
           renderItem={({ item }) => (
-            <CarteInventaire inventaire={item} onPress={() => ouvrir(item.id)} />
+            <LigneProduitInventaire produit={item} onPress={() => ouvrirProduit(item)} />
           )}
         />
       )}
@@ -461,8 +472,9 @@ export default function ListeInventaires() {
         disabled={creation}
         onPress={demanderCreation}
         accessibilityRole="button">
+        <Icone nom="codeBarres" taille={23} couleur="#FFFFFF" />
         <Text style={sl.boutonFlottantTexte}>
-          {creation ? 'Preparation...' : 'Nouvel inventaire'}
+          {creation ? 'Preparation...' : 'Scanner un produit'}
         </Text>
       </Pressable>
     </View>
@@ -482,6 +494,24 @@ function CarteStat(p: { titre: string; valeur: string; couleur?: string; aide?: 
       </Text>
       {p.aide ? <Text style={sl.carteStatAide}>{p.aide}</Text> : null}
     </View>
+  );
+}
+
+function LigneProduitInventaire(p: { produit: ProduitStock; onPress: () => void }) {
+  return (
+    <Pressable style={sl.produitCarte} onPress={p.onPress} accessibilityRole="button">
+      <Vignette chemin={p.produit.chemin_image} nom={p.produit.nom} taille={58} />
+      <View style={sl.produitTextes}>
+        <Text style={sl.produitNom} numberOfLines={2}>{p.produit.nom}</Text>
+        <Text style={sl.produitCode} numberOfLines={1}>
+          {p.produit.code_barre || p.produit.categorie || 'Produit catalogue'}
+        </Text>
+        <View style={sl.nonCompte}>
+          <Text style={sl.nonCompteTexte}>Non compte</Text>
+        </View>
+      </View>
+      <Icone nom="chevron" taille={21} couleur={C.texte} />
+    </Pressable>
   );
 }
 
@@ -553,6 +583,26 @@ function CarteInventaire(p: { inventaire: LigneListeInventaire; onPress: () => v
 const sl = StyleSheet.create({
   tete: { gap: 10, paddingBottom: 4 },
 
+  intro: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: couleurs.primaireDouce,
+    borderRadius: 10,
+    padding: 14,
+  },
+  introIcone: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#DDEBFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  introTextes: { flex: 1, gap: 3 },
+  introTitre: { fontSize: 16, fontWeight: '700', color: C.texte },
+  introAide: { fontSize: 12, color: C.texteFaible, lineHeight: 18 },
+
   cartesStats: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   carteStat: {
     flexGrow: 1,
@@ -567,6 +617,29 @@ const sl = StyleSheet.create({
   carteStatTitre: { fontSize: 12, color: C.texteFaible },
   carteStatValeur: { fontSize: 19, fontWeight: '700', color: C.texte },
   carteStatAide: { fontSize: 11, color: C.texteFaible },
+
+  produitCarte: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: C.carte,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: C.bordure,
+    padding: 10,
+    minHeight: 82,
+  },
+  produitTextes: { flex: 1, minWidth: 0, gap: 3 },
+  produitNom: { fontSize: 15, fontWeight: '700', color: C.texte },
+  produitCode: { fontSize: 12, color: C.texteFaible },
+  nonCompte: {
+    alignSelf: 'flex-start',
+    backgroundColor: couleurs.surfaceDouce,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+  },
+  nonCompteTexte: { fontSize: 11, color: C.texteFaible, fontWeight: '600' },
 
   recherche: { backgroundColor: C.carte },
   effacer: { fontSize: 12, color: C.accent, fontWeight: '600' },

@@ -35,7 +35,7 @@ import {
   messageDe,
   type ProduitStock,
 } from '../(tabs)/stock';
-import { BandeauEtat, couleurs } from '../../src/ui/components';
+import { BandeauEtat, couleurs, Vignette } from '../../src/ui/components';
 import { seuilAlerteStock } from '../../src/domain/stock';
 import { Icone } from '../../src/ui/icones';
 
@@ -55,6 +55,7 @@ export default function Alertes() {
   const router = useRouter();
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [rafraichissement, setRafraichissement] = useState(false);
+  const [filtre, setFiltre] = useState<'bas' | 'rupture' | 'tous'>('bas');
 
   const charger = useCallback(async (silencieux: boolean) => {
     if (!silencieux) setEtat({ phase: 'chargement' });
@@ -78,7 +79,7 @@ export default function Alertes() {
 
   const produits = etat.phase === 'pret' ? etat.produits : [];
 
-  const { sections, sansSeuil, aRacheter, coutReassort } = useMemo(() => {
+  const { sections, sansSeuil, aRacheter, ruptures } = useMemo(() => {
     const ruptures: ProduitStock[] = [];
     const bas: ProduitStock[] = [];
     let nbSansSeuil = 0;
@@ -119,18 +120,29 @@ export default function Alertes() {
       sansSeuil: nbSansSeuil,
       aRacheter: ruptures.length + bas.length,
       coutReassort: cout,
+      ruptures,
+      bas,
     };
   }, [produits]);
+
+  const sectionsAffichees = filtre === 'rupture'
+    ? sections.filter((section) => section.titre.startsWith('Rupture'))
+    : filtre === 'bas'
+      ? sections.filter((section) => section.titre.startsWith('Stock bas'))
+      : sections;
 
   return (
     <View style={s.plein}>
       <BandeauEtat />
-      <View style={s.entete}>
+      <View style={sl.entete}>
         <Pressable onPress={() => router.back()} style={s.retour}>
           <Icone nom="retour" taille={17} couleur={couleurs.primaire} />
-          <Text style={s.retourTexte}>Retour</Text>
         </Pressable>
         <Text style={s.titre}>Alertes de stock</Text>
+        <View style={sl.cloche}>
+          <Icone nom="alerte" taille={21} couleur={C.rouge} />
+          <Text style={sl.clocheNombre}>{aRacheter}</Text>
+        </View>
       </View>
 
       {etat.phase === 'chargement' ? (
@@ -148,23 +160,37 @@ export default function Alertes() {
         </View>
       ) : (
         <SectionList
-          sections={sections}
+          sections={sectionsAffichees}
           keyExtractor={(produit) => String(produit.id)}
-          contentContainerStyle={sections.length === 0 ? sl.listeVide : sl.liste}
+          contentContainerStyle={sectionsAffichees.length === 0 ? sl.listeVide : sl.liste}
           stickySectionHeadersEnabled={false}
           refreshControl={
             <RefreshControl refreshing={rafraichissement} onRefresh={rafraichir} />
           }
           ListHeaderComponent={
-            sections.length > 0 ? (
-              <View style={sl.resume}>
-                <Text style={sl.resumeTitre}>
-                  {aRacheter} produit(s) a racheter
-                </Text>
-                <Text style={sl.resumeAide}>
-                  Environ {formaterFrancs(coutReassort)} pour revenir au-dessus des seuils, au
-                  prix d&apos;achat connu.
-                </Text>
+            sectionsAffichees.length > 0 ? (
+              <View>
+                <View style={sl.filtres}>
+                  <Pressable style={[sl.filtre, filtre === 'bas' ? sl.filtreActif : null]} onPress={() => setFiltre('bas')}>
+                    <Text style={[sl.filtreTexte, filtre === 'bas' ? sl.filtreTexteActif : null]}>Stock tres bas</Text>
+                    <Text style={[sl.filtreBadge, filtre === 'bas' ? sl.filtreBadgeActif : null]}>{aRacheter}</Text>
+                  </Pressable>
+                  <Pressable style={[sl.filtre, filtre === 'rupture' ? sl.filtreActifRouge : null]} onPress={() => setFiltre('rupture')}>
+                    <Text style={[sl.filtreTexte, filtre === 'rupture' ? sl.filtreTexteRouge : null]}>Rupture</Text>
+                    <Text style={sl.filtreBadgeRouge}>{ruptures.length}</Text>
+                  </Pressable>
+                  <Pressable style={[sl.filtre, filtre === 'tous' ? sl.filtreActif : null]} onPress={() => setFiltre('tous')}>
+                    <Text style={[sl.filtreTexte, filtre === 'tous' ? sl.filtreTexteActif : null]}>Tous</Text>
+                    <Text style={sl.filtreBadge}>{aRacheter}</Text>
+                  </Pressable>
+                </View>
+                <View style={sl.resume}>
+                  <View style={sl.resumeIcone}><Icone nom="alerte" taille={26} couleur={C.rouge} /></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={sl.resumeTitre}>Produits a surveiller</Text>
+                    <Text style={sl.resumeAide}>Ces produits sont en dessous du seuil d&apos;alerte.</Text>
+                  </View>
+                </View>
               </View>
             ) : null
           }
@@ -205,12 +231,7 @@ export default function Alertes() {
           renderItem={({ item }) => (
             <LigneAlerte
               produit={item}
-              onEntree={() =>
-                router.push({
-                  pathname: '/stock/ajustement',
-                  params: { produit: String(item.id), nature: 'ENTREE' },
-                })
-              }
+              onCommande={() => router.push('/stock/commande')}
               onJournal={() =>
                 router.push({
                   pathname: '/stock/mouvements',
@@ -227,7 +248,7 @@ export default function Alertes() {
 
 function LigneAlerte(p: {
   produit: ProduitStock;
-  onEntree: () => void;
+  onCommande: () => void;
   onJournal: () => void;
 }) {
   const rupture = p.produit.quantite_base <= 0;
@@ -237,6 +258,7 @@ function LigneAlerte(p: {
   return (
     <View style={sl.carte}>
       <View style={sl.carteHaut}>
+        <Vignette chemin={p.produit.chemin_image} nom={p.produit.nom} taille={72} />
         <View style={sl.carteTextes}>
           <Text style={sl.nom} numberOfLines={2}>
             {p.produit.nom}
@@ -255,14 +277,8 @@ function LigneAlerte(p: {
         </View>
 
         <View style={sl.carteChiffres}>
-          <Text style={[sl.stock, { color: rupture ? C.rouge : C.orange }]}>
-            {rupture
-              ? 'Rupture'
-              : `${formaterQuantite(p.produit.quantite_base)} ${p.produit.unite_base}`}
-          </Text>
-          <Text style={sl.seuil}>
-            Seuil {formaterQuantite(seuil)} {p.produit.unite_base}
-          </Text>
+          <Text style={[sl.stock, { color: rupture ? C.rouge : C.orange }]}>Stock : {rupture ? '0' : formaterQuantite(p.produit.quantite_base)}</Text>
+          <Text style={sl.seuil}>Seuil : {formaterQuantite(seuil)}</Text>
         </View>
       </View>
 
@@ -270,8 +286,9 @@ function LigneAlerte(p: {
         <Pressable style={sl.lien} onPress={p.onJournal} hitSlop={6}>
           <Text style={sl.lienTexte}>Journal</Text>
         </Pressable>
-        <Pressable style={sl.boutonEntree} onPress={p.onEntree}>
-          <Text style={sl.boutonEntreeTexte}>Entree de stock</Text>
+        <Pressable style={sl.boutonEntree} onPress={p.onCommande}>
+          <Icone nom="plus" taille={17} couleur="#FFFFFF" />
+          <Text style={sl.boutonEntreeTexte}>Ajouter a la commande</Text>
         </Pressable>
       </View>
     </View>
@@ -279,20 +296,85 @@ function LigneAlerte(p: {
 }
 
 const sl = StyleSheet.create({
+  entete: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: C.carte,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.bordure,
+  },
+  cloche: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.rouge,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clocheNombre: {
+    position: 'absolute',
+    right: -5,
+    top: -8,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    backgroundColor: C.rouge,
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
   liste: { padding: 12, paddingBottom: 32, gap: 8 },
   listeVide: { flexGrow: 1, padding: 12 },
 
   resume: {
-    backgroundColor: couleurs.avertissementDouce,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: couleurs.dangerDouce,
     borderWidth: 1,
-    borderColor: couleurs.avertissementBordure,
+    borderColor: couleurs.dangerBordure,
     borderRadius: 10,
     padding: 12,
-    gap: 3,
+    gap: 10,
     marginBottom: 4,
   },
-  resumeTitre: { fontSize: 15, fontWeight: '700', color: couleurs.avertissementFonce },
-  resumeAide: { fontSize: 12, color: couleurs.avertissementFonce, lineHeight: 17 },
+  resumeIcone: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  resumeTitre: { fontSize: 15, fontWeight: '700', color: C.rouge },
+  resumeAide: { fontSize: 12, color: C.texteFaible, lineHeight: 17 },
+
+  filtres: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  filtre: {
+    flex: 1,
+    minHeight: 46,
+    borderRadius: 10,
+    backgroundColor: couleurs.surfaceDouce,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: 5,
+  },
+  filtreActif: { backgroundColor: C.rouge },
+  filtreActifRouge: { backgroundColor: couleurs.dangerDouce, borderWidth: 1, borderColor: C.rouge },
+  filtreTexte: { color: C.texte, fontSize: 11, fontWeight: '700' },
+  filtreTexteActif: { color: '#FFFFFF' },
+  filtreTexteRouge: { color: C.rouge },
+  filtreBadge: { color: C.texteFaible, fontSize: 11, fontWeight: '800' },
+  filtreBadgeActif: { color: '#FFFFFF' },
+  filtreBadgeRouge: { color: C.rouge, fontSize: 11, fontWeight: '800' },
 
   sectionEntete: { paddingTop: 12, paddingBottom: 4, gap: 2 },
   sectionTitre: { fontSize: 14, fontWeight: '700' },
@@ -325,6 +407,8 @@ const sl = StyleSheet.create({
   lienTexte: { fontSize: 13, color: C.accent, fontWeight: '600' },
   boutonEntree: {
     flex: 1,
+    flexDirection: 'row',
+    gap: 6,
     backgroundColor: C.accent,
     borderRadius: 8,
     paddingVertical: 11,
