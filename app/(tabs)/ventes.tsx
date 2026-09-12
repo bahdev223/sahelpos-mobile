@@ -5,9 +5,9 @@
  * question qu'un commercant se pose vingt fois par jour est "combien j'ai fait
  * aujourd'hui", pas "qu'ai-je vendu le mois dernier".
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  FlatList,
+  SectionList,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -36,25 +36,10 @@ import {
 } from '../../src/db/repositories/vente';
 import type { StatutVente } from '../../src/domain/types';
 import { useSession } from '../_layout';
+import { calculerPeriode, cleGroupe, libelleGroupe, type ModePeriode } from '../../src/domain/periodes';
+import { SelecteurPeriode } from '../../src/ui/SelecteurPeriode';
 
-type Periode = 'jour' | 'semaine' | 'mois';
-
-const PERIODES: Array<{ cle: Periode; libelle: string }> = [
-  { cle: 'jour', libelle: "Aujourd'hui" },
-  { cle: 'semaine', libelle: '7 jours' },
-  { cle: 'mois', libelle: '30 jours' },
-];
-
-/** Bornes ISO de la periode, du premier instant au dernier. */
-function bornes(periode: Periode): { debut: string; fin: string } {
-  const fin = new Date();
-  fin.setHours(23, 59, 59, 999);
-  const debut = new Date();
-  debut.setHours(0, 0, 0, 0);
-  if (periode === 'semaine') debut.setDate(debut.getDate() - 6);
-  if (periode === 'mois') debut.setDate(debut.getDate() - 29);
-  return { debut: debut.toISOString(), fin: fin.toISOString() };
-}
+const TAILLE_PAGE = 100;
 
 const LIBELLE_STATUT: Record<StatutVente, string> = {
   payee: 'Payee',
@@ -79,36 +64,79 @@ function heure(iso: string): string {
 
 export default function EcranVentes() {
   const router = useRouter();
-  const { synchroniserMaintenant } = useSession();
-  const [periode, setPeriode] = useState<Periode>('jour');
+  const { synchroniserMaintenant, revisionSynchronisation, utilisateur, boutique } = useSession();
+  const utilisateurId = utilisateur?.role === 'vendeur' ? utilisateur.id : undefined;
+  const [periode, setPeriode] = useState<ModePeriode>('jour');
+  const [decalage, setDecalage] = useState(0);
+  const plage = calculerPeriode(periode, decalage);
+  const { debut, fin } = plage;
+  const cle = [debut, fin, utilisateurId ?? 'tous'].join('/');
+  const periodeActive = useRef(cle);
+  periodeActive.current = cle;
   const [ventes, setVentes] = useState<VenteResume[]>([]);
   const [totaux, setTotaux] = useState<TotauxPeriode | null>(null);
   const [chargement, setChargement] = useState(true);
   const [rafraichit, setRafraichit] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  const [suite, setSuite] = useState(false);
+  const [chargeSuite, setChargeSuite] = useState(false);
+  const lecture = useRef(0);
+  const pagination = useRef(false);
 
   const charger = useCallback(async () => {
+    if (periodeActive.current !== cle) return;
+    const requete = ++lecture.current;
+    pagination.current = false;
+    setChargeSuite(false);
     setErreur(null);
     try {
-      const { debut, fin } = bornes(periode);
       const [liste, t] = await Promise.all([
-        listerVentes({ debut, fin, limite: 300 }),
-        totauxPeriode(debut, fin),
+        listerVentes({ debut, fin, limite: TAILLE_PAGE + 1, utilisateurId }),
+        totauxPeriode(debut, fin, utilisateurId),
       ]);
-      setVentes(liste);
+      if (requete !== lecture.current) return;
+      setVentes(liste.slice(0, TAILLE_PAGE));
+      setSuite(liste.length > TAILLE_PAGE);
       setTotaux(t);
     } catch (e) {
-      setErreur(e instanceof Error ? e.message : 'Lecture des ventes impossible.');
+      if (requete === lecture.current) setErreur(e instanceof Error ? e.message : 'Lecture des ventes impossible.');
     } finally {
-      setChargement(false);
-      setRafraichit(false);
+      if (requete === lecture.current) setChargement(false);
     }
-  }, [periode]);
+  }, [debut, fin, utilisateurId, cle]);
+
+  const chargerSuite = useCallback(async () => {
+    if (!suite || chargement || rafraichit || pagination.current || !ventes.length) return;
+    const requete = lecture.current;
+    pagination.current = true;
+    setChargeSuite(true);
+    try {
+      const liste = await listerVentes({ debut, fin, utilisateurId, limite: TAILLE_PAGE + 1, avant: ventes[ventes.length - 1] });
+      if (requete !== lecture.current) return;
+      setVentes((actuelles) => [...actuelles, ...liste.slice(0, TAILLE_PAGE)]);
+      setSuite(liste.length > TAILLE_PAGE);
+    } catch {
+      // La page deja chargee reste consultable; le bouton permet de reessayer.
+    } finally {
+      if (requete === lecture.current) { pagination.current = false; setChargeSuite(false); }
+    }
+  }, [suite, chargement, rafraichit, ventes, debut, fin, utilisateurId]);
+
+  const sections = useMemo(() => {
+    const groupes = new Map<string, VenteResume[]>();
+    for (const vente of ventes) {
+      const cle = cleGroupe(new Date(vente.dateVente), periode === 'annee');
+      const groupe = groupes.get(cle);
+      if (groupe) groupe.push(vente);
+      else groupes.set(cle, [vente]);
+    }
+    return [...groupes].map(([cle, data]) => ({ titre: libelleGroupe(cle), data }));
+  }, [ventes, periode]);
 
   const rafraichir = useCallback(async () => {
     setRafraichit(true);
     try {
-      await synchroniserMaintenant();
+      try { await synchroniserMaintenant(); } catch { /* Consultation locale disponible hors ligne. */ }
       await charger();
     } finally {
       setRafraichit(false);
@@ -118,8 +146,9 @@ export default function EcranVentes() {
   useFocusEffect(
     useCallback(() => {
       setChargement(true);
-      charger();
-    }, [charger]),
+      void charger();
+      return () => { lecture.current += 1; };
+    }, [charger, revisionSynchronisation]),
   );
 
   if (chargement) return <Chargement message="Lecture des ventes..." />;
@@ -133,22 +162,7 @@ export default function EcranVentes() {
 
   return (
     <SafeAreaView style={styles.page} edges={['top']}>
-      <View style={styles.onglets}>
-        {PERIODES.map((p) => {
-          const actif = p.cle === periode;
-          return (
-            <Pressable
-              key={p.cle}
-              onPress={() => setPeriode(p.cle)}
-              style={[styles.onglet, actif && styles.ongletActif]}
-            >
-              <Text style={[styles.ongletTexte, actif && styles.ongletTexteActif]}>
-                {p.libelle}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <SelecteurPeriode mode={periode} decalage={decalage} libelle={plage.libelle} onMode={(mode) => { setPeriode(mode); setDecalage(0); }} onDecalage={setDecalage} />
 
       {totaux ? (
         <Carte style={styles.resume}>
@@ -162,7 +176,7 @@ export default function EcranVentes() {
                 {totaux.nbVentes} vente{totaux.nbVentes > 1 ? 's' : ''}
               </Text>
               <Text style={styles.benefice}>
-                Benefice {formaterMontant(totaux.benefice)}
+                Benefice {formaterMontant(totaux.benefice, boutique.devise)}
               </Text>
             </View>
           </View>
@@ -179,8 +193,13 @@ export default function EcranVentes() {
         </Carte>
       ) : null}
 
-      <FlatList
-        data={ventes}
+      <SectionList
+        sections={sections}
+        stickySectionHeadersEnabled={false}
+        renderSectionHeader={({ section }) => <Text style={styles.groupe}>{section.titre}</Text>}
+        onEndReached={() => void chargerSuite()}
+        onEndReachedThreshold={0.4}
+        ListFooterComponent={suite ? <Pressable style={styles.suite} disabled={chargeSuite} onPress={() => void chargerSuite()}><Text style={styles.benefice}>{chargeSuite ? 'Chargement...' : 'Charger la suite'}</Text></Pressable> : null}
         keyExtractor={(v) => String(v.id)}
         contentContainerStyle={ventes.length === 0 ? styles.videConteneur : styles.liste}
         refreshControl={
@@ -193,7 +212,7 @@ export default function EcranVentes() {
           <ListeVide
             titre="Aucune vente"
             message={
-              periode === 'jour'
+              periode === 'jour' && decalage === 0
                 ? "Aucune vente enregistree aujourd'hui."
                 : 'Aucune vente sur cette periode.'
             }
@@ -225,6 +244,8 @@ export default function EcranVentes() {
 }
 
 const styles = StyleSheet.create({
+  groupe: { fontSize: 13, fontWeight: '700', color: couleurs.texteFaible, paddingVertical: 10 },
+  suite: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   page: { flex: 1, backgroundColor: couleurs.fond },
   onglets: {
     flexDirection: 'row',
@@ -247,7 +268,7 @@ const styles = StyleSheet.create({
   ongletTexteActif: { color: couleurs.texteInverse },
 
   resume: { margin: espaces.l, marginBottom: espaces.s },
-  resumeHaut: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  resumeHaut: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'space-between', alignItems: 'flex-start' },
   resumeDroite: { alignItems: 'flex-end' },
   resumeLibelle: { fontSize: 12, color: couleurs.texteFaible, marginBottom: 2 },
   benefice: { fontSize: 14, fontWeight: '600', color: couleurs.primaire, marginTop: 4 },

@@ -1,347 +1,118 @@
-/**
- * Tableau de bord.
- *
- * Il repond a trois questions, dans cet ordre : combien j'ai encaisse, combien
- * j'ai gagne, et qu'est-ce qui va me manquer demain. Tout le reste est du
- * detail qui a sa place dans les autres ecrans.
- */
-import { useCallback, useState } from 'react';
-import {
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
-
-import {
-  Carte,
-  Chargement,
-  Montant,
-  couleurs,
-  espaces,
-  formaterMontant,
-  formaterQuantite,
-  rayons,
-} from '../src/ui/components';
-import {
-  meilleuresVentes,
-  totauxPeriode,
-  type ProduitVendu,
-  type TotauxPeriode,
-} from '../src/db/repositories/vente';
+import { useSession } from './_layout';
+import { Carte, Chargement, couleurs, formaterMontant, formaterQuantite } from '../src/ui/components';
+import { SelecteurPeriode } from '../src/ui/SelecteurPeriode';
+import { calculerPeriode, type ModePeriode } from '../src/domain/periodes';
+import { meilleuresVentes, regrouperVentes, totauxPeriode, type GroupeVentes, type ProduitVendu, type TotauxPeriode } from '../src/db/repositories/vente';
 import { listerAlertesStock } from '../src/db/repositories/produit';
 import { valeurStock, type ValeurStock } from '../src/db/repositories/stock';
-import type { Produit } from '../src/domain/types';
 
-function bornesJour(): { debut: string; fin: string } {
-  const debut = new Date();
-  debut.setHours(0, 0, 0, 0);
-  const fin = new Date();
-  fin.setHours(23, 59, 59, 999);
-  return { debut: debut.toISOString(), fin: fin.toISOString() };
-}
-
-function bornesMois(): { debut: string; fin: string } {
-  const debut = new Date();
-  debut.setDate(1);
-  debut.setHours(0, 0, 0, 0);
-  const fin = new Date();
-  fin.setHours(23, 59, 59, 999);
-  return { debut: debut.toISOString(), fin: fin.toISOString() };
+interface Rapport {
+  cle: string;
+  totaux: TotauxPeriode;
+  groupes: GroupeVentes[];
+  meilleurs: ProduitVendu[];
+  nbAlertes: number;
+  stock: ValeurStock;
 }
 
 export default function EcranTableauDeBord() {
   const router = useRouter();
-  const [jour, setJour] = useState<TotauxPeriode | null>(null);
-  const [mois, setMois] = useState<TotauxPeriode | null>(null);
-  const [meilleurs, setMeilleurs] = useState<ProduitVendu[]>([]);
-  const [alertes, setAlertes] = useState<Produit[]>([]);
-  const [stock, setStock] = useState<ValeurStock | null>(null);
-  const [chargement, setChargement] = useState(true);
+  const { utilisateur, boutique, synchroniserMaintenant, revisionSynchronisation } = useSession();
+  const utilisateurId = utilisateur?.role === 'vendeur' ? utilisateur.id : undefined;
+  const [mode, setMode] = useState<ModePeriode>('mois');
+  const [decalage, setDecalage] = useState(0);
+  const plage = calculerPeriode(mode, decalage);
+  const { debut, fin, mensuel } = plage;
+  const cle = [debut, fin, utilisateurId ?? 'tous'].join('/');
+  const periodeActive = useRef(cle);
+  periodeActive.current = cle;
+  const [rapport, setRapport] = useState<Rapport | null>(null);
   const [rafraichit, setRafraichit] = useState(false);
+  const [lectureEnCours, setLectureEnCours] = useState(true);
+  const lecture = useRef(0);
 
   const charger = useCallback(async () => {
+    if (periodeActive.current !== cle) return;
+    const requete = ++lecture.current;
+    setLectureEnCours(true);
     try {
-      const j = bornesJour();
-      const m = bornesMois();
-      const [tJour, tMois, tops, alertesStock, valeur] = await Promise.all([
-        totauxPeriode(j.debut, j.fin),
-        totauxPeriode(m.debut, m.fin),
-        meilleuresVentes(m.debut, m.fin, 5),
-        listerAlertesStock(),
-        valeurStock(),
+      const [totaux, groupes, meilleurs, alertes, stock] = await Promise.all([
+        totauxPeriode(debut, fin, utilisateurId),
+        regrouperVentes(debut, fin, mensuel, utilisateurId),
+        meilleuresVentes(debut, fin, 5, utilisateurId),
+        listerAlertesStock(), valeurStock(),
       ]);
-      setJour(tJour);
-      setMois(tMois);
-      setMeilleurs(tops);
-      setAlertes(alertesStock);
-      setStock(valeur);
+      if (requete === lecture.current) setRapport({ cle, totaux, groupes, meilleurs, nbAlertes: alertes.length, stock });
     } catch {
-      // Une lecture ponctuelle ne remet jamais les chiffres a zero et ne
-      // remplace jamais le tableau par un ecran d'erreur. Les valeurs deja
-      // lues restent intactes; le handle SQLite resilient rejoue la requete.
+      // Une lecture echouee conserve le dernier rapport de la meme periode.
     } finally {
-      setChargement(false);
-      setRafraichit(false);
+      if (requete === lecture.current) setLectureEnCours(false);
     }
-  }, []);
+  }, [debut, fin, mensuel, utilisateurId, cle]);
 
-  useFocusEffect(
-    useCallback(() => {
-      // Les chiffres deja affiches restent a l'ecran pendant une relecture.
-      // Une requete SQLite transitoirement indisponible ne doit jamais vider
-      // le tableau de bord ni faire apparaitre des montants a zero.
-      if (!jour || !mois || !stock) setChargement(true);
-      void charger();
-    }, [charger, jour, mois, stock]),
-  );
+  useFocusEffect(useCallback(() => {
+    void charger();
+    return () => { lecture.current += 1; };
+  }, [charger, revisionSynchronisation]));
 
-  if (chargement || !jour || !mois || !stock) {
-    return <Chargement message="Calcul des chiffres..." />;
-  }
+  const rafraichir = useCallback(async () => {
+    setRafraichit(true);
+    try {
+      try { await synchroniserMaintenant(); } catch { /* Lecture hors ligne. */ }
+      await charger();
+    } finally { setRafraichit(false); }
+  }, [charger, synchroniserMaintenant]);
 
-  return (
-    <SafeAreaView style={styles.page} edges={['bottom']}>
-      <Stack.Screen options={{ headerShown: true, title: 'Tableau de bord' }} />
-      <ScrollView
-        contentContainerStyle={styles.contenu}
-        refreshControl={
-          <RefreshControl
-            refreshing={rafraichit}
-            onRefresh={() => {
-              setRafraichit(true);
-              charger();
-            }}
-          />
-        }
-      >
-        <View style={styles.grilleChiffres}>
-          <MiniCarte
-            libelle="CA aujourd'hui"
-            valeur={formaterMontant(jour?.chiffreAffaires ?? 0)}
-            detail={`${jour?.nbVentes ?? 0} vente${(jour?.nbVentes ?? 0) > 1 ? 's' : ''}`}
-          />
-          <MiniCarte
-            libelle="Benefice"
-            valeur={formaterMontant(jour?.benefice ?? 0)}
-            couleur={couleurs.primaire}
-            detail="aujourd'hui"
-          />
-          <MiniCarte
-            libelle="Encaisse"
-            valeur={formaterMontant(jour?.encaisse ?? 0)}
-            detail="aujourd'hui"
-          />
-          <MiniCarte
-            libelle="CA mois"
-            valeur={formaterMontant(mois?.chiffreAffaires ?? 0)}
-            detail={`${mois?.nbVentes ?? 0} vente${(mois?.nbVentes ?? 0) > 1 ? 's' : ''}`}
-          />
-          <MiniCarte
-            libelle="Benefice mois"
-            valeur={formaterMontant(mois?.benefice ?? 0)}
-            couleur={couleurs.primaire}
-            detail="depuis le 1er"
-          />
-          <MiniCarte
-            libelle="Stock a surveiller"
-            valeur={String(alertes.length)}
-            couleur={alertes.length > 0 ? couleurs.danger : couleurs.primaire}
-            detail={alertes.length > 0 ? 'a reapprovisionner' : 'stock calme'}
-          />
+  const actif = rapport?.cle === cle ? rapport : null;
+  const montant = (n: number) => formaterMontant(n, boutique.devise);
+  return <SafeAreaView style={s.page} edges={['bottom']}>
+    <Stack.Screen options={{ headerShown: true, title: 'Tableau de bord' }} />
+    <SelecteurPeriode mode={mode} decalage={decalage} libelle={plage.libelle} onMode={(valeur) => { setMode(valeur); setDecalage(0); }} onDecalage={setDecalage} />
+    {!actif ? lectureEnCours ? <Chargement message="Calcul des chiffres..." /> : <Pressable style={s.reessayer} onPress={() => void charger()}><Text style={s.lien}>Réessayer</Text></Pressable> :
+      <ScrollView contentContainerStyle={s.contenu} refreshControl={<RefreshControl refreshing={rafraichit} onRefresh={rafraichir} />}>
+        <View style={s.grille}>
+          <MiniCarte libelle="Chiffre d'affaires" valeur={montant(actif.totaux.chiffreAffaires)} detail={String(actif.totaux.nbVentes) + ' ventes'} />
+          <MiniCarte libelle="Bénéfice" valeur={montant(actif.totaux.benefice)} detail="Sur la période" vert />
+          <MiniCarte libelle="Encaissé" valeur={montant(actif.totaux.encaisse)} detail="Sur la période" />
+          <MiniCarte libelle="Panier moyen" valeur={montant(actif.totaux.nbVentes ? Math.round(actif.totaux.chiffreAffaires / actif.totaux.nbVentes) : 0)} detail="Hors annulations" />
         </View>
-
-        {/* Ce qui est du a la boutique : un credit oublie est de l'argent
-            perdu, il doit rester sous les yeux. */}
-        {(mois?.resteDu ?? 0) > 0 ? (
-          <Pressable onPress={() => router.push('/clients')}>
-            <Carte>
-              <Text style={styles.creanceLibelle}>Ardoises des clients</Text>
-              <Montant valeur={mois?.resteDu ?? 0} taille="moyen" couleur={couleurs.danger} />
-              <Text style={styles.lien}>Voir les clients</Text>
-            </Carte>
-          </Pressable>
-        ) : null}
-
-        <Pressable onPress={() => router.push('/stock/alertes')}>
-          <Carte titre="Stock">
-            <View style={styles.stockLigne}>
-              <Text style={styles.stockLibelle}>Valeur en rayon (prix d'achat)</Text>
-              <Text style={styles.stockValeur}>
-                {formaterMontant(stock?.valeurAchat ?? 0)}
-              </Text>
-            </View>
-            <View style={styles.stockLigne}>
-              <Text style={styles.stockLibelle}>Produits suivis</Text>
-              <Text style={styles.stockValeur}>{stock?.nbProduits ?? 0}</Text>
-            </View>
-            <View
-              style={[
-                styles.alerteBloc,
-                alertes.length === 0 && styles.alerteBlocCalme,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.alerteTexte,
-                  alertes.length === 0 && styles.alerteTexteCalme,
-                ]}
-              >
-                {alertes.length === 0
-                  ? 'Aucun produit sous le seuil minimum'
-                  : `${alertes.length} produit${alertes.length > 1 ? 's' : ''} a reapprovisionner`}
-              </Text>
-            </View>
-          </Carte>
-        </Pressable>
-
-        <Carte titre="Meilleures ventes du mois">
-          {meilleurs.length === 0 ? (
-            <Text style={styles.vide}>Aucune vente ce mois-ci.</Text>
-          ) : (
-            meilleurs.map((p, rang) => (
-              <View key={p.produitId} style={styles.topLigne}>
-                <Text style={styles.topRang}>{rang + 1}</Text>
-                <View style={styles.topMilieu}>
-                  <Text style={styles.topNom} numberOfLines={1}>
-                    {p.libelle}
-                  </Text>
-                  <Text style={styles.topQuantite}>
-                    {formaterQuantite(p.quantite)} vendu(s)
-                  </Text>
-                </View>
-                <View style={styles.topDroite}>
-                  <Text style={styles.topTotal}>{formaterMontant(p.total)}</Text>
-                  <Text style={styles.topBenefice}>
-                    +{formaterMontant(p.benefice)}
-                  </Text>
-                </View>
-              </View>
-            ))
-          )}
+        {actif.totaux.resteDu > 0 && <Pressable onPress={() => router.push('/clients')}><Carte><Text style={s.libelle}>Créances de la période</Text><Text style={s.valeur}>{montant(actif.totaux.resteDu)}</Text><Text style={s.lien}>Voir les clients</Text></Carte></Pressable>}
+        <Carte titre={mensuel ? 'Ventes par mois' : 'Ventes par jour'}>
+          {plage.groupes.map((g) => {
+            const total = actif.groupes.find((ligne) => ligne.cle === g.cle);
+            return <View style={s.ligne} key={g.cle}>
+              <View style={s.milieu}><Text style={s.nom}>{g.libelle}</Text><Text style={s.detail}>{total?.nbVentes ?? 0} ventes</Text></View>
+              <View style={s.droite}><Text style={s.total}>{montant(total?.chiffreAffaires ?? 0)}</Text><Text style={s.detail}>Bénéfice {montant(total?.benefice ?? 0)}</Text></View>
+            </View>;
+          })}
         </Carte>
-      </ScrollView>
-    </SafeAreaView>
-  );
+        <Carte titre="Meilleures ventes de la période">
+          {actif.meilleurs.length === 0 ? <Text style={s.detail}>Aucune vente sur cette période.</Text> : actif.meilleurs.map((p, i) => <View key={String(p.produitId) + p.libelle} style={s.ligne}>
+            <Text style={s.rang}>{i + 1}</Text><View style={s.milieu}><Text style={s.nom}>{p.libelle}</Text><Text style={s.detail}>{formaterQuantite(p.quantite)} vendu(s)</Text></View><Text style={s.total}>{montant(p.total)}</Text>
+          </View>)}
+        </Carte>
+        <Pressable onPress={() => router.push('/stock/alertes')}><Carte titre="Stock actuel">
+          <View style={s.ligne}><Text style={s.milieu}>Valeur au prix d'achat</Text><Text style={s.total}>{montant(actif.stock.valeurAchat)}</Text></View>
+          <Text style={s.detail}>{actif.stock.nbProduits} produits suivis</Text>
+          <Text style={s.lien}>{actif.nbAlertes} produits à surveiller</Text>
+        </Carte></Pressable>
+      </ScrollView>}
+  </SafeAreaView>;
 }
 
-function MiniCarte({
-  libelle,
-  valeur,
-  detail,
-  couleur,
-}: {
-  libelle: string;
-  valeur: string;
-  detail: string;
-  couleur?: string;
-}) {
-  return (
-    <Carte style={styles.miniCarte}>
-      <Text style={styles.miniLibelle} numberOfLines={1}>
-        {libelle}
-      </Text>
-      <Text
-        style={[styles.miniValeur, couleur ? { color: couleur } : null]}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-      >
-        {valeur}
-      </Text>
-      <Text style={styles.miniDetail} numberOfLines={1}>
-        {detail}
-      </Text>
-    </Carte>
-  );
+function MiniCarte({ libelle, valeur, detail, vert }: { libelle: string; valeur: string; detail: string; vert?: boolean }) {
+  return <Carte style={s.mini}><Text style={s.libelle}>{libelle}</Text><Text style={[s.valeur, vert && { color: couleurs.succesFonce }]} numberOfLines={1} adjustsFontSizeToFit>{valeur}</Text><Text style={s.detail}>{detail}</Text></Carte>;
 }
-
-const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: couleurs.fond },
-  contenu: { padding: espaces.m, paddingBottom: espaces.xxl, gap: espaces.m },
-
-  grilleChiffres: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: espaces.s,
-  },
-  miniCarte: {
-    width: '31.5%',
-    minWidth: 104,
-    flexGrow: 1,
-    padding: espaces.m,
-  },
-  miniLibelle: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: couleurs.texteFaible,
-    textTransform: 'uppercase',
-  },
-  miniValeur: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: couleurs.texte,
-    marginTop: 4,
-  },
-  miniDetail: { fontSize: 11, color: couleurs.texteFaible, marginTop: 2 },
-
-  sousChiffres: {
-    flexDirection: 'row',
-    marginTop: espaces.m,
-    paddingTop: espaces.m,
-    borderTopWidth: 1,
-    borderTopColor: couleurs.bordure,
-  },
-  bloc: { flex: 1 },
-  blocLibelle: { fontSize: 11, color: couleurs.texteFaible },
-  blocValeur: { fontSize: 15, fontWeight: '700', color: couleurs.texte, marginTop: 2 },
-
-  moisLigne: { flexDirection: 'row', justifyContent: 'space-between' },
-  moisDroite: { alignItems: 'flex-end' },
-  moisLibelle: { fontSize: 12, color: couleurs.texteFaible, marginBottom: 2 },
-  moisDetail: { fontSize: 12, color: couleurs.texteFaible, marginTop: espaces.s },
-
-  creanceLibelle: { fontSize: 13, color: couleurs.texteFaible, marginBottom: 4 },
-  lien: { fontSize: 13, color: couleurs.primaire, fontWeight: '600', marginTop: espaces.s },
-
-  stockLigne: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 4,
-  },
-  stockLibelle: { fontSize: 13, color: couleurs.texteFaible },
-  stockValeur: { fontSize: 14, fontWeight: '600', color: couleurs.texte },
-  alerteBloc: {
-    marginTop: espaces.m,
-    padding: espaces.m,
-    borderRadius: rayons.s,
-    backgroundColor: couleurs.avertissementDouce,
-  },
-  alerteBlocCalme: { backgroundColor: couleurs.primaireDouce },
-  alerteTexte: { fontSize: 13, fontWeight: '600', color: couleurs.avertissement },
-  alerteTexteCalme: { color: couleurs.primaire },
-
-  vide: { fontSize: 14, color: couleurs.texteFaible, paddingVertical: espaces.s },
-  topLigne: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: espaces.s,
-    borderBottomWidth: 1,
-    borderBottomColor: couleurs.bordure,
-  },
-  topRang: {
-    width: 24,
-    fontSize: 14,
-    fontWeight: '700',
-    color: couleurs.texteFaible,
-  },
-  topMilieu: { flex: 1, marginRight: espaces.s },
-  topNom: { fontSize: 14, color: couleurs.texte },
-  topQuantite: { fontSize: 12, color: couleurs.texteFaible, marginTop: 2 },
-  topDroite: { alignItems: 'flex-end' },
-  topTotal: { fontSize: 14, fontWeight: '600', color: couleurs.texte },
-  topBenefice: { fontSize: 12, color: couleurs.primaire, marginTop: 2 },
+const s = StyleSheet.create({
+  page: { flex: 1, backgroundColor: couleurs.fond }, contenu: { padding: 12, paddingBottom: 32, gap: 12 },
+  grille: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, mini: { width: '47%', flexGrow: 1, minWidth: 0, padding: 12 },
+  libelle: { fontSize: 12, color: couleurs.texteFaible }, valeur: { fontSize: 19, fontWeight: '800', color: couleurs.texte, marginVertical: 5 },
+  detail: { fontSize: 11, color: couleurs.texteFaible, marginTop: 3 }, lien: { fontSize: 13, fontWeight: '600', color: couleurs.primaire, marginTop: 8 },
+  ligne: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: couleurs.bordure },
+  milieu: { flex: 1, minWidth: 90 }, droite: { alignItems: 'flex-end', maxWidth: '60%' }, nom: { fontSize: 13, color: couleurs.texte },
+  total: { fontSize: 13, color: couleurs.texte, fontWeight: '700', flexShrink: 1 }, rang: { width: 20, color: couleurs.texteFaible }, reessayer: { padding: 24, alignItems: 'center' },
 });

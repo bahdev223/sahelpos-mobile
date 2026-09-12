@@ -31,6 +31,7 @@ export interface FiltreVente {
   modePaiement?: ModePaiement;
   recherche?: string;
   limite?: number;
+  avant?: { dateVente: string; id: number };
 }
 
 export async function listerVentes(filtre: FiltreVente = {}): Promise<VenteResume[]> {
@@ -48,6 +49,10 @@ export async function listerVentes(filtre: FiltreVente = {}): Promise<VenteResum
   if (filtre.clientId) {
     conditions.push('v.client_id = ?');
     params.push(filtre.clientId);
+  }
+  if (filtre.avant) {
+    conditions.push('(v.date_vente < ? OR (v.date_vente = ? AND v.id < ?))');
+    params.push(filtre.avant.dateVente, filtre.avant.dateVente, filtre.avant.id);
   }
   if (filtre.utilisateurId) {
     conditions.push('v.utilisateur_id = ?');
@@ -74,7 +79,7 @@ export async function listerVentes(filtre: FiltreVente = {}): Promise<VenteResum
             v.mode_paiement AS modePaiement, v.statut,
             v.benefice_total AS beneficeTotal
      FROM vente v LEFT JOIN client c ON c.id = v.client_id${ou}
-     ORDER BY v.date_vente DESC LIMIT ?`,
+     ORDER BY v.date_vente DESC, v.id DESC LIMIT ?`,
     ...params,
     filtre.limite ?? 200,
   );
@@ -152,6 +157,7 @@ export async function meilleuresVentes(
   debut: string,
   fin: string,
   limite = 10,
+  utilisateurId?: number,
 ): Promise<ProduitVendu[]> {
   return lireTout<ProduitVendu>(
     `SELECT lv.produit_id AS produitId, lv.libelle,
@@ -159,11 +165,32 @@ export async function meilleuresVentes(
             SUM(lv.benefice_total) AS benefice
      FROM ligne_vente lv JOIN vente v ON v.id = lv.vente_id
      WHERE v.date_vente >= ? AND v.date_vente <= ? AND v.statut <> 'annulee'
+       ${utilisateurId ? 'AND v.utilisateur_id = ?' : ''}
      GROUP BY lv.produit_id, lv.libelle
      ORDER BY total DESC LIMIT ?`,
     debut,
     fin,
+    ...(utilisateurId ? [utilisateurId] : []),
     limite,
+  );
+}
+
+export interface GroupeVentes {
+  cle: string;
+  nbVentes: number;
+  chiffreAffaires: number;
+  benefice: number;
+}
+
+export async function regrouperVentes(debut: string, fin: string, mensuel: boolean, utilisateurId?: number): Promise<GroupeVentes[]> {
+  return lireTout<GroupeVentes>(
+    `SELECT strftime(?, date_vente, 'localtime') AS cle, COUNT(*) AS nbVentes,
+            COALESCE(SUM(total), 0) AS chiffreAffaires,
+            COALESCE(SUM(benefice_total), 0) AS benefice
+     FROM vente WHERE date_vente >= ? AND date_vente <= ? AND statut <> 'annulee'
+       ${utilisateurId ? 'AND utilisateur_id = ?' : ''}
+     GROUP BY cle ORDER BY cle`,
+    mensuel ? '%Y-%m' : '%Y-%m-%d', debut, fin, ...(utilisateurId ? [utilisateurId] : []),
   );
 }
 
