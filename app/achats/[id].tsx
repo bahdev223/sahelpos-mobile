@@ -37,6 +37,8 @@ import {
 import { obtenirFournisseur } from '../../src/db/repositories/fournisseur';
 import { lireParametres } from '../../src/services/parametres';
 import { bonDeCommandeHtml, genererEtPartager } from '../../src/services/pdf';
+import { ActionsDocument } from '../../src/ui/ActionsDocument';
+import { preparerDocumentAchat } from '../../src/services/document-achat';
 
 const LIBELLE_STATUT: Record<StatutAchat, string> = {
   BROUILLON: 'A recevoir',
@@ -308,14 +310,7 @@ export default function EcranDetailAchat() {
         ) : null}
 
         <View style={styles.actions}>
-          <Bouton
-            titre="Envoyer la commande"
-            sousTitre="Bon de commande en PDF, par WhatsApp ou autre"
-            onPress={envoyer}
-            enCours={envoiEnCours}
-            variante="secondaire"
-            grand
-          />
+          <ActionsDocument preparer={() => preparerDocumentAchat(achat.id)} />
           {achat.statut === 'BROUILLON' ? (
             <>
               <Bouton

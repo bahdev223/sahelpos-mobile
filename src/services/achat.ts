@@ -95,6 +95,8 @@ export interface FiltreAchat {
   debut?: string;
   fin?: string;
   limite?: number;
+  recherche?: string;
+  avant?: { dateAchat: string; id: number };
 }
 
 export async function listerAchats(filtre: FiltreAchat = {}): Promise<AchatResume[]> {
@@ -117,6 +119,15 @@ export async function listerAchats(filtre: FiltreAchat = {}): Promise<AchatResum
     conditions.push('a.date_achat <= ?');
     params.push(filtre.fin);
   }
+  if (filtre.recherche?.trim()) {
+    conditions.push('(a.numero LIKE ? OR a.reference LIKE ? OR f.nom LIKE ?)');
+    const terme = `%${filtre.recherche.trim()}%`;
+    params.push(terme, terme, terme);
+  }
+  if (filtre.avant) {
+    conditions.push('(a.date_achat < ? OR (a.date_achat = ? AND a.id < ?))');
+    params.push(filtre.avant.dateAchat, filtre.avant.dateAchat, filtre.avant.id);
+  }
 
   const ou = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
   return lireTout<AchatResume>(
@@ -129,6 +140,15 @@ export async function listerAchats(filtre: FiltreAchat = {}): Promise<AchatResum
     ...params,
     filtre.limite ?? 200,
   );
+}
+
+export async function compterAchats(): Promise<Record<StatutAchat, number>> {
+  const lignes = await lireTout<{ statut: StatutAchat; nombre: number }>(
+    'SELECT statut, COUNT(*) AS nombre FROM achat GROUP BY statut',
+  );
+  const resultat: Record<StatutAchat, number> = { BROUILLON: 0, RECU: 0, ANNULE: 0 };
+  for (const ligne of lignes) resultat[ligne.statut] = ligne.nombre;
+  return resultat;
 }
 
 export async function obtenirAchat(id: number): Promise<AchatResume | null> {

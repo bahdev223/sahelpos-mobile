@@ -11,6 +11,7 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -55,6 +56,8 @@ export default function EcranAchats() {
   const router = useRouter();
   const { boutique, synchroniserMaintenant } = useSession();
   const [achats, setAchats] = useState<AchatResume[]>([]);
+  const [filtre, setFiltre] = useState<StatutAchat | 'TOUS'>('TOUS');
+  const [recherche, setRecherche] = useState('');
   const [dette, setDette] = useState(0);
   const [chargement, setChargement] = useState(true);
   const [rafraichit, setRafraichit] = useState(false);
@@ -63,7 +66,7 @@ export default function EcranAchats() {
   const charger = useCallback(async () => {
     setErreur(null);
     try {
-      const [liste, d] = await Promise.all([listerAchats({ limite: 200 }), detteTotale()]);
+      const [liste, d] = await Promise.all([listerAchats({ limite: 200, statut: filtre === 'TOUS' ? undefined : filtre, recherche }), detteTotale()]);
       setAchats(liste);
       setDette(d);
     } catch (e) {
@@ -72,12 +75,12 @@ export default function EcranAchats() {
       setChargement(false);
       setRafraichit(false);
     }
-  }, []);
+  }, [filtre, recherche]);
 
   const rafraichir = useCallback(async () => {
     setRafraichit(true);
     try {
-      await synchroniserMaintenant();
+      try { await synchroniserMaintenant(); } catch { /* La liste locale reste disponible hors ligne. */ }
       await charger();
     } finally {
       setRafraichit(false);
@@ -85,9 +88,7 @@ export default function EcranAchats() {
   }, [charger, synchroniserMaintenant]);
 
   useFocusEffect(
-    useCallback(() => {
-      charger();
-    }, [charger]),
+    useCallback(() => { void charger(); }, [charger]),
   );
 
   if (chargement) return <Chargement message="Lecture des achats..." />;
@@ -112,22 +113,19 @@ export default function EcranAchats() {
             />
           }
           ListHeaderComponent={
-            achats.length > 0 ? (
+            <>
               <Carte style={styles.resume}>
                 <Text style={styles.resumeLibelle}>
                   {dette > 0 ? 'Vous devez a vos fournisseurs' : 'Aucune dette fournisseur'}
                 </Text>
-                <Montant
-                  valeur={dette}
-                  devise={boutique.devise}
-                  taille="grand"
-                  couleur={dette > 0 ? couleurs.danger : couleurs.primaire}
-                />
-                <Pressable onPress={() => router.push('/fournisseurs')}>
-                  <Text style={styles.lien}>Voir les fournisseurs</Text>
-                </Pressable>
+                <Montant valeur={dette} devise={boutique.devise} taille="grand" couleur={dette > 0 ? couleurs.danger : couleurs.primaire} />
+                <Pressable onPress={() => router.push('/fournisseurs')}><Text style={styles.lien}>Voir les fournisseurs</Text></Pressable>
               </Carte>
-            ) : null
+              <TextInput value={recherche} onChangeText={setRecherche} placeholder="Rechercher une commande..." placeholderTextColor={couleurs.texteFaible} style={styles.recherche} returnKeyType="search" />
+              <View style={styles.filtres}>
+                {([['TOUS', 'Toutes'], ['BROUILLON', 'À recevoir'], ['RECU', 'Reçus'], ['ANNULE', 'Annulés']] as const).map(([valeur, libelle]) => <Pressable key={valeur} onPress={() => setFiltre(valeur)} style={[styles.filtre, filtre === valeur && styles.filtreActif]}><Text style={[styles.filtreTexte, filtre === valeur && styles.filtreTexteActif]}>{libelle}</Text></Pressable>)}
+              </View>
+            </>
           }
           ListEmptyComponent={
             <ListeVide
@@ -193,6 +191,12 @@ const styles = StyleSheet.create({
     marginTop: espaces.s,
     minHeight: 24,
   },
+  recherche: { minHeight: 46, paddingHorizontal: 14, borderWidth: 1, borderColor: couleurs.bordure, borderRadius: rayons.m, backgroundColor: couleurs.surface, color: couleurs.texte, marginBottom: espaces.s },
+  filtres: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: espaces.m },
+  filtre: { minHeight: 36, paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center', borderRadius: rayons.m, backgroundColor: couleurs.surface, borderWidth: 1, borderColor: couleurs.bordure },
+  filtreActif: { backgroundColor: couleurs.primaire, borderColor: couleurs.primaire },
+  filtreTexte: { fontSize: 12, fontWeight: '600', color: couleurs.texteFaible },
+  filtreTexteActif: { color: couleurs.texteInverse },
 
   ligne: {
     flexDirection: 'row',

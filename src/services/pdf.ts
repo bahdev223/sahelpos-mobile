@@ -358,6 +358,11 @@ export async function genererPdf(html: string, nomFichier: string): Promise<stri
   }
 }
 
+/** Apercu natif, avec impression ou enregistrement PDF sur Android. */
+export async function apercuPdf(html: string): Promise<void> {
+  await Impression.printAsync({ html });
+}
+
 /**
  * Ouvre le partage du systeme (WhatsApp, Bluetooth, Drive, courriel...).
  *

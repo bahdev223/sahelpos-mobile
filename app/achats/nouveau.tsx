@@ -4,7 +4,7 @@ import {
   Alert, FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ListeVide, Vignette, couleurs, formaterMontant, formaterQuantite } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
@@ -23,6 +23,7 @@ const dateAujourdhui = () => new Intl.DateTimeFormat('fr-FR', {
 
 export default function EcranNouvelAchat() {
   const router = useRouter();
+  const { commande } = useLocalSearchParams<{ commande?: string }>();
   const { boutique } = useSession();
   const [etape, setEtape] = useState<Etape>(1);
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
@@ -45,6 +46,17 @@ export default function EcranNouvelAchat() {
   const [prix, setPrix] = useState('');
 
   useEffect(() => { listerFournisseurs().then(setFournisseurs).catch(() => setFournisseurs([])); }, []);
+  useEffect(() => {
+    if (!commande) return;
+    try {
+      const lignes: { produitId: number; quantite: number }[] = JSON.parse(commande);
+      if (!lignes.length || articles.length) return;
+      void Promise.all(lignes.map(async ({ produitId, quantite: q }) => {
+        const produit = (await listerProduits({ limite: 500 })).find((item) => item.id === produitId);
+        return produit ? { produitId: produit.id, libelle: produit.nom, unite: produit.uniteBase, facteur: 1, quantite: q, prixUnitaire: produit.prixAchat } : null;
+      })).then((resultat) => setArticles(resultat.filter((article): article is ArticleAchat => article !== null)));
+    } catch { /* Un parametre de navigation invalide ne bloque pas la saisie manuelle. */ }
+  }, [articles.length, commande]);
   useEffect(() => {
     if (!choixOuvert) return;
     const timer = setTimeout(() => {

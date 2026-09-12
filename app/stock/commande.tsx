@@ -20,6 +20,10 @@ import {
 import { C, formaterFrancs, formaterQuantite, s } from '../produit/nouveau';
 import { BandeauEtat, couleurs, Vignette } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
+import { ActionsDocument } from '../../src/ui/ActionsDocument';
+import { bonDeCommandeHtml } from '../../src/services/pdf';
+import { lireParametres } from '../../src/services/parametres';
+import type { AchatResume, LigneAchat } from '../../src/services/achat';
 
 interface LigneCommande {
   produit: ProduitStock;
@@ -77,6 +81,27 @@ export default function ListeCommande() {
   const supprimer = useCallback((id: number) => {
     setLignes((actuelles) => actuelles.filter((ligne) => ligne.produit.id !== id));
   }, []);
+
+  const preparerPdf = useCallback(async () => {
+    const parametres = await lireParametres();
+    const achat: AchatResume = {
+      id: 0, numero: `A commander-${new Date().toISOString().slice(0, 10)}`,
+      fournisseurId: null, fournisseurNom: null, reference: null,
+      dateAchat: new Date().toISOString(), total, montantPaye: 0,
+      statut: 'BROUILLON', dateReception: null,
+    };
+    const articles: LigneAchat[] = lignes.map((ligne) => ({
+      produitId: ligne.produit.id, libelle: ligne.produit.nom, unite: ligne.produit.unite_base,
+      facteur: 1, quantite: ligne.quantite, quantiteBase: ligne.quantite,
+      prixUnitaire: ligne.produit.prix_achat, total: ligne.quantite * ligne.produit.prix_achat,
+    }));
+    return { html: bonDeCommandeHtml({ achat, lignes: articles, fournisseur: null, parametres }), nom: 'Liste-a-commander' };
+  }, [lignes, total]);
+
+  const ouvrirNouvelAchat = useCallback(() => {
+    const produits = lignes.map(({ produit, quantite }) => ({ produitId: produit.id, quantite }));
+    router.push({ pathname: '/achats/nouveau', params: { commande: JSON.stringify(produits) } });
+  }, [lignes, router]);
 
   return (
     <View style={s.plein}>
@@ -184,11 +209,8 @@ export default function ListeCommande() {
           <Icone nom="corbeille" taille={19} couleur={C.texte} />
           <Text style={sl.actionTexte}>Vider la liste</Text>
         </Pressable>
-        <Pressable style={sl.actionSecondaire} onPress={() => Alert.alert('Apercu PDF', 'Le bon de commande sera disponible dans le module Achats.') }>
-          <Icone nom="document" taille={19} couleur={C.accent} />
-          <Text style={sl.actionBleue}>Apercu PDF</Text>
-        </Pressable>
-        <Pressable style={sl.actionPrincipale} onPress={() => router.push('/achats/nouveau')}>
+        <View style={sl.actionDocument}><ActionsDocument preparer={preparerPdf} desactive={!lignes.length} /></View>
+        <Pressable style={sl.actionPrincipale} onPress={ouvrirNouvelAchat} disabled={!lignes.length}>
           <Icone nom="achats" taille={19} couleur="#FFFFFF" />
           <Text style={sl.actionPrincipalTexte}>Creer l&apos;achat</Text>
         </Pressable>
@@ -229,6 +251,7 @@ const sl = StyleSheet.create({
   noteSaisie: { minHeight: 54, borderWidth: 1, borderColor: C.bordure, borderRadius: 9, padding: 12, color: C.texte, backgroundColor: C.carte, textAlignVertical: 'top' },
   actions: { position: 'absolute', left: 0, right: 0, bottom: 0, flexDirection: 'row', gap: 7, padding: 12, backgroundColor: C.carte, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.bordure },
   actionSecondaire: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, borderWidth: 1, borderColor: C.bordure, borderRadius: 9, paddingHorizontal: 5 },
+  actionDocument: { flex: 1.55, justifyContent: 'center' },
   actionPrincipale: { flex: 1.15, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: C.accent, borderRadius: 9, paddingHorizontal: 5 },
   actionTexte: { fontSize: 11, fontWeight: '700', color: C.texte },
   actionBleue: { fontSize: 11, fontWeight: '700', color: C.accent },
