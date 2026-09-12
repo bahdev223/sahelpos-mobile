@@ -810,16 +810,16 @@ async function appliquerVente(v: VenteSync): Promise<void> {
   const venteId = existe?.id ?? (await executer(
     `INSERT INTO vente (id_local, numero, client_id, utilisateur_id, date_vente, total,
                         montant_paye, mode_paiement, statut, benefice_total)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     v.id_local, v.numero, client?.id ?? null, vendeur?.id ?? null, v.date_vente, nombre(v.total),
     nombre(v.montant_paye), v.mode_paiement, v.statut, nombre(v.benefice_total),
   )).lastInsertRowId;
   if (existe) {
     await executer(
-      `UPDATE vente SET numero = ?, client_id = ?, date_vente = ?, total = ?,
+      `UPDATE vente SET numero = ?, client_id = ?, utilisateur_id = ?, date_vente = ?, total = ?,
                         montant_paye = ?, mode_paiement = ?, statut = ?, benefice_total = ?
         WHERE id = ?`,
-      v.numero, client?.id ?? null, v.date_vente, nombre(v.total), nombre(v.montant_paye),
+      v.numero, client?.id ?? null, vendeur?.id ?? null, v.date_vente, nombre(v.total), nombre(v.montant_paye),
       v.mode_paiement, v.statut, nombre(v.benefice_total), venteId,
     );
     await executer('DELETE FROM ligne_vente WHERE vente_id = ?', venteId);

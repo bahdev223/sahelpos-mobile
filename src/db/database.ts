@@ -113,18 +113,17 @@ async function migrer(db: SQLite.SQLiteDatabase): Promise<void> {
   );
   const versionActuelle = ligne?.user_version ?? 0;
 
-  // Cette reparation reste executee meme si user_version est deja a jour. Cela
-  // protege les bases issues d'une build qui avait marque la version trop tot.
-  await reparerSchemaVendeurs(db);
-
-  if (versionActuelle >= SCHEMA_VERSION) return;
+  if (versionActuelle >= SCHEMA_VERSION) {
+    await reparerSchemaCritique(db);
+    return;
+  }
 
   for (let v = versionActuelle; v < SCHEMA_VERSION; v++) {
     const etapes = MIGRATIONS[v];
     if (!etapes) continue;
     await db.withTransactionAsync(async () => {
       for (const sql of etapes) {
-        await db.execAsync(sql);
+        await executerEtapeMigration(db, sql);
       }
     });
   }
@@ -132,6 +131,7 @@ async function migrer(db: SQLite.SQLiteDatabase): Promise<void> {
   // PRAGMA n'accepte pas de parametre lie : la valeur vient d'une constante
   // du code, jamais d'une saisie utilisateur.
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION};`);
+  await reparerSchemaCritique(db);
 }
 
 /**
@@ -140,6 +140,7 @@ async function migrer(db: SQLite.SQLiteDatabase): Promise<void> {
  * Android supportees, donc on inspecte la table avant chaque ALTER TABLE.
  */
 async function reparerSchemaVendeurs(db: SQLite.SQLiteDatabase): Promise<void> {
+  if (!(await tableExiste(db, 'utilisateur'))) return;
   const colonnes = new Set(
     (await db.getAllAsync<{ name: string }>('PRAGMA table_info(utilisateur)'))
       .map((colonne) => colonne.name),
@@ -177,6 +178,120 @@ async function reparerSchemaVendeurs(db: SQLite.SQLiteDatabase): Promise<void> {
       'CREATE UNIQUE INDEX IF NOT EXISTS idx_utilisateur_id_local ON utilisateur(id_local)',
     );
   });
+}
+
+async function tableExiste(db: SQLite.SQLiteDatabase, nom: string): Promise<boolean> {
+  const ligne = await db.getFirstAsync<{ n: string }>(
+    "SELECT name AS n FROM sqlite_master WHERE type = 'table' AND name = ?",
+    nom,
+  );
+  return Boolean(ligne?.n);
+}
+
+function etapeDejaAppliquee(erreur: unknown): boolean {
+  const texte = erreur instanceof Error ? erreur.message : String(erreur);
+  return /duplicate column name|already exists/i.test(texte);
+}
+
+async function executerEtapeMigration(
+  db: SQLite.SQLiteDatabase,
+  sql: string,
+): Promise<void> {
+  try {
+    await db.execAsync(sql);
+  } catch (erreur) {
+    if (etapeDejaAppliquee(erreur)) return;
+    throw erreur;
+  }
+}
+
+/**
+ * Filet de securite pour les bases qui ont traverse une build defectueuse.
+ * On repare seulement les tables deja creees, sans jamais vider les donnees.
+ */
+async function reparerSchemaCritique(db: SQLite.SQLiteDatabase): Promise<void> {
+  await reparerSchemaVendeurs(db);
+
+  await db.withTransactionAsync(async () => {
+    if (await tableExiste(db, 'mouvement_stock')) {
+      const colonnes = await colonnesTable(db, 'mouvement_stock');
+      if (!colonnes.has('id_local')) {
+        await db.execAsync('ALTER TABLE mouvement_stock ADD COLUMN id_local TEXT');
+      }
+      await db.execAsync(
+        `UPDATE mouvement_stock SET id_local = lower(hex(randomblob(16)))
+          WHERE id_local IS NULL OR id_local = ''`,
+      );
+      await db.execAsync(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_mouvement_id_local ON mouvement_stock(id_local)',
+      );
+    }
+
+    if (await tableExiste(db, 'paiement_achat')) {
+      const colonnes = await colonnesTable(db, 'paiement_achat');
+      if (!colonnes.has('id_local')) {
+        await db.execAsync('ALTER TABLE paiement_achat ADD COLUMN id_local TEXT');
+      }
+      await db.execAsync(
+        `UPDATE paiement_achat SET id_local = lower(hex(randomblob(16)))
+          WHERE id_local IS NULL OR id_local = ''`,
+      );
+      await db.execAsync(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_paiement_achat_id_local ON paiement_achat(id_local)',
+      );
+    }
+
+    if (await tableExiste(db, 'client')) {
+      const colonnes = await colonnesTable(db, 'client');
+      if (!colonnes.has('date_modification')) {
+        await db.execAsync('ALTER TABLE client ADD COLUMN date_modification TEXT');
+      }
+    }
+
+    if (await tableExiste(db, 'fournisseur')) {
+      const colonnes = await colonnesTable(db, 'fournisseur');
+      if (!colonnes.has('date_modification')) {
+        await db.execAsync('ALTER TABLE fournisseur ADD COLUMN date_modification TEXT');
+      }
+    }
+
+    if (await tableExiste(db, 'achat')) {
+      const colonnes = await colonnesTable(db, 'achat');
+      if (!colonnes.has('date_modification')) {
+        await db.execAsync('ALTER TABLE achat ADD COLUMN date_modification TEXT');
+      }
+      await db.execAsync(
+        `UPDATE achat
+            SET date_modification = COALESCE(date_reception, date_achat)
+          WHERE date_modification IS NULL OR date_modification = ''`,
+      );
+    }
+
+    if (await tableExiste(db, 'sync_outbox')) {
+      const colonnes = await colonnesTable(db, 'sync_outbox');
+      if (!colonnes.has('statut')) {
+        await db.execAsync("ALTER TABLE sync_outbox ADD COLUMN statut TEXT NOT NULL DEFAULT 'PENDING'");
+      }
+      await db.execAsync(
+        `UPDATE sync_outbox
+            SET statut = CASE WHEN derniere_erreur IS NULL THEN 'PENDING' ELSE 'FAILED' END
+          WHERE statut IS NULL OR statut = ''`,
+      );
+      await db.execAsync(
+        'CREATE INDEX IF NOT EXISTS idx_sync_outbox_statut_date ON sync_outbox(statut, date_creation)',
+      );
+    }
+  });
+}
+
+async function colonnesTable(
+  db: SQLite.SQLiteDatabase,
+  table: string,
+): Promise<Set<string>> {
+  return new Set(
+    (await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`))
+      .map((colonne) => colonne.name),
+  );
 }
 
 /** A n'utiliser que dans les tests : referme et oublie la base ouverte. */

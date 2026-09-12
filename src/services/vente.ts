@@ -114,6 +114,13 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
 
     const numero = await genererNumero(db);
     const idLocal = genererIdLocal();
+    const vendeur = demande.utilisateurId
+      ? await db.getFirstAsync<{ nom: string | null; login: string }>(
+          'SELECT nom, login FROM utilisateur WHERE id = ?',
+          demande.utilisateurId,
+        )
+      : null;
+    const nomVendeur = vendeur ? (vendeur.nom || vendeur.login) : null;
     const reste = total - demande.montantPaye;
     const statut = reste <= 0 ? 'payee' : demande.montantPaye > 0 ? 'partielle' : 'impayee';
 
@@ -159,10 +166,10 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
       await db.runAsync(
         `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
                                       unite, quantite_base, stock_avant, stock_apres,
-                                      prix_unitaire, reference, date_mouvement)
-         VALUES (lower(hex(randomblob(16))), ?, 'SORTIE', 'VENTE', ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                      prix_unitaire, reference, motif, utilisateur, date_mouvement)
+         VALUES (lower(hex(randomblob(16))), ?, 'SORTIE', 'VENTE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         l.produitId, l.quantite, l.unite, l.quantiteBase,
-        avant.quantite_base, apres, l.prixUnitaire, numero, maintenant,
+        avant.quantite_base, apres, l.prixUnitaire, numero, `Vente ${numero}`, nomVendeur, maintenant,
       );
     }
 
