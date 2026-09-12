@@ -7,7 +7,7 @@
  * Rechercher, il voit son appareil, il le choisit.
  */
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect } from 'expo-router';
 
@@ -38,6 +38,7 @@ export default function EcranImprimante() {
   const [choisi, setChoisi] = useState<string>('');
   const [recherche, setRecherche] = useState(false);
   const [connexion, setConnexion] = useState(false);
+  const [connexionId, setConnexionId] = useState<string | null>(null);
   const [impression, setImpression] = useState(false);
   const [messageRecherche, setMessageRecherche] = useState<string | null>(null);
 
@@ -81,7 +82,9 @@ export default function EcranImprimante() {
 
   const choisir = useCallback(
     async (appareil: ImprimanteTrouvee) => {
+      if (connexion) return;
       setConnexion(true);
+      setConnexionId(appareil.id);
       try {
         await connecterImprimante(appareil);
         setChoisi(appareil.id);
@@ -99,9 +102,10 @@ export default function EcranImprimante() {
         );
       } finally {
         setConnexion(false);
+        setConnexionId(null);
       }
     },
-    [],
+    [connexion],
   );
 
   const changerPapier = useCallback(async (largeur: LargeurPapier) => {
@@ -196,7 +200,12 @@ export default function EcranImprimante() {
                     {a.canal === 'classic' ? 'Bluetooth Classic' : 'Bluetooth LE'}
                   </Text>
                 </View>
-                {actif ? <Text style={styles.coche}>Connectee</Text> : null}
+                {connexion && connexionId === a.id ? (
+                  <View style={styles.connexionEnCours}>
+                    <ActivityIndicator size="small" color={couleurs.primaire} />
+                    <Text style={styles.coche}>Connexion...</Text>
+                  </View>
+                ) : actif ? <Text style={styles.coche}>Connectee</Text> : null}
               </Pressable>
             );
           })}
@@ -266,4 +275,5 @@ const styles = StyleSheet.create({
   appareilActif: { borderColor: couleurs.primaire, backgroundColor: couleurs.primaireDouce },
   appareilNom: { fontSize: 15, fontWeight: '600', color: couleurs.texte },
   appareilDetail: { fontSize: 12, color: couleurs.texteFaible, marginTop: 2 },
+  connexionEnCours: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });
