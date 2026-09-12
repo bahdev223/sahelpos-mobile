@@ -25,7 +25,8 @@ import {
 } from '../../src/services/impression/transports';
 import { serviceImpression } from '../../src/services/impression/imprimante';
 import { Ticket, type LargeurPapier } from '../../src/services/impression/escpos';
-import { ecrireParametres, lireParametres } from '../../src/services/parametres';
+import { ajouterEnteteBoutique } from '../../src/services/impression/recu';
+import { enteteRecu, ecrireParametres, lireParametres } from '../../src/services/parametres';
 
 const PAPIERS: Array<{ cle: LargeurPapier; libelle: string; detail: string }> = [
   { cle: '58mm', libelle: '58 mm', detail: 'Petites imprimantes de poche' },
@@ -117,7 +118,9 @@ export default function EcranImprimante() {
     setImpression(true);
     try {
       const t = new Ticket(papier);
-      t.titre('TICKET DE TEST');
+      // Le ticket de test doit verifier le vrai en-tete de la boutique, pas
+      // seulement la liaison Bluetooth et la largeur du papier.
+      ajouterEnteteBoutique(t, await enteteRecu());
       t.separateur('=');
       t.ligne('Si vous lisez cette ligne en entier,');
       t.ligne('la largeur du papier est correcte.');

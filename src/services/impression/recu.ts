@@ -21,6 +21,14 @@ const LIBELLE_PAIEMENT: Record<string, string> = {
   credit: 'Credit',
 };
 
+/** Ajoute l'identite de la boutique sur tout document imprime. */
+export function ajouterEnteteBoutique(t: Ticket, boutique: EnteteBoutique): Ticket {
+  t.titre((boutique.nom || 'Ma boutique').toUpperCase());
+  if (boutique.adresse) t.commande([0x1b, 0x61, 1]).ligne(boutique.adresse);
+  if (boutique.telephone) t.ligne('Tel : ' + boutique.telephone);
+  return t.commande([0x1b, 0x61, 0]);
+}
+
 export function construireRecu(
   vente: Vente,
   lignes: LigneVente[],
@@ -29,10 +37,7 @@ export function construireRecu(
 ): Ticket {
   const t = new Ticket(papier);
 
-  t.titre(boutique.nom.toUpperCase());
-  if (boutique.adresse) t.commande([0x1b, 0x61, 1]).ligne(boutique.adresse);
-  if (boutique.telephone) t.ligne('Tel : ' + boutique.telephone);
-  t.commande([0x1b, 0x61, 0]);
+  ajouterEnteteBoutique(t, boutique);
 
   t.separateur('=');
   t.ligneDouble('Recu', vente.numero);

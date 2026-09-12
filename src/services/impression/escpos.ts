@@ -23,8 +23,10 @@ export const CMD = {
   GRAS_OFF: [ESC, 0x45, 0],
   DOUBLE_ON: [GS, 0x21, 0x11],
   DOUBLE_OFF: [GS, 0x21, 0x00],
-  COUPER: [GS, 0x56, 0x42, 0x00],
-  AVANCER: [ESC, 0x64, 0x03],
+  // Xprinter attend la coupe complete apres avoir amene le ticket au couteau.
+  // La variante partielle avec n=0 etait ignoree par certains firmwares.
+  COUPER: [GS, 0x56, 0x00],
+  AVANCER: [ESC, 0x64, 0x04],
 } as const;
 
 /**
