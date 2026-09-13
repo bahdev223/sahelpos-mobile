@@ -186,6 +186,10 @@ function fusionner(listes: ImprimanteTrouvee[][]): ImprimanteTrouvee[] {
 
   for (const liste of listes) {
     for (const imprimante of liste) {
+      // Les recherches Bluetooth remontent aussi les appareils personnels
+      // voisins. On ne montre que les noms qui ressemblent a une imprimante,
+      // sans masquer les modeles generiques comme LN-1316SUN.
+      if (!imprimante.nom || !estNomImprimante(imprimante.nom)) continue;
       const cle = imprimante.id.toUpperCase();
       const deja = parAdresse.get(cle);
       if (deja && deja.canal === 'classic') continue;
@@ -196,4 +200,61 @@ function fusionner(listes: ImprimanteTrouvee[][]): ImprimanteTrouvee[] {
   return [...parAdresse.values()].sort((a, b) =>
     (a.nom ?? a.id).localeCompare(b.nom ?? b.id),
   );
+}
+
+const MOTIFS_IMPRIMANTE = [
+  'printer',
+  'imprim',
+  'xprinter',
+  'thermal',
+  'receipt',
+  'print',
+  'zjiang',
+  'gprinter',
+  'rongta',
+  'sunmi',
+  'bixolon',
+  'sewoo',
+  'munbyn',
+  'mpt-',
+  'ln-',
+  'p50',
+  'pos-',
+  'rp-',
+  'bt-printer',
+];
+
+const MOTIFS_APPAREIL_PERSONNEL = [
+  'phone',
+  'telephone',
+  'tecno',
+  'samsung',
+  'iphone',
+  'pixel',
+  'redmi',
+  'airpods',
+  'buds',
+  'headset',
+  'headphone',
+  'speaker',
+  'mouse',
+  'keyboard',
+  'clavier',
+  'watch',
+  'montre',
+  'tablet',
+  'tablette',
+  'laptop',
+  'ordinateur',
+  'tv',
+];
+
+function estNomImprimante(nom: string): boolean {
+  const normalise = nom.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (MOTIFS_APPAREIL_PERSONNEL.some((motif) => normalise.includes(motif))) return false;
+  if (MOTIFS_IMPRIMANTE.some((motif) => normalise.includes(motif))) return true;
+
+  // Plusieurs petits fabricants utilisent seulement une reference technique
+  // (par exemple P501A-1F19 ou LN-1316SUN) sans le mot « printer ».
+  return /^(?:p|ln|mpt|rp|pt|bt|pos)[-_ ]?[a-z0-9]{3,}$/i.test(nom.trim());
 }
