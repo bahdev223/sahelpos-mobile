@@ -19,6 +19,8 @@ export interface Parametres {
   imprimantePapier: string;
   /** Identifiant du dernier appareil Bluetooth utilise, pour s'y reconnecter. */
   imprimanteAppareil: string;
+  /** Canal du dernier appareil : Bluetooth Classic ou BLE. */
+  imprimanteCanal: string;
   installationTerminee: boolean;
 }
 
@@ -31,6 +33,7 @@ export const PARAMETRES_PAR_DEFAUT: Parametres = {
   recuPiedDePage: 'Merci de votre visite',
   imprimantePapier: '58mm',
   imprimanteAppareil: '',
+  imprimanteCanal: '',
   installationTerminee: false,
 };
 
@@ -48,6 +51,7 @@ const CLES: Record<keyof Parametres, string> = {
   recuPiedDePage: 'recu_pied_de_page',
   imprimantePapier: 'recu_largeur_papier',
   imprimanteAppareil: 'imprimante_appareil',
+  imprimanteCanal: 'imprimante_canal',
   installationTerminee: 'installation_terminee',
 };
 
@@ -60,6 +64,7 @@ const ANCIENNES_CLES: Partial<Record<keyof Parametres, string>> = {
   recuPiedDePage: 'recu.pied_de_page',
   imprimantePapier: 'imprimante.papier',
   imprimanteAppareil: 'imprimante.appareil',
+  imprimanteCanal: 'imprimante.canal',
   installationTerminee: 'installation.terminee',
 };
 

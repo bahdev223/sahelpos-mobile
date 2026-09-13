@@ -89,7 +89,10 @@ export default function EcranImprimante() {
       try {
         await connecterImprimante(appareil);
         setChoisi(appareil.id);
-        await ecrireParametres({ imprimanteAppareil: appareil.id });
+        await ecrireParametres({
+          imprimanteAppareil: appareil.id,
+          imprimanteCanal: appareil.canal,
+        });
         Alert.alert(
           'Imprimante connectee',
           `${appareil.nom ?? 'Appareil'} est prete. Imprimez un ticket de test pour verifier.`,

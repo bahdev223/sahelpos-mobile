@@ -37,6 +37,7 @@ import type { Role, Utilisateur } from '../src/domain/types';
 import type { LargeurPapier } from '../src/services/impression/escpos';
 import { Chargement, Erreur, couleurs } from '../src/ui/components';
 import { FournisseurTiroir } from '../src/ui/tiroir';
+import { reconnecterImprimanteParDefaut } from '../src/services/impression/transports';
 
 import { EcranConnexion } from './connexion';
 import { EcranDemarrage } from './demarrage';
@@ -365,6 +366,20 @@ export default function DispositionRacine() {
     });
     return () => abonnement.remove();
   }, [pileMontee, synchroniserSansBruit]);
+
+  // La derniere imprimante choisie est reconnectee en arriere-plan. Une
+  // imprimante eteinte ou hors de portee ne doit jamais bloquer la caisse.
+  useEffect(() => {
+    if (!pileMontee) return;
+    const tenter = () => {
+      void reconnecterImprimanteParDefaut().catch(() => {});
+    };
+    tenter();
+    const abonnement = AppState.addEventListener('change', (etatApp) => {
+      if (etatApp === 'active') tenter();
+    });
+    return () => abonnement.remove();
+  }, [pileMontee]);
 
   // L'aiguillage de la racine est fait par app/index.tsx, qui redirige vers
   // la caisse. Aucun effet de navigation ici : celui qui s'y trouvait

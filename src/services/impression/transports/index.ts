@@ -26,6 +26,7 @@ import {
   demanderPermissionsBluetooth,
   transportBluetoothClassic,
 } from './classic';
+import { lireParametres } from '../../parametres';
 
 export { transportBluetoothLowEnergy, TransportBluetoothLowEnergy } from './ble';
 export { transportBluetoothClassic, TransportBluetoothClassic } from './classic';
@@ -57,6 +58,47 @@ export function transportDuCanal(canal: CanalImprimante): Transport {
  */
 export function estCanalImprimante(valeur: string): valeur is CanalImprimante {
   return valeur === 'classic' || valeur === 'ble';
+}
+
+let reconnexionEnCours: Promise<boolean> | null = null;
+
+/**
+ * Reconnecte sans bruit la derniere imprimante choisie par le commercant.
+ *
+ * Cette tentative est volontairement best-effort : une imprimante eteinte ne
+ * doit ni ralentir l'ouverture de la caisse ni afficher une fausse erreur.
+ */
+export async function reconnecterImprimanteParDefaut(): Promise<boolean> {
+  if (serviceImpression.connecte) return true;
+  if (reconnexionEnCours) return reconnexionEnCours;
+
+  const execution = (async () => {
+    const parametres = await lireParametres();
+    const id = parametres.imprimanteAppareil.trim();
+    if (!id) return false;
+
+    const canalEnregistre = parametres.imprimanteCanal;
+    const canaux: CanalImprimante[] = estCanalImprimante(canalEnregistre)
+      ? [canalEnregistre, canalEnregistre === 'classic' ? 'ble' : 'classic']
+      : ['classic', 'ble'];
+
+    for (const canal of canaux) {
+      try {
+        await connecterImprimante({ id, nom: null, canal });
+        return true;
+      } catch {
+        // La prochaine tentative essaie l'autre canal sans avertir l'utilisateur.
+      }
+    }
+    return false;
+  })();
+
+  reconnexionEnCours = execution;
+  try {
+    return await execution;
+  } finally {
+    if (reconnexionEnCours === execution) reconnexionEnCours = null;
+  }
 }
 
 /** Les canaux effectivement utilisables ici et maintenant (radio et permissions). */
