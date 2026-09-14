@@ -57,12 +57,14 @@ export async function preparer(): Promise<boolean> {
       await Notifications.setNotificationChannelAsync(CANAL_URGENT, {
         name: 'Ruptures de stock',
         importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
         vibrationPattern: [0, 250, 250, 250],
         description: "Un produit vient d'etre epuise.",
       });
       await Notifications.setNotificationChannelAsync(CANAL_INFO, {
         name: 'Stock bas et rappels',
         importance: Notifications.AndroidImportance.DEFAULT,
+        sound: 'default',
         description: 'Produits sous leur seuil, echeance d abonnement.',
       });
     }
@@ -104,7 +106,7 @@ export async function sonner(avis: AvisSysteme): Promise<boolean> {
         title: avis.titre,
         body: avis.corps,
         data: avis.chemin ? { chemin: avis.chemin } : {},
-        sound: avis.gravite === 'urgent',
+        sound: 'default',
       },
       // `null` = immediatement. On ne planifie jamais dans le futur : une
       // notification differee arriverait apres que le commercant a deja

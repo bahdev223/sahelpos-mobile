@@ -40,6 +40,7 @@
       "expo-sqlite",
       "expo-sharing",
       "expo-document-picker",
+      "expo-notifications",
       [
         "expo-camera",
         {

@@ -12,6 +12,9 @@ import {
   lireTout,
   maintenant,
 } from '../db/repositories/base';
+import { File, Paths } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
+import { deposer } from './notifications/journal';
 import { jetonAppareil } from './abonnement';
 
 const SERVEUR = 'https://sahelpos.saheltech.tech';
@@ -29,6 +32,7 @@ const CLE_DERNIER_PULL = 'sync.dernier_pull';
 const CLE_DERNIER_NOMBRE_PUSH = 'sync.dernier_nombre_push';
 const CLE_DERNIER_NOMBRE_PULL = 'sync.dernier_nombre_pull';
 const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
+const TAILLE_IMAGE_SYNC_MAX = 4 * 1024 * 1024;
 
 type TypeObjet = 'produit' | 'client' | 'fournisseur' | 'vente' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
 
@@ -52,6 +56,9 @@ interface ProduitSync {
   chemin_image?: string | null;
   image_url?: string | null;
   image_version?: string | null;
+  image_base64?: string | null;
+  image_nom?: string | null;
+  image_supprimee?: boolean;
   actif: boolean | number;
   date_creation?: string | null;
   date_modification?: string | null;
@@ -191,6 +198,15 @@ interface PullSync {
   achats?: AchatSync[];
   utilisateurs?: UtilisateurSync[];
   boutique?: BoutiqueSync;
+  annonces?: AnnonceSync[];
+}
+
+interface AnnonceSync {
+  id: number;
+  titre: string;
+  message: string;
+  niveau: 'info' | 'important' | 'critique';
+  date_creation: string;
 }
 
 interface PushSync {
@@ -496,11 +512,12 @@ async function lireProduits(ids: string[]): Promise<ProduitSync[]> {
   const produits = await lireTout<ProduitSync>(
     `SELECT id_local, nom, categorie, code_barre, prix_unitaire, prix_achat,
             unite_base, quantite_base, stock_min, gestion_stock, actif,
-            date_creation, date_modification
+            chemin_image, date_creation, date_modification
        FROM produit WHERE id_local IN (${placeholders(ids)})`,
     ...ids,
   );
   for (const produit of produits) {
+    Object.assign(produit, await imageProduitPourSync(produit.chemin_image));
     const local = await lirePremier<{ id: number }>(
       'SELECT id FROM produit WHERE id_local = ?',
       produit.id_local,
@@ -513,6 +530,32 @@ async function lireProduits(ids: string[]): Promise<ProduitSync[]> {
       : [];
   }
   return produits;
+}
+
+/**
+ * Une photo locale doit voyager dans le push du produit. Les URLs deja
+ * recues du Web restent des references distantes et ne sont jamais renvoyees
+ * comme si elles etaient des fichiers du telephone.
+ */
+async function imageProduitPourSync(chemin: string | null | undefined): Promise<Pick<ProduitSync, 'image_base64' | 'image_nom' | 'image_supprimee'>> {
+  if (!chemin) return { image_base64: null, image_nom: null, image_supprimee: true };
+  if (/^(https?:\/\/|\/media\/|content:\/\/)/i.test(chemin)) return {};
+
+  const uri = chemin.startsWith('file://') ? chemin : new File(Paths.document, chemin).uri;
+  const fichier = new File(uri);
+  const informations = await FileSystem.getInfoAsync(uri);
+  if (!informations.exists) {
+    throw new Error(`La photo locale du produit est introuvable : ${chemin}`);
+  }
+  if ((informations.size ?? 0) > TAILLE_IMAGE_SYNC_MAX) {
+    throw new Error('La photo du produit depasse 4 Mo. Reduisez-la puis relancez la synchronisation.');
+  }
+
+  return {
+    image_base64: await FileSystem.readAsStringAsync(uri, { encoding: 'base64' }),
+    image_nom: fichier.name || 'produit.jpg',
+    image_supprimee: false,
+  };
 }
 
 async function lireClients(ids: string[]): Promise<ClientSync[]> {
@@ -659,6 +702,16 @@ async function appliquerPull(pull: PullSync): Promise<number> {
       await appliquerBoutique(pull.boutique);
       recus++;
     }
+    for (const annonce of pull.annonces ?? []) {
+      await deposer({
+        cle: `annonce:${annonce.id}`,
+        genre: 'annonce',
+        gravite: annonce.niveau === 'critique' ? 'urgent' : annonce.niveau === 'important' ? 'attention' : 'info',
+        titre: annonce.titre,
+        corps: annonce.message,
+        chemin: '/notifications',
+      });
+    }
     // Le curseur est ecrit dans la MEME transaction que les objets recus.
     // Un crash ne peut donc pas avancer le curseur sur une base a moitie mise
     // a jour : le prochain cycle reprendra exactement le meme lot.
@@ -684,6 +737,15 @@ async function appliquerUtilisateur(u: UtilisateurSync): Promise<void> {
 }
 
 async function appliquerProduit(p: ProduitSync): Promise<void> {
+  const dejaPresent = await lirePremier<{ chemin_image: string | null }>(
+    'SELECT chemin_image FROM produit WHERE id_local = ?',
+    p.id_local,
+  );
+  const imageRecue = p.image_url ?? p.chemin_image ?? null;
+  const imageLocale =
+    imageRecue === null && cheminImageLocal(dejaPresent?.chemin_image)
+      ? dejaPresent?.chemin_image ?? null
+      : imageRecue;
   await executer(
     `INSERT INTO produit (id_local, nom, categorie, code_barre, prix_unitaire,
                           prix_achat, unite_base, quantite_base, stock_min,
@@ -713,7 +775,7 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
     nombre(p.quantite_base),
     nombre(p.stock_min),
     p.gestion_stock ? 1 : 0,
-    urlImageVersionnee(p.image_url ?? p.chemin_image ?? null, p.image_version ?? null),
+    urlImageVersionnee(imageLocale, p.image_version ?? null),
     p.supprime_le ? 0 : p.actif ? 1 : 0,
     p.date_creation ?? maintenant(),
     p.date_modification ?? maintenant(),
@@ -732,6 +794,16 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
       nombre(su.facteur, 1),
       nombre(su.prix),
     );
+  }
+}
+
+function cheminImageLocal(chemin: string | null | undefined): string | null {
+  if (!chemin || /^(file:|content:|https?:\/\/|\/media\/)/i.test(chemin)) return null;
+  const uri = chemin.startsWith('file://') ? chemin : new File(Paths.document, chemin).uri;
+  try {
+    return new File(uri).exists ? chemin : null;
+  } catch {
+    return null;
   }
 }
 
