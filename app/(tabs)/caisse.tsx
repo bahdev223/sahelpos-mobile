@@ -54,7 +54,7 @@ import {
   StockInsuffisant,
 } from '../../src/services/vente';
 import type { ArticlePanier, ResultatVente } from '../../src/services/vente';
-import { construireRecu } from '../../src/services/impression/recu';
+import { construireRecu, construireRecuAvecLogo } from '../../src/services/impression/recu';
 import { serviceImpression } from '../../src/services/impression/imprimante';
 import {
   BARRE_HORIZONTALE,
@@ -1449,8 +1449,7 @@ function ModaleRecu({
   const monnaie = Math.max(0, Math.round(terminee.montantRecu - terminee.resultat.total));
   const reste = Math.max(0, Math.round(terminee.resultat.total - terminee.montantPaye));
 
-  const ticket = useMemo(() => {
-    const vente: Vente = {
+  const venteTicket = useMemo<Vente>(() => ({
       id: terminee.resultat.venteId,
       idLocal: '',
       numero: terminee.resultat.numero,
@@ -1467,25 +1466,36 @@ function ModaleRecu({
         (somme: number, ligne: LigneVente) => somme + ligne.beneficeTotal,
         0,
       ),
-    };
+    }), [terminee, utilisateur, reste]);
+
+  const enteteTicket = useMemo(() => ({
+    nom: boutique.nom,
+    adresse: boutique.adresse ?? undefined,
+    telephone: boutique.telephone ?? undefined,
+    piedDePage: boutique.piedDePage ?? undefined,
+    logo: boutique.logo ?? undefined,
+  }), [boutique]);
+
+  const ticket = useMemo(() => {
     return construireRecu(
-      vente,
+      venteTicket,
       terminee.resultat.lignes,
-      {
-        nom: boutique.nom,
-        adresse: boutique.adresse ?? undefined,
-        telephone: boutique.telephone ?? undefined,
-        piedDePage: boutique.piedDePage ?? undefined,
-      },
+      enteteTicket,
       boutique.largeurPapier,
     );
-  }, [terminee, boutique, utilisateur, reste]);
+  }, [venteTicket, terminee.resultat.lignes, enteteTicket, boutique.largeurPapier]);
 
   const imprimer = useCallback(async () => {
     setImpression(true);
     setMessageImpression(null);
     try {
-      await serviceImpression.imprimer(ticket);
+      const ticketAvecLogo = await construireRecuAvecLogo(
+        venteTicket,
+        terminee.resultat.lignes,
+        enteteTicket,
+        boutique.largeurPapier,
+      );
+      await serviceImpression.imprimer(ticketAvecLogo);
       setMessageImpression('Recu envoye a l imprimante.');
     } catch (erreur) {
       setMessageImpression(
@@ -1496,7 +1506,7 @@ function ModaleRecu({
     } finally {
       setImpression(false);
     }
-  }, [ticket]);
+  }, [venteTicket, terminee.resultat.lignes, enteteTicket, boutique.largeurPapier]);
 
   return (
     <Modal visible animationType="slide" onRequestClose={onFermer}>

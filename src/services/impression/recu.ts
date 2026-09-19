@@ -7,6 +7,7 @@
 import type { LigneVente, Vente } from '../../domain/types';
 
 import { formaterMontant, LargeurPapier, Ticket } from './escpos';
+import { ajouterLogoTicket } from './logo';
 
 export interface EnteteBoutique {
   nom: string;
@@ -37,7 +38,26 @@ export function construireRecu(
   papier: LargeurPapier = '58mm',
 ): Ticket {
   const t = new Ticket(papier);
+  return remplirRecu(t, vente, lignes, boutique);
+}
 
+export async function construireRecuAvecLogo(
+  vente: Vente,
+  lignes: LigneVente[],
+  boutique: EnteteBoutique,
+  papier: LargeurPapier = '58mm',
+): Promise<Ticket> {
+  const t = new Ticket(papier);
+  await ajouterLogoTicket(t, boutique.logo, papier);
+  return remplirRecu(t, vente, lignes, boutique);
+}
+
+function remplirRecu(
+  t: Ticket,
+  vente: Vente,
+  lignes: LigneVente[],
+  boutique: EnteteBoutique,
+): Ticket {
   ajouterEnteteBoutique(t, boutique);
 
   t.separateur('=');

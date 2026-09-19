@@ -32,7 +32,7 @@ import {
   type VenteResume,
 } from '../../src/db/repositories/vente';
 import type { LigneVente, StatutVente } from '../../src/domain/types';
-import { construireRecu } from '../../src/services/impression/recu';
+import { construireRecuAvecLogo } from '../../src/services/impression/recu';
 import { serviceImpression } from '../../src/services/impression/imprimante';
 import { enteteRecu, lireParametres } from '../../src/services/parametres';
 import { preparerDocumentVente } from '../../src/services/document-vente';
@@ -156,7 +156,7 @@ export default function EcranDetailVente() {
     try {
       const [entete, parametres] = await Promise.all([enteteRecu(), lireParametres()]);
       const papier = parametres.imprimantePapier === '80mm' ? '80mm' : '58mm';
-      const ticket = construireRecu(
+      const ticket = await construireRecuAvecLogo(
         {
           id: vente.id,
           idLocal: '',
