@@ -52,6 +52,7 @@ export const CLES_PARAMETRES = {
   devise: 'devise',
   piedDePage: 'recu_pied_de_page',
   largeurPapier: 'recu_largeur_papier',
+  biometrieUtilisateur: 'biometrie_utilisateur_id',
 } as const;
 
 export interface Boutique {

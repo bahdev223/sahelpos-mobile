@@ -32,7 +32,7 @@ import type { Gravite } from './journal';
 const CANAL_URGENT = 'rupture';
 const CANAL_INFO = 'stock';
 
-let prepare = false;
+let canauxPrepares = false;
 
 /**
  * Prepare les canaux et demande l'autorisation.
@@ -41,8 +41,6 @@ let prepare = false;
  * ouverture est le meilleur moyen de se faire refuser definitivement.
  */
 export async function preparer(): Promise<boolean> {
-  if (prepare) return true;
-
   try {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
@@ -53,7 +51,7 @@ export async function preparer(): Promise<boolean> {
       }),
     });
 
-    if (Platform.OS === 'android') {
+    if (Platform.OS === 'android' && !canauxPrepares) {
       await Notifications.setNotificationChannelAsync(CANAL_URGENT, {
         name: 'Ruptures de stock',
         importance: Notifications.AndroidImportance.HIGH,
@@ -67,6 +65,7 @@ export async function preparer(): Promise<boolean> {
         sound: 'default',
         description: 'Produits sous leur seuil, echeance d abonnement.',
       });
+      canauxPrepares = true;
     }
 
     const { status } = await Notifications.getPermissionsAsync();
@@ -76,7 +75,6 @@ export async function preparer(): Promise<boolean> {
       accorde = demande.status === 'granted';
     }
 
-    prepare = true;
     return accorde;
   } catch {
     // Un telephone qui refuse net ne doit pas empecher la caisse d'ouvrir.

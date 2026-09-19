@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { obtenirBase } from '../src/db/database';
@@ -27,7 +28,13 @@ import {
   rayons,
 } from '../src/ui/components';
 
-import { CLES_PARAMETRES, ecrireParametres, enRole, useSession } from './_layout';
+import {
+  CLES_PARAMETRES,
+  ecrireParametres,
+  enRole,
+  lireParametres,
+  useSession,
+} from './_layout';
 
 interface CompteAffiche {
   id: number;
@@ -51,6 +58,11 @@ export function EcranConnexion() {
   const [pin, setPin] = useState('');
   const [refus, setRefus] = useState<string | null>(null);
   const [verification, setVerification] = useState(false);
+  const [verificationBiometrie, setVerificationBiometrie] = useState(false);
+  const [biometrieDisponible, setBiometrieDisponible] = useState(false);
+  const [biometrieUtilisateur, setBiometrieUtilisateur] = useState<number | null>(null);
+  const [liaisonBiometrie, setLiaisonBiometrie] = useState(false);
+  const [nomBiometrie, setNomBiometrie] = useState('empreinte');
 
   const charger = useCallback(async () => {
     setEtat('chargement');
@@ -60,8 +72,35 @@ export function EcranConnexion() {
         `SELECT id, id_local, login, nom, role, caisse_ouvre_a, caisse_ferme_a FROM utilisateur
          WHERE actif = 1 ORDER BY role = 'admin' DESC, nom, login`,
       );
+      const parametres = await lireParametres();
+      const utilisateurLie = Number(parametres[CLES_PARAMETRES.biometrieUtilisateur] || 0) || null;
+      const compteLieExiste = utilisateurLie !== null && lignes.some((ligne) => ligne.id === utilisateurLie);
+
+      let materielBiometrique = false;
+      let biometriqueEnregistre = false;
+      let libelleBiometrie = 'empreinte';
+      try {
+        materielBiometrique = await LocalAuthentication.hasHardwareAsync();
+        biometriqueEnregistre = materielBiometrique
+          ? await LocalAuthentication.isEnrolledAsync()
+          : false;
+        const types = materielBiometrique
+          ? await LocalAuthentication.supportedAuthenticationTypesAsync()
+          : [];
+        libelleBiometrie = types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)
+          ? 'biometrie'
+          : 'empreinte';
+      } catch {
+        materielBiometrique = false;
+        biometriqueEnregistre = false;
+      }
+
       setComptes(lignes);
-      setCompteChoisi(lignes.length > 0 ? lignes[0].id : null);
+      setCompteChoisi(compteLieExiste ? utilisateurLie : lignes.length > 0 ? lignes[0].id : null);
+      setBiometrieDisponible(materielBiometrique && biometriqueEnregistre);
+      setBiometrieUtilisateur(compteLieExiste ? utilisateurLie : null);
+      setLiaisonBiometrie(materielBiometrique && biometriqueEnregistre && !compteLieExiste);
+      setNomBiometrie(libelleBiometrie);
       setEtat('pret');
     } catch (erreur) {
       setMessageErreur(
@@ -132,6 +171,17 @@ export function EcranConnexion() {
         caisseOuvreA: ligne.caisse_ouvre_a,
         caisseFermeA: ligne.caisse_ferme_a,
       };
+      if (biometrieDisponible && liaisonBiometrie) {
+        try {
+          await ecrireParametres({
+            [CLES_PARAMETRES.biometrieUtilisateur]: String(compte.id),
+          });
+          setBiometrieUtilisateur(compte.id);
+        } catch {
+          // Le PIN est correct : une preference biométrique illisible ne doit
+          // pas bloquer l'ouverture de la caisse.
+        }
+      }
       ouvrirSession(compte);
     } catch (erreur) {
       setRefus(
@@ -141,7 +191,67 @@ export function EcranConnexion() {
       );
       setVerification(false);
     }
-  }, [compteChoisi, pin, ouvrirSession]);
+  }, [biometrieDisponible, compteChoisi, liaisonBiometrie, pin, ouvrirSession]);
+
+  const validerBiometrie = useCallback(async () => {
+    if (!biometrieDisponible || biometrieUtilisateur === null) return;
+    setVerificationBiometrie(true);
+    setRefus(null);
+    try {
+      const resultat = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Ouvrir SahelPOS',
+        cancelLabel: 'Annuler',
+        fallbackLabel: 'Utiliser le code',
+        disableDeviceFallback: false,
+      });
+      if (!resultat.success) {
+        setRefus(`${nomBiometrie[0].toUpperCase()}${nomBiometrie.slice(1)} non reconnue.`);
+        setVerificationBiometrie(false);
+        return;
+      }
+
+      const db = await obtenirBase();
+      const ligne = await db.getFirstAsync<{
+        id: number;
+        id_local: string;
+        login: string;
+        nom: string | null;
+        role: string;
+        caisse_ouvre_a: string | null;
+        caisse_ferme_a: string | null;
+      }>(
+        `SELECT id, id_local, login, nom, role, caisse_ouvre_a, caisse_ferme_a FROM utilisateur
+         WHERE id = ? AND actif = 1`,
+        biometrieUtilisateur,
+      );
+
+      if (!ligne) {
+        await ecrireParametres({ [CLES_PARAMETRES.biometrieUtilisateur]: '0' });
+        setBiometrieUtilisateur(null);
+        setRefus('Compte introuvable. Utilisez le code.');
+        setVerificationBiometrie(false);
+        return;
+      }
+
+      ouvrirSession({
+        id: ligne.id,
+        idLocal: ligne.id_local,
+        login: ligne.login,
+        nom: ligne.nom,
+        role: enRole(ligne.role),
+        actif: true,
+        caisseOuvreA: ligne.caisse_ouvre_a,
+        caisseFermeA: ligne.caisse_ferme_a,
+      });
+    } catch (erreur) {
+      setRefus(
+        erreur instanceof Error
+          ? erreur.message
+          : "L'ouverture par biometrie a echoue.",
+      );
+      setVerificationBiometrie(false);
+    }
+  }, [biometrieDisponible, biometrieUtilisateur, nomBiometrie, ouvrirSession]);
 
   const reprendreInstallation = useCallback(async () => {
     try {
@@ -186,6 +296,7 @@ export function EcranConnexion() {
   }
 
   const pretAValider = pin.length >= LONGUEUR_PIN_MIN && compteChoisi !== null;
+  const libelleBiometrie = nomBiometrie === 'empreinte' ? "l'empreinte" : 'la biometrie';
 
   return (
     <SafeAreaView style={styles.ecran} edges={['top', 'bottom']}>
@@ -214,6 +325,10 @@ export function EcranConnexion() {
                   setCompteChoisi(compte.id);
                   setPin('');
                   setRefus(null);
+                  setLiaisonBiometrie(
+                    biometrieDisponible &&
+                      (biometrieUtilisateur === null || biometrieUtilisateur === compte.id),
+                  );
                 }}
                 style={[styles.compte, actif && styles.compteActif]}
               >
@@ -239,6 +354,37 @@ export function EcranConnexion() {
           </Text>
         </View>
       )}
+
+      {biometrieDisponible && biometrieUtilisateur === compteChoisi ? (
+        <View style={styles.biometrieZone}>
+          <Bouton
+            titre={`Entrer avec ${libelleBiometrie}`}
+            onPress={() => void validerBiometrie()}
+            enCours={verificationBiometrie}
+          />
+        </View>
+      ) : null}
+
+      {biometrieDisponible ? (
+        <Pressable
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: liaisonBiometrie }}
+          onPress={() => setLiaisonBiometrie((valeur) => !valeur)}
+          style={styles.biometrieOption}
+        >
+          <View style={[styles.caseBiometrie, liaisonBiometrie && styles.caseBiometrieActive]}>
+            <Text style={styles.caseBiometrieTexte}>{liaisonBiometrie ? 'OK' : ''}</Text>
+          </View>
+          <View style={styles.biometrieTexteBloc}>
+            <Text style={styles.biometrieTitre}>
+              Utiliser {libelleBiometrie} sur ce telephone
+            </Text>
+            <Text style={styles.biometrieAide}>
+              Apres un code correct, ce compte pourra s'ouvrir plus vite.
+            </Text>
+          </View>
+        </Pressable>
+      ) : null}
 
       <View style={styles.pastilles}>
         {Array.from({ length: LONGUEUR_PIN_MAX }, (rien, index) => (
@@ -348,6 +494,49 @@ const styles = StyleSheet.create({
   compteRoleActif: { color: couleurs.primaireDouce },
   compteUnique: { paddingHorizontal: espaces.l, paddingVertical: espaces.l },
   compteUniqueNom: { fontSize: 16, fontWeight: '700', color: couleurs.texte },
+  biometrieZone: {
+    paddingHorizontal: espaces.l,
+    marginTop: espaces.xs,
+  },
+  biometrieOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaces.m,
+    marginHorizontal: espaces.l,
+    marginTop: espaces.m,
+    padding: espaces.m,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  caseBiometrie: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: couleurs.bordure,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: couleurs.surface,
+  },
+  caseBiometrieActive: {
+    borderColor: couleurs.primaire,
+    backgroundColor: couleurs.primaire,
+  },
+  caseBiometrieTexte: {
+    color: couleurs.texteInverse,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  biometrieTexteBloc: { flex: 1 },
+  biometrieTitre: { fontSize: 14, fontWeight: '800', color: couleurs.texte },
+  biometrieAide: {
+    marginTop: 2,
+    fontSize: 12,
+    color: couleurs.texteFaible,
+    lineHeight: 17,
+  },
   pastilles: {
     flexDirection: 'row',
     justifyContent: 'center',
