@@ -45,6 +45,18 @@ const LONGUEUR_PIN_MIN = 4;
 const LONGUEUR_PIN_MAX = 6;
 type ModeConnexion = 'connexion' | 'creation';
 type VueDepart = 'accueil' | 'formulaire';
+type TypeCommerce = 'alimentaire' | 'quincaillerie' | 'pharmacie' | 'autre';
+
+const TYPES_COMMERCE: Array<{
+  id: TypeCommerce;
+  titre: string;
+  icone: Parameters<typeof Icone>[0]['nom'];
+}> = [
+  { id: 'alimentaire', titre: 'Alimentaire', icone: 'caisse' },
+  { id: 'quincaillerie', titre: 'Quincaillerie', icone: 'mouvements' },
+  { id: 'pharmacie', titre: 'Pharmacie', icone: 'plus' },
+  { id: 'autre', titre: 'Autre', icone: 'menu' },
+];
 
 export function EcranDemarrage() {
   const { ouvrirSession, recharger } = useSession();
@@ -59,6 +71,9 @@ export function EcranDemarrage() {
   const [nomBoutique, setNomBoutique] = useState('');
   const [nomAdmin, setNomAdmin] = useState('');
   const [telephone, setTelephone] = useState('');
+  const [ville, setVille] = useState('Bamako');
+  const [devise, setDevise] = useState('FCFA');
+  const [typeCommerce, setTypeCommerce] = useState<TypeCommerce>('alimentaire');
   const [motDePasseWeb, setMotDePasseWeb] = useState('');
   const [motDePasseWebConfirme, setMotDePasseWebConfirme] = useState('');
   const [login, setLogin] = useState('');
@@ -145,7 +160,7 @@ export function EcranDemarrage() {
                 login,
                 motDePasse: motDePasseWeb,
                 telephone,
-                devise: 'FCFA',
+                devise,
                 plan: 'START',
               },
               'Telephone principal',
@@ -171,7 +186,7 @@ export function EcranDemarrage() {
     } finally {
       setEnCours(false);
     }
-  }, [login, mode, motDePasseWeb, nomAdmin, nomBoutique, telephone, validerEtape]);
+  }, [devise, login, mode, motDePasseWeb, nomAdmin, nomBoutique, telephone, validerEtape]);
 
   const terminer = useCallback(async () => {
     if (!droit) {
@@ -383,16 +398,61 @@ export function EcranDemarrage() {
                   </Pressable>
                 </View>
               ) : (
-                <View>
+                <View style={styles.creationCarte}>
+                  <EtapesCreation />
+
+                  <Text style={styles.creationTitre}>Parlez-nous de votre boutique</Text>
+                  <Text style={styles.creationSousTitre}>
+                    Ces informations nous permettent de configurer votre espace.
+                  </Text>
+
                   <ChampMaquette icone="boutique" label="Nom de la boutique" valeur={nomBoutique} onChangeText={setNomBoutique} placeholder="Alimentation Fatoumata" erreur={erreurs.nomBoutique} autoFocus />
+                  <Text style={styles.exempleChamp}>Ex : Alimentation Fatoumata, Quincaillerie du Marche, ...</Text>
+
+                  <View style={styles.ligneDeuxColonnes}>
+                    <View style={styles.colonneChamp}>
+                      <ChampMaquette icone="etiquette" label="Ville" valeur={ville} onChangeText={setVille} placeholder="Bamako" />
+                    </View>
+                    <View style={styles.colonneChamp}>
+                      <ChampMaquette icone="argent" label="Devise" valeur={devise} onChangeText={setDevise} placeholder="FCFA" />
+                    </View>
+                  </View>
+
+                  <View style={styles.infoCreation}>
+                    <View style={styles.infoPastille}>
+                      <Text style={styles.infoPastilleTexte}>i</Text>
+                    </View>
+                    <Text style={styles.infoCreationTexte}>Vous pourrez ajouter d'autres informations (adresse, logo, etc.) plus tard dans les parametres.</Text>
+                  </View>
+
+                  <Text style={styles.commerceLabel}>Quel type de commerce ? <Text style={styles.commerceFacultatif}>(facultatif)</Text></Text>
+                  <View style={styles.commerceGrille}>
+                    {TYPES_COMMERCE.map((item) => (
+                      <CarteCommerce
+                        key={item.id}
+                        actif={typeCommerce === item.id}
+                        icone={item.icone}
+                        titre={item.titre}
+                        onPress={() => setTypeCommerce(item.id)}
+                      />
+                    ))}
+                  </View>
+
+                  <View style={styles.creationSeparateur} />
+                  <Text style={styles.creationCompteTitre}>Compte administrateur</Text>
+                  <Text style={styles.creationCompteTexte}>
+                    Ce compte servira a gerer la boutique et a creer les vendeurs.
+                  </Text>
+
                   <ChampMaquette icone="utilisateurs" label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Fatoumata Traore" erreur={erreurs.nomAdmin} />
                   <ChampMaquette icone="reseau" label="Telephone" valeur={telephone} onChangeText={setTelephone} placeholder="76 00 00 00" clavier="phone-pad" />
                   <ChampMaquette icone="document" label="Identifiant" valeur={login} onChangeText={setLogin} placeholder="fatoumata" erreur={erreurs.login} />
                   <ChampMaquette icone="caisse" label="Mot de passe" valeur={motDePasseWeb} onChangeText={setMotDePasseWeb} placeholder="Minimum 6 caracteres" secret erreur={erreurs.motDePasseWeb} />
                   <ChampMaquette icone="caisse" label="Confirmez le mot de passe" valeur={motDePasseWebConfirme} onChangeText={setMotDePasseWebConfirme} placeholder="Minimum 6 caracteres" secret erreur={erreurs.motDePasseWebConfirme} />
-                  <View style={styles.infoCreation}>
+
+                  <View style={styles.creationBasSecurise}>
                     <Icone nom="coche" taille={24} couleur={couleurs.primaire} />
-                    <Text style={styles.infoCreationTexte}>Vous pourrez ajouter l'adresse, le logo et les vendeurs plus tard.</Text>
+                    <Text style={styles.creationBasTexte}>Vos donnees sont securisees et ne seront jamais partagees.</Text>
                   </View>
                   <Pressable style={[styles.boutonPrimaire, enCours && styles.boutonInactif]} onPress={suivant} disabled={enCours}>
                     <Text style={styles.boutonPrimaireTexte}>{enCours ? 'Creation...' : 'Continuer'}</Text>
@@ -508,6 +568,55 @@ function MiniFonction({ icone, titre, sousTitre, fond, couleur }: {
   );
 }
 
+function EtapesCreation() {
+  return (
+    <View style={styles.etapes}>
+      <View style={styles.etapeItem}>
+        <View style={[styles.etapeCercle, styles.etapeCercleActive]}>
+          <Text style={[styles.etapeNumero, styles.etapeNumeroActive]}>1</Text>
+        </View>
+        <Text style={[styles.etapeTexte, styles.etapeTexteActive]}>Informations</Text>
+      </View>
+      <View style={styles.etapeTrait} />
+      <View style={styles.etapeItem}>
+        <View style={styles.etapeCercle}>
+          <Text style={styles.etapeNumero}>2</Text>
+        </View>
+        <Text style={styles.etapeTexte}>Compte</Text>
+      </View>
+      <View style={styles.etapeTrait} />
+      <View style={styles.etapeItem}>
+        <View style={styles.etapeCercle}>
+          <Text style={styles.etapeNumero}>3</Text>
+        </View>
+        <Text style={styles.etapeTexte}>C'est parti !</Text>
+      </View>
+    </View>
+  );
+}
+
+function CarteCommerce({
+  actif,
+  icone,
+  titre,
+  onPress,
+}: {
+  actif: boolean;
+  icone: Parameters<typeof Icone>[0]['nom'];
+  titre: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.commerceCarte, actif && styles.commerceCarteActive]}
+    >
+      <Icone nom={icone} taille={27} couleur={actif ? couleurs.primaire : couleurs.texte} />
+      <Text style={[styles.commerceTitre, actif && styles.commerceTitreActive]}>{titre}</Text>
+    </Pressable>
+  );
+}
+
 function BandeauErreur({ message }: { message: string }) {
   return (
     <View style={styles.bandeauErreur}>
@@ -562,6 +671,79 @@ const styles = StyleSheet.create({
   formTitre: { marginTop: 14, fontSize: 38, lineHeight: 44, textAlign: 'center', fontWeight: '900', color: couleurs.texte },
   formSousTitre: { marginTop: 8, marginBottom: 28, textAlign: 'center', fontSize: 20, lineHeight: 27, color: '#60708e', fontWeight: '500' },
   formBloc: { paddingBottom: 20 },
+  creationCarte: {
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(190,210,236,0.9)',
+    backgroundColor: 'rgba(255,255,255,0.96)',
+    padding: 20,
+    shadowColor: '#0c2857',
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 4,
+  },
+  etapes: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    marginBottom: 28,
+  },
+  etapeItem: { width: 82, alignItems: 'center' },
+  etapeCercle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: '#b7cef0',
+    backgroundColor: couleurs.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  etapeCercleActive: { backgroundColor: couleurs.primaire, borderColor: couleurs.primaire },
+  etapeNumero: { fontSize: 15, fontWeight: '900', color: '#5e7294' },
+  etapeNumeroActive: { color: '#fff' },
+  etapeTexte: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#60708e',
+    textAlign: 'center',
+  },
+  etapeTexteActive: { color: couleurs.texte },
+  etapeTrait: {
+    flex: 1,
+    height: 2,
+    marginTop: 16,
+    backgroundColor: '#dbe8fb',
+    minWidth: 24,
+  },
+  creationTitre: {
+    fontSize: 26,
+    lineHeight: 32,
+    fontWeight: '900',
+    color: couleurs.texte,
+  },
+  creationSousTitre: {
+    marginTop: 8,
+    marginBottom: 22,
+    fontSize: 16,
+    lineHeight: 23,
+    color: '#60708e',
+    fontWeight: '500',
+  },
+  exempleChamp: {
+    marginTop: -10,
+    marginBottom: 14,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#5d73a0',
+  },
+  ligneDeuxColonnes: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  colonneChamp: { flex: 1 },
   champBloc: { marginBottom: 16 },
   champMaquette: { minHeight: 82, borderRadius: 16, borderWidth: 1, borderColor: couleurs.bordure, backgroundColor: couleurs.surface, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 16 },
   champErreur: { borderColor: couleurs.danger, borderWidth: 2 },
@@ -588,8 +770,76 @@ const styles = StyleSheet.create({
   securiteTexte: { marginTop: 4, fontSize: 14, lineHeight: 20, color: '#60708e' },
   creerBas: { marginTop: 26, textAlign: 'center', fontSize: 16, color: '#60708e' },
   creerBasLien: { color: couleurs.primaire, fontWeight: '900' },
-  infoCreation: { marginBottom: 4, borderRadius: 14, padding: 14, backgroundColor: '#eaf5ff', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  infoCreation: { marginBottom: 18, borderRadius: 14, padding: 14, backgroundColor: '#eaf5ff', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  infoPastille: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: couleurs.primaire,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoPastilleTexte: { color: '#fff', fontSize: 15, fontWeight: '900' },
   infoCreationTexte: { flex: 1, fontSize: 14, lineHeight: 19, color: '#31517c', fontWeight: '600' },
+  commerceLabel: {
+    marginBottom: 12,
+    fontSize: 15,
+    fontWeight: '900',
+    color: couleurs.texte,
+  },
+  commerceFacultatif: { color: '#60708e', fontWeight: '700' },
+  commerceGrille: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 20,
+  },
+  commerceCarte: {
+    width: '48%',
+    minHeight: 82,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  commerceCarteActive: {
+    borderColor: couleurs.primaire,
+    borderWidth: 2,
+    backgroundColor: '#f7fbff',
+  },
+  commerceTitre: { fontSize: 14, fontWeight: '800', color: couleurs.texte },
+  commerceTitreActive: { color: couleurs.primaire },
+  creationSeparateur: {
+    height: 1,
+    backgroundColor: '#e2eaf5',
+    marginBottom: 18,
+  },
+  creationCompteTitre: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '900',
+    color: couleurs.texte,
+  },
+  creationCompteTexte: {
+    marginTop: 4,
+    marginBottom: 18,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#60708e',
+  },
+  creationBasSecurise: {
+    marginTop: 4,
+    borderRadius: 14,
+    padding: 14,
+    backgroundColor: '#f1f7ff',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  creationBasTexte: { flex: 1, color: '#405273', fontSize: 13, lineHeight: 18, fontWeight: '700' },
   carteCode: { marginTop: 16 },
   boutiqueConnectee: { padding: espaces.m, borderRadius: rayons.m, backgroundColor: couleurs.succesDouce, marginBottom: espaces.l },
   boutiqueLibelle: { color: couleurs.texteFaible, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
