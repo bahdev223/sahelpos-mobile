@@ -6,7 +6,7 @@
  * personne.
  */
 import { useCallback, useState } from 'react';
-import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect } from 'expo-router';
 
@@ -40,6 +40,12 @@ const LIBELLE_ROLE: Record<Role, string> = {
   vendeur: 'Vendeur',
 };
 
+const HEURES_CAISSE = Array.from({ length: 48 }, (_, index) => {
+  const heure = Math.floor(index / 2);
+  const minute = index % 2 === 0 ? '00' : '30';
+  return `${String(heure).padStart(2, '0')}:${minute}`;
+});
+
 export default function EcranUtilisateurs() {
   const [utilisateurs, setUtilisateurs] = useState<Utilisateur[]>([]);
   const [chargement, setChargement] = useState(true);
@@ -52,7 +58,10 @@ export default function EcranUtilisateurs() {
   const [role, setRole] = useState<Role>('vendeur');
   const [caisseOuvreA, setCaisseOuvreA] = useState('');
   const [caisseFermeA, setCaisseFermeA] = useState('');
+  const [selecteur, setSelecteur] = useState<'role' | 'ouverture' | 'fermeture' | null>(null);
   const [enCours, setEnCours] = useState(false);
+
+  const roleChoisi = ROLES.find((r) => r.cle === role) ?? ROLES[2];
 
   const charger = useCallback(async () => {
     setErreur(null);
@@ -74,13 +83,15 @@ export default function EcranUtilisateurs() {
   const creer = useCallback(async () => {
     setEnCours(true);
     try {
-      if ((caisseOuvreA || caisseFermeA) && (!/^\d{2}:\d{2}$/.test(caisseOuvreA) || !/^\d{2}:\d{2}$/.test(caisseFermeA))) {
+      const ouverture = role === 'vendeur' ? caisseOuvreA : '';
+      const fermeture = role === 'vendeur' ? caisseFermeA : '';
+      if ((ouverture || fermeture) && (!/^\d{2}:\d{2}$/.test(ouverture) || !/^\d{2}:\d{2}$/.test(fermeture))) {
         throw new Error("Indiquez les deux horaires au format 08:00.");
       }
       await creerUtilisateur({
         login, nom, pin, role,
-        caisseOuvreA: caisseOuvreA || null,
-        caisseFermeA: caisseFermeA || null,
+        caisseOuvreA: ouverture || null,
+        caisseFermeA: fermeture || null,
       });
       setLogin('');
       setNom('');
@@ -88,6 +99,7 @@ export default function EcranUtilisateurs() {
       setRole('vendeur');
       setCaisseOuvreA('');
       setCaisseFermeA('');
+      setSelecteur(null);
       setOuvert(false);
       await charger();
     } catch (e) {
@@ -95,7 +107,7 @@ export default function EcranUtilisateurs() {
     } finally {
       setEnCours(false);
     }
-  }, [login, nom, pin, role, charger]);
+  }, [caisseFermeA, caisseOuvreA, login, nom, pin, role, charger]);
 
   const basculerActif = useCallback(
     async (u: Utilisateur) => {
@@ -184,10 +196,17 @@ export default function EcranUtilisateurs() {
           ))}
         </Carte>
 
-        <Bouton titre="Ajouter un compte" onPress={() => setOuvert(true)} grand />
+        <Bouton
+          titre="Ajouter un compte"
+          onPress={() => {
+            setSelecteur(null);
+            setOuvert(true);
+          }}
+          grand
+        />
       </ScrollView>
 
-      <Modal visible={ouvert} animationType="slide" transparent onRequestClose={() => setOuvert(false)}>
+      {ouvert ? (
         <View style={styles.voile}>
           <ScrollView contentContainerStyle={styles.feuille}>
             <Text style={styles.feuilleTitre}>Nouveau compte</Text>
@@ -203,38 +222,97 @@ export default function EcranUtilisateurs() {
             />
 
             <Text style={styles.sousTitre}>Role</Text>
-            {ROLES.map((r) => {
-              const actif = r.cle === role;
-              return (
-                <Pressable
-                  key={r.cle}
-                  onPress={() => setRole(r.cle)}
-                  style={[styles.choix, actif && styles.choixActif]}
-                >
-                  <View style={styles.choixTexte}>
-                    <Text style={[styles.choixTitre, actif && styles.choixTitreActif]}>
-                      {r.libelle}
-                    </Text>
-                    <Text style={styles.choixDetail}>{r.detail}</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
+            <Pressable
+              onPress={() => setSelecteur(selecteur === 'role' ? null : 'role')}
+              style={styles.selecteur}
+            >
+              <View style={styles.choixTexte}>
+                <Text style={styles.choixTitre}>{roleChoisi.libelle}</Text>
+                <Text style={styles.choixDetail}>{roleChoisi.detail}</Text>
+              </View>
+              <Text style={styles.chevron}>v</Text>
+            </Pressable>
+            {selecteur === 'role' ? (
+              <View style={styles.menu}>
+                {ROLES.map((r) => {
+                  const actif = r.cle === role;
+                  return (
+                    <Pressable
+                      key={r.cle}
+                      onPress={() => {
+                        setRole(r.cle);
+                        setSelecteur(null);
+                      }}
+                      style={[styles.option, actif && styles.optionActive]}
+                    >
+                      <Text style={[styles.optionTitre, actif && styles.optionTitreActive]}>
+                        {r.libelle}
+                      </Text>
+                      <Text style={styles.choixDetail}>{r.detail}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
 
             {role === 'vendeur' ? (
               <View style={styles.horaires}>
-                <Champ valeur={caisseOuvreA} onChangeText={setCaisseOuvreA} label="Caisse ouverte a" placeholder="08:00" />
-                <Champ valeur={caisseFermeA} onChangeText={setCaisseFermeA} label="Caisse ferme a" placeholder="18:00" />
+                <Pressable
+                  style={styles.champHoraire}
+                  onPress={() => setSelecteur(selecteur === 'ouverture' ? null : 'ouverture')}
+                >
+                  <Text style={styles.labelHoraire}>Caisse ouverte a</Text>
+                  <Text style={styles.valeurHoraire}>{caisseOuvreA || 'Choisir'}</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.champHoraire}
+                  onPress={() => setSelecteur(selecteur === 'fermeture' ? null : 'fermeture')}
+                >
+                  <Text style={styles.labelHoraire}>Caisse ferme a</Text>
+                  <Text style={styles.valeurHoraire}>{caisseFermeA || 'Choisir'}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {selecteur === 'ouverture' || selecteur === 'fermeture' ? (
+              <View style={styles.menuTemps}>
+                <ScrollView nestedScrollEnabled style={styles.menuTempsListe}>
+                  {HEURES_CAISSE.map((heure) => {
+                    const actif = heure === (selecteur === 'ouverture' ? caisseOuvreA : caisseFermeA);
+                    return (
+                      <Pressable
+                        key={heure}
+                        onPress={() => {
+                          if (selecteur === 'ouverture') setCaisseOuvreA(heure);
+                          if (selecteur === 'fermeture') setCaisseFermeA(heure);
+                          setSelecteur(null);
+                        }}
+                        style={[styles.optionTemps, actif && styles.optionActive]}
+                      >
+                        <Text style={[styles.optionTitre, actif && styles.optionTitreActive]}>
+                          {heure}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
               </View>
             ) : null}
 
             <View style={styles.feuilleActions}>
-              <Bouton titre="Annuler" onPress={() => setOuvert(false)} variante="secondaire" />
+              <Bouton
+                titre="Annuler"
+                onPress={() => {
+                  setSelecteur(null);
+                  setOuvert(false);
+                }}
+                variante="secondaire"
+              />
               <Bouton titre="Creer" onPress={() => void creer()} enCours={enCours} />
             </View>
           </ScrollView>
         </View>
-      </Modal>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -263,13 +341,22 @@ const styles = StyleSheet.create({
   actionDanger: { color: couleurs.danger },
   actionPrimaire: { color: couleurs.primaire },
 
-  voile: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  voile: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+  },
   feuille: {
     backgroundColor: couleurs.surface,
     borderTopLeftRadius: rayons.l,
     borderTopRightRadius: rayons.l,
     padding: espaces.l,
     gap: espaces.s,
+    maxHeight: '92%',
   },
   feuilleTitre: { fontSize: 18, fontWeight: '700', color: couleurs.texte },
   sousTitre: {
@@ -277,6 +364,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: couleurs.texteFaible,
     marginTop: espaces.s,
+  },
+  selecteur: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: espaces.m,
+    paddingVertical: espaces.s,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
   },
   choix: {
     minHeight: 56,
@@ -292,6 +390,48 @@ const styles = StyleSheet.create({
   choixTitre: { fontSize: 15, fontWeight: '600', color: couleurs.texte },
   choixTitreActif: { color: couleurs.primaire },
   choixDetail: { fontSize: 12, color: couleurs.texteFaible, marginTop: 2 },
+  chevron: { color: couleurs.texteFaible, fontSize: 14, fontWeight: '700' },
+  menu: {
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    overflow: 'hidden',
+  },
+  option: {
+    paddingHorizontal: espaces.m,
+    paddingVertical: espaces.s,
+    borderBottomWidth: 1,
+    borderBottomColor: couleurs.bordure,
+  },
+  optionActive: { backgroundColor: couleurs.primaireDouce },
+  optionTitre: { color: couleurs.texte, fontSize: 14, fontWeight: '600' },
+  optionTitreActive: { color: couleurs.primaire },
   horaires: { flexDirection: 'row', gap: espaces.s },
+  champHoraire: {
+    flex: 1,
+    minHeight: 58,
+    justifyContent: 'center',
+    paddingHorizontal: espaces.m,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  labelHoraire: { color: couleurs.texteFaible, fontSize: 12, fontWeight: '600' },
+  valeurHoraire: { color: couleurs.texte, fontSize: 16, fontWeight: '700', marginTop: 4 },
+  menuTemps: {
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    overflow: 'hidden',
+  },
+  menuTempsListe: { maxHeight: 180 },
+  optionTemps: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: espaces.m,
+    borderBottomWidth: 1,
+    borderBottomColor: couleurs.bordure,
+  },
   feuilleActions: { flexDirection: 'row', gap: espaces.s, marginTop: espaces.m },
 });
