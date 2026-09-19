@@ -25,7 +25,9 @@ import * as Partage from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
 
 import type { AchatResume, LigneAchat } from './achat';
+import type { VenteResume } from '../db/repositories/vente';
 import type { Fournisseur } from '../db/repositories/fournisseur';
+import type { LigneVente, ModePaiement, StatutVente } from '../domain/types';
 import type { Parametres } from './parametres';
 
 /**
@@ -73,6 +75,14 @@ function dateCourte(iso: string | null | undefined): string {
   const jj = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   return `${jj}/${mm}/${d.getFullYear()}`;
+}
+
+function dateHeure(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const deux = (n: number) => String(n).padStart(2, '0');
+  return `${deux(d.getDate())}/${deux(d.getMonth() + 1)}/${d.getFullYear()} ${deux(d.getHours())}:${deux(d.getMinutes())}`;
 }
 
 /**
@@ -239,6 +249,87 @@ export function bonDeCommandeHtml(d: DonneesBonCommande): string {
     </div>
 
     ${piedHtml(d.parametres, `Commande ${d.achat.numero} - ${dateCourte(d.achat.dateAchat)}`)}`;
+
+  return page(corps);
+}
+
+// --- facture de vente ------------------------------------------------------
+
+export interface DonneesFactureVente {
+  vente: VenteResume;
+  lignes: LigneVente[];
+  parametres: Parametres;
+}
+
+const LIBELLE_STATUT_VENTE: Record<StatutVente, string> = {
+  payee: 'Payee',
+  partielle: 'Partiellement payee',
+  impayee: 'Impayee',
+  annulee: 'Annulee',
+};
+
+const LIBELLE_PAIEMENT_VENTE: Record<ModePaiement, string> = {
+  especes: 'Especes',
+  mobile_money: 'Mobile Money',
+  credit: 'Credit',
+};
+
+/** Facture client A4, partageable par WhatsApp ou imprimable depuis Android. */
+export function factureVenteHtml(d: DonneesFactureVente): string {
+  const devise = d.parametres.devise;
+  const reste = Math.max(0, d.vente.total - d.vente.montantPaye);
+
+  const rangs = d.lignes.length
+    ? d.lignes
+        .map(
+          (l, i) => `<tr>
+            <td class="num">${i + 1}</td>
+            <td>${echapper(l.libelle)}</td>
+            <td>${echapper(l.unite)}</td>
+            <td class="num">${quantite(l.quantite)}</td>
+            <td class="num">${montant(l.prixUnitaire, devise)}</td>
+            <td class="num">${montant(l.total, devise)}</td>
+          </tr>`,
+        )
+        .join('')
+    : `<tr><td colspan="6" class="vide">Aucun article sur cette vente.</td></tr>`;
+
+  const corps = `
+    ${enteteHtml(d.parametres, 'FACTURE DE VENTE', d.vente.numero)}
+
+    <div class="blocs">
+      <div class="bloc">
+        <p class="bloc-titre">Client</p>
+        <p class="bloc-nom">${echapper(d.vente.clientNom || 'Client comptoir')}</p>
+        <p class="bloc-ligne">Numero : ${echapper(d.vente.numero)}</p>
+      </div>
+      <div class="bloc">
+        <p class="bloc-titre">Vente</p>
+        <p class="bloc-ligne">Date : ${dateHeure(d.vente.dateVente)}</p>
+        <p class="bloc-ligne">Paiement : ${echapper(LIBELLE_PAIEMENT_VENTE[d.vente.modePaiement])}</p>
+        <p class="bloc-ligne">Statut : ${echapper(LIBELLE_STATUT_VENTE[d.vente.statut])}</p>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th class="num">N</th><th>Article</th><th>Unite</th>
+          <th class="num">Quantite</th><th class="num">Prix unitaire</th><th class="num">Total</th>
+        </tr>
+      </thead>
+      <tbody>${rangs}</tbody>
+    </table>
+
+    <table class="totaux">
+      <tr><td>Total facture</td><td class="num">${montant(d.vente.total, devise)}</td></tr>
+      <tr><td>Montant regle</td><td class="num">${montant(d.vente.montantPaye, devise)}</td></tr>
+      <tr class="total-fort"><td>Reste a payer</td><td class="num">${montant(reste, devise)}</td></tr>
+    </table>
+
+    ${d.parametres.recuPiedDePage ? `<div class="note">${echapper(d.parametres.recuPiedDePage)}</div>` : ''}
+
+    ${piedHtml(d.parametres, `Facture ${d.vente.numero} - ${dateCourte(d.vente.dateVente)}`)}`;
 
   return page(corps);
 }

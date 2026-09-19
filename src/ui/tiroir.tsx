@@ -67,6 +67,12 @@ const GROUPES: Groupe[] = [
         icone: 'ventes',
       },
       {
+        titre: 'Factures',
+        description: 'PDF, recu et partage',
+        chemin: '/factures',
+        icone: 'document',
+      },
+      {
         titre: 'Tableau de bord',
         description: 'Chiffre d affaires et benefice',
         chemin: '/tableau-de-bord',

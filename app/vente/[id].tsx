@@ -35,6 +35,8 @@ import type { LigneVente, StatutVente } from '../../src/domain/types';
 import { construireRecu } from '../../src/services/impression/recu';
 import { serviceImpression } from '../../src/services/impression/imprimante';
 import { enteteRecu, lireParametres } from '../../src/services/parametres';
+import { preparerDocumentVente } from '../../src/services/document-vente';
+import { ActionsDocument } from '../../src/ui/ActionsDocument';
 
 const LIBELLE_STATUT: Record<StatutVente, string> = {
   payee: 'Payee',
@@ -277,6 +279,10 @@ export default function EcranDetailVente() {
             />
           </Carte>
         ) : null}
+
+        <Carte titre="Facture client">
+          <ActionsDocument preparer={() => preparerDocumentVente(vente.id)} />
+        </Carte>
 
         <View style={styles.actions}>
           <Bouton titre="Reimprimer le recu" onPress={() => void reimprimer()} variante="secondaire" />

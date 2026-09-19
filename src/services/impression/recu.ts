@@ -13,6 +13,7 @@ export interface EnteteBoutique {
   adresse?: string;
   telephone?: string;
   piedDePage?: string;
+  logo?: string;
 }
 
 const LIBELLE_PAIEMENT: Record<string, string> = {
