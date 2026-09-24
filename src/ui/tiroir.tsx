@@ -357,7 +357,7 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
           </Pressable>
         ) : null}
 
-        <Text style={st.pied}>SahelPOS Mobile</Text>
+        <Text style={st.pied}>Néré Mobile</Text>
       </ScrollView>
     </View>
   );

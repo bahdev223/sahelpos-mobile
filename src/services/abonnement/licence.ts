@@ -146,7 +146,7 @@ export function lireDroit(licence: string): Droit {
 
   if (!nacl.sign.detached.verify(corps, signature, cle)) {
     throw new LicenceInvalide(
-      "Ce droit d acces n a pas ete emis par SahelPOS. Ressaisissez votre code d activation.",
+      "Ce droit d acces n a pas ete emis par Néré. Ressaisissez votre code d activation.",
     );
   }
 
@@ -159,7 +159,7 @@ export function lireDroit(licence: string): Droit {
 
   if (brut.version !== VERSION_ATTENDUE) {
     throw new LicenceInvalide(
-      "Ce droit vient d une version plus recente de SahelPOS. Mettez l application a jour.",
+      "Ce droit vient d une version plus recente de Néré. Mettez l application a jour.",
     );
   }
 

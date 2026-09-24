@@ -66,7 +66,7 @@ export function decoderInvitation(contenu: string): InvitationBoutique {
   const morceaux = contenu.trim().split('|');
   if (morceaux[0] !== MARQUEUR) {
     throw new InvitationIllisible(
-      "Ce QR code n'est pas celui de SahelPOS. Demandez au patron d'afficher " +
+      "Ce QR code n'est pas celui de Néré. Demandez au patron d'afficher " +
         "l'ecran Partager la boutique.",
     );
   }

@@ -218,13 +218,13 @@ function messageErreurHttp(statut: number, corps: unknown): string {
   }
 
   if (statut === 404) {
-    return "Le serveur SahelPOS n'est pas encore a jour pour l'application mobile.";
+    return "Le serveur Néré n'est pas encore a jour pour l'application mobile.";
   }
   if (statut === 401 || statut === 403) {
     return "Identifiant ou mot de passe incorrect.";
   }
   if (statut >= 500) {
-    return 'Le serveur SahelPOS a rencontre une erreur. Reessayez plus tard.';
+    return 'Le serveur Néré a rencontre une erreur. Reessayez plus tard.';
   }
   return `Le serveur a refuse la demande (${statut}).`;
 }
@@ -436,7 +436,7 @@ export async function exigerEcriture(): Promise<void> {
     throw new EcritureFermee(
       etat.message ||
         "Cette application n'est pas encore activee. Ouvrez « Mon abonnement » " +
-          'dans le menu et saisissez le code recu de SahelPOS.',
+          'dans le menu et saisissez le code recu de Néré.',
     );
   }
 
@@ -450,6 +450,6 @@ export async function exigerEcriture(): Promise<void> {
   throw new EcritureFermee(
     etat.message ||
       "Votre abonnement ne permet plus d enregistrer d operations. " +
-        'Contactez SahelPOS.',
+        'Contactez Néré.',
   );
 }

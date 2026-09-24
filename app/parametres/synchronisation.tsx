@@ -45,7 +45,7 @@ export default function EcranSynchronisation() {
               ? 'Les opérations restent enregistrées sur ce téléphone et seront renvoyées dès la prochaine réussite.'
               : enAttente
                 ? 'Les données restent locales et seront envoyées dès que le serveur sera joignable.'
-                : 'Les écritures restent utilisables sans Internet et sont rapprochées avec SahelPOS Web.'}
+                : 'Les écritures restent utilisables sans Internet et sont rapprochées avec Néré Web.'}
           </Text>
         </View>
       </View>

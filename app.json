@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "SahelPOS",
+    "name": "Néré",
     "slug": "sahelpos-mobile",
     "version": "1.2.3",
     "orientation": "portrait",
@@ -46,7 +46,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "SahelPOS utilise l'appareil photo pour scanner les codes-barres des produits et le QR code de partage de la boutique."
+          "cameraPermission": "Néré utilise l'appareil photo pour scanner les codes-barres des produits et le QR code de partage de la boutique."
         }
       ],
       [

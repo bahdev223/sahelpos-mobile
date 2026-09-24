@@ -199,7 +199,7 @@ export function EcranConnexion() {
     setRefus(null);
     try {
       const resultat = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Ouvrir SahelPOS',
+        promptMessage: 'Ouvrir Néré',
         cancelLabel: 'Annuler',
         fallbackLabel: 'Utiliser le code',
         disableDeviceFallback: false,

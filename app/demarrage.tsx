@@ -91,8 +91,8 @@ export function EcranDemarrage() {
   const sousTitreEtape = useMemo(() => {
     if (etape === 0) {
       return mode === 'connexion'
-        ? 'Accedez a votre espace SahelPOS'
-        : 'Configurez votre espace SahelPOS';
+        ? 'Accedez a votre espace Néré'
+        : 'Configurez votre espace Néré';
     }
     return 'Protegez la caisse sur ce telephone.';
   }, [etape, mode]);
@@ -473,7 +473,7 @@ export function EcranDemarrage() {
               <View style={styles.boutiqueConnectee}>
                 <Text style={styles.boutiqueLibelle}>Boutique connectee</Text>
                 <Text style={styles.boutiqueNom}>{droit?.nom || 'Boutique'}</Text>
-                <Text style={styles.boutiqueDetail}>Plan {droit?.plan || '-'} recu depuis SahelPOS Web.</Text>
+                <Text style={styles.boutiqueDetail}>Plan {droit?.plan || '-'} recu depuis Néré Web.</Text>
               </View>
               <Champ label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Aminata Diarra" autoFocus />
               <Champ label="Identifiant local" valeur={login} onChangeText={setLogin} placeholder="aminata" erreur={erreurs.login} />
