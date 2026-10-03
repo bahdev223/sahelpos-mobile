@@ -22,6 +22,7 @@ import {
 import type { Produit } from '../../../src/domain/types';
 import { BandeauEtat, Bouton, couleurs, espaces, rayons } from '../../../src/ui/components';
 import { Icone } from '../../../src/ui/icones';
+import { HABILLEMENT_MOBILE_THEME as H } from '../../../src/profile-ui/habillement/theme';
 
 export default function GererVariantesHabillement() {
   const router = useRouter();
@@ -123,14 +124,14 @@ export default function GererVariantesHabillement() {
       <BandeauEtat />
       <View style={s.entete}>
         <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Icone nom="retour" taille={23} couleur={couleurs.texte} />
+          <Icone nom="retour" taille={23} couleur={H.texte} />
         </Pressable>
         <View style={s.enteteTextes}>
           <Text style={s.titre}>Gérer les variantes</Text>
           <Text style={s.sousTitre}>{produit.nom}</Text>
         </View>
         <Pressable style={s.action} onPress={() => setAjoutOuvert((v) => !v)}>
-          <Icone nom={ajoutOuvert ? 'fermer' : 'plus'} taille={19} couleur={couleurs.primaire} />
+          <Icone nom={ajoutOuvert ? 'fermer' : 'plus'} taille={19} couleur={H.primaire} />
         </Pressable>
       </View>
 
@@ -230,68 +231,68 @@ export default function GererVariantesHabillement() {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: couleurs.fond },
+  page: { flex: 1, backgroundColor: H.fond },
   entete: {
     flexDirection: 'row', alignItems: 'center', gap: espaces.m,
-    padding: espaces.m, backgroundColor: couleurs.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: couleurs.bordure,
+    padding: espaces.m, backgroundColor: H.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: H.bordure,
   },
   enteteTextes: { flex: 1 },
-  titre: { fontSize: 19, fontWeight: '900', color: couleurs.texte },
-  sousTitre: { marginTop: 2, fontSize: 11, color: couleurs.texteFaible },
+  titre: { fontSize: 19, fontWeight: '900', color: H.texte },
+  sousTitre: { marginTop: 2, fontSize: 11, color: H.texteFaible },
   action: {
     width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
-    borderRadius: rayons.m, borderWidth: 1, borderColor: couleurs.bordure,
+    borderRadius: rayons.m, borderWidth: 1, borderColor: H.bordure,
   },
   contenu: { padding: espaces.m, paddingBottom: espaces.xxl },
   blocAjout: {
-    padding: espaces.m, borderRadius: rayons.l, backgroundColor: couleurs.surface,
-    borderWidth: 1, borderColor: couleurs.bordure,
+    padding: espaces.m, borderRadius: rayons.l, backgroundColor: H.surface,
+    borderWidth: 1, borderColor: H.bordure,
   },
-  blocTitre: { fontSize: 15, fontWeight: '900', color: couleurs.texte },
-  blocSousTitre: { marginTop: 4, fontSize: 11, lineHeight: 17, color: couleurs.texteFaible },
+  blocTitre: { fontSize: 15, fontWeight: '900', color: H.texte },
+  blocSousTitre: { marginTop: 4, fontSize: 11, lineHeight: 17, color: H.texteFaible },
   dimensionBloc: { marginTop: espaces.l },
-  dimensionTitre: { fontSize: 13, fontWeight: '900', color: couleurs.texte },
+  dimensionTitre: { fontSize: 13, fontWeight: '900', color: H.texte },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: espaces.s, marginTop: espaces.s },
   option: {
     flexDirection: 'row', alignItems: 'center', gap: 7,
     paddingHorizontal: 11, paddingVertical: 8, borderRadius: 18,
-    borderWidth: 1, borderColor: couleurs.bordure, backgroundColor: couleurs.fond,
+    borderWidth: 1, borderColor: H.bordure, backgroundColor: H.fond,
   },
-  optionActive: { backgroundColor: couleurs.primaire, borderColor: couleurs.primaire },
-  optionTexte: { fontSize: 11, fontWeight: '800', color: couleurs.texte },
+  optionActive: { backgroundColor: H.primaire, borderColor: H.primaire },
+  optionTexte: { fontSize: 11, fontWeight: '800', color: H.texte },
   optionTexteActive: { color: '#fff' },
-  couleur: { width: 17, height: 17, borderRadius: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: couleurs.bordure },
+  couleur: { width: 17, height: 17, borderRadius: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: H.bordure },
   genererResume: {
     marginTop: espaces.l, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between', gap: espaces.m,
   },
-  genererTexte: { fontSize: 13, fontWeight: '900', color: couleurs.primaire },
+  genererTexte: { fontSize: 13, fontWeight: '900', color: H.primaire },
   sectionEntete: {
     marginTop: espaces.xl, marginBottom: espaces.s, flexDirection: 'row',
     alignItems: 'center', justifyContent: 'space-between',
   },
-  sectionTitre: { fontSize: 15, fontWeight: '900', color: couleurs.texte },
-  sectionCompteur: { fontSize: 12, fontWeight: '900', color: couleurs.primaire },
+  sectionTitre: { fontSize: 15, fontWeight: '900', color: H.texte },
+  sectionCompteur: { fontSize: 12, fontWeight: '900', color: H.primaire },
   variante: {
     flexDirection: 'row', alignItems: 'center', gap: espaces.m,
     padding: espaces.m, marginBottom: espaces.s, borderRadius: rayons.m,
-    backgroundColor: couleurs.surface, borderWidth: 1, borderColor: couleurs.bordure,
+    backgroundColor: H.surface, borderWidth: 1, borderColor: H.bordure,
   },
   varianteInactive: { opacity: 0.62 },
   varianteInfos: { flex: 1, minWidth: 0 },
   varianteNomLigne: { flexDirection: 'row', alignItems: 'center', gap: espaces.s },
-  varianteNom: { flex: 1, fontSize: 13, fontWeight: '900', color: couleurs.texte },
-  varianteMeta: { marginTop: 3, fontSize: 10, color: couleurs.texteFaible },
-  varianteEtat: { marginTop: 4, fontSize: 10, fontWeight: '800', color: couleurs.primaire },
+  varianteNom: { flex: 1, fontSize: 13, fontWeight: '900', color: H.texte },
+  varianteMeta: { marginTop: 3, fontSize: 10, color: H.texteFaible },
+  varianteEtat: { marginTop: 4, fontSize: 10, fontWeight: '800', color: H.primaire },
   boutonEtat: {
     paddingVertical: 8, paddingHorizontal: 10, borderRadius: rayons.s,
-    backgroundColor: couleurs.primaireDouce,
+    backgroundColor: H.primaireClair,
   },
   boutonEtatDanger: { backgroundColor: couleurs.dangerDouce },
-  boutonEtatTexte: { fontSize: 10, fontWeight: '900', color: couleurs.primaire },
+  boutonEtatTexte: { fontSize: 10, fontWeight: '900', color: H.primaire },
   boutonEtatTexteDanger: { color: couleurs.danger },
   vide: { padding: espaces.xl, alignItems: 'center' },
-  videTitre: { fontSize: 16, fontWeight: '900', color: couleurs.texte },
-  videTexte: { marginTop: 7, textAlign: 'center', color: couleurs.texteFaible },
+  videTitre: { fontSize: 16, fontWeight: '900', color: H.texte },
+  videTexte: { marginTop: 7, textAlign: 'center', color: H.texteFaible },
 });
