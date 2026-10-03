@@ -128,7 +128,7 @@ export function CatalogueHabillement() {
         <Pressable style={s.puce} onPress={() => router.push('/habillement/referentiel')}>
           <Text style={s.puceTexte}>Tailles & couleurs</Text>
         </Pressable>
-        <Pressable style={s.puce} onPress={() => router.push('/inventaire')}>
+        <Pressable style={s.puce} onPress={() => router.push('/habillement/inventaire')}>
           <Text style={s.puceTexte}>Inventaire variantes</Text>
         </Pressable>
         <Pressable style={s.puce} onPress={() => router.push('/achats')}>
