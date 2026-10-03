@@ -240,6 +240,9 @@ interface CommandeClientSync {
   date_confirmation?: string | null;
   date_prete?: string | null;
   date_fin?: string | null;
+  conversion_demandee?: boolean | number;
+  conversion_mode_paiement?: string | null;
+  conversion_montant_paye?: number | string | null;
   lignes: LigneCommandeClientSync[];
 }
 
@@ -587,7 +590,9 @@ async function lireCommandesClients(ids: string[]): Promise<CommandeClientSync[]
   const commandes = await lireTout<CommandeClientSync & { id: number }>(
     `SELECT c.id, c.id_local, c.serveur_id, c.numero,
             cl.id_local AS client_id_local, c.statut, c.total, c.montant_paye,
-            c.note, c.date_creation, c.date_confirmation, c.date_prete, c.date_fin
+            c.note, c.date_creation, c.date_confirmation, c.date_prete, c.date_fin,
+            c.conversion_demandee, c.conversion_mode_paiement,
+            c.conversion_montant_paye
        FROM commande_client c
        LEFT JOIN client cl ON cl.id = c.client_id
       WHERE c.id_local IN (${placeholders(ids)})`,
@@ -1395,7 +1400,11 @@ async function appliquerCommandeClient(c: CommandeClientSync): Promise<void> {
       `UPDATE commande_client
           SET id_local = ?, serveur_id = ?, numero = ?, client_id = ?, statut = ?,
               total = ?, montant_paye = ?, note = ?, date_creation = ?,
-              date_confirmation = ?, date_prete = ?, date_fin = ?, sync_statut = 'SYNCED'
+              date_confirmation = ?, date_prete = ?, date_fin = ?,
+              conversion_demandee = 0,
+              conversion_mode_paiement = NULL,
+              conversion_montant_paye = NULL,
+              sync_statut = 'SYNCED'
         WHERE id = ?`,
       c.id_local,
       c.serveur_id ?? null,
