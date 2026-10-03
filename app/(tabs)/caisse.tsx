@@ -814,45 +814,68 @@ function EnteteModale({ titre, onFermer }: { titre: string; onFermer: () => void
 
 function ModaleUnite({
   choix,
+  panier,
   devise,
-  dejaAuPanier,
   onAnnuler,
   onAjouter,
 }: {
   choix: ChoixProduit;
+  panier: ArticlePanier[];
   devise: string;
-  dejaAuPanier: number;
   onAnnuler: () => void;
-  onAjouter: (produit: Produit, unite: OptionUnite, quantite: number) => void;
+  onAjouter: (
+    produit: Produit,
+    unite: OptionUnite,
+    quantite: number,
+    variante?: VarianteMobile | null,
+  ) => void;
 }) {
+  const indexInitial = choix.varianteInitialeId
+    ? choix.variantes.findIndex((v) => v.id === choix.varianteInitialeId)
+    : -1;
+  const [indexVariante, setIndexVariante] = useState(indexInitial);
   const [indexUnite, setIndexUnite] = useState(0);
   const [quantiteTexte, setQuantiteTexte] = useState('1');
-  const [prixTexte, setPrixTexte] = useState(String(choix.unites[0]?.prix ?? ''));
 
+  const variante = indexVariante >= 0 ? choix.variantes[indexVariante] : null;
   const unite = choix.unites[indexUnite] ?? choix.unites[0];
+  const prixDefaut = variante?.prixOverride ?? unite?.prix ?? 0;
+  const [prixTexte, setPrixTexte] = useState(String(prixDefaut));
+
   const quantite = lireNombre(quantiteTexte);
   const prixUnitaire = lireNombre(prixTexte);
   const produit = choix.produit;
+  const exigeVariante = choix.variantes.length > 0;
 
-  const disponible = stockDansUnite(produit, unite.facteur);
+  const dejaAuPanier = panier
+    .filter((article) =>
+      article.produit.id === produit.id &&
+      (article.variante?.id ?? null) === (variante?.id ?? null))
+    .reduce((somme, article) => somme + article.quantite * article.facteur, 0);
+
+  const disponibleBase = variante ? variante.stockActuel : produit.quantiteBase;
+  const disponible = unite.facteur > 0 ? disponibleBase / unite.facteur : disponibleBase;
   const resteApresPanier = disponible - dejaAuPanier / unite.facteur;
 
   const ligne =
     quantite > 0
       ? calculerLigne({
           produit,
+          variante,
           unite: unite.nom,
           facteur: unite.facteur,
           quantite,
-          prixUnitaire: prixUnitaire,
+          prixUnitaire,
         })
       : null;
 
   let refus: string | null = null;
-  if (quantite <= 0) {
+  if (exigeVariante && !variante) {
+    refus = 'Choisissez la taille et la couleur avant d ajouter au panier.';
+  } else if (quantite <= 0) {
     refus = 'Indiquez une quantite superieure a zero.';
   } else if (prixUnitaire <= 0) {
-    refus = "Ce produit n'a pas de prix de vente pour cette unite.";
+    refus = "Ce modele n'a pas de prix de vente pour cette variante.";
   } else if (produit.gestionStock && quantite > resteApresPanier) {
     refus = `Stock insuffisant : ${formaterQuantite(
       Math.max(0, Math.round(resteApresPanier * 1000) / 1000),
@@ -869,6 +892,53 @@ function ModaleUnite({
             contentContainerStyle={styles.contenuFeuille}
             keyboardShouldPersistTaps="handled"
           >
+            {choix.variantes.length > 0 ? (
+              <View>
+                <Text style={styles.sousLabel}>Taille / couleur</Text>
+                <View style={styles.grilleVariantes}>
+                  {choix.variantes.map((option, index) => {
+                    const actif = index === indexVariante;
+                    const couleur = option.valeurs.find((v) => v.codeHex)?.codeHex ?? null;
+                    return (
+                      <Pressable
+                        key={option.idLocal}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: actif }}
+                        onPress={() => {
+                          setIndexVariante(index);
+                          const prix = option.prixOverride ??
+                            ((choix.unites[indexUnite] ?? choix.unites[0])?.prix ?? produit.prixUnitaire);
+                          setPrixTexte(String(prix));
+                        }}
+                        style={[
+                          styles.varianteChoix,
+                          actif && styles.varianteChoixActive,
+                          option.stockActuel <= 0 && styles.varianteChoixRupture,
+                        ]}
+                      >
+                        <View style={styles.varianteChoixHaut}>
+                          {couleur ? (
+                            <View style={[styles.pastilleCouleur, { backgroundColor: couleur }]} />
+                          ) : null}
+                          <Text
+                            style={[styles.varianteChoixNom, actif && styles.puceNomActive]}
+                            numberOfLines={2}
+                          >
+                            {libelleVariante(option)}
+                          </Text>
+                        </View>
+                        <Text style={[styles.varianteChoixStock, actif && styles.puceDetailActive]}>
+                          {option.stockActuel > 0
+                            ? `Stock ${formaterQuantite(option.stockActuel)}`
+                            : 'Rupture'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
             {choix.unites.length > 1 ? (
               <View>
                 <Text style={styles.sousLabel}>Unite de vente</Text>
@@ -882,7 +952,9 @@ function ModaleUnite({
                         accessibilityState={{ selected: actif }}
                         onPress={() => {
                           setIndexUnite(index);
-                          setPrixTexte(String(option.prix));
+                          const prix = variante?.prixOverride ??
+                            (option.prix > 0 ? option.prix : produit.prixUnitaire * option.facteur);
+                          setPrixTexte(String(prix));
                         }}
                         style={[styles.puce, actif && styles.puceActive]}
                       >
@@ -943,6 +1015,9 @@ function ModaleUnite({
             />
 
             <Carte style={styles.resume}>
+              {variante ? (
+                <LigneResume libelle="Variante" valeur={libelleVariante(variante)} />
+              ) : null}
               <LigneResume
                 libelle="Prix unitaire"
                 valeur={formaterMontant(prixUnitaire, devise)}
@@ -968,7 +1043,14 @@ function ModaleUnite({
           <View style={styles.piedFeuille}>
             <Bouton
               titre="Ajouter au panier"
-              onPress={() => onAjouter(produit, { ...unite, prix: prixUnitaire }, quantite)}
+              onPress={() =>
+                onAjouter(
+                  produit,
+                  { ...unite, prix: prixUnitaire },
+                  quantite,
+                  variante,
+                )
+              }
               desactive={refus !== null}
               grand
             />
@@ -1044,7 +1126,7 @@ function ModalePanier({
                 <View style={styles.lignePanier}>
                   <View style={styles.lignePanierHaut}>
                     <Text style={styles.lignePanierNom} numberOfLines={2}>
-                      {item.produit.nom}
+                      {calculerLigne(item).libelle}
                     </Text>
                     <Montant valeur={ligne.total} devise={devise} taille="moyen" />
                   </View>
@@ -1808,6 +1890,35 @@ const styles = StyleSheet.create({
   puceNomActive: { color: couleurs.texteInverse },
   puceDetail: { fontSize: 12, color: couleurs.texteFaible, marginTop: 2 },
   puceDetailActive: { color: couleurs.primaireDouce },
+
+  grilleVariantes: { flexDirection: 'row', flexWrap: 'wrap', gap: espaces.s },
+  varianteChoix: {
+    minWidth: '30%',
+    maxWidth: '48%',
+    minHeight: 64,
+    justifyContent: 'center',
+    paddingHorizontal: espaces.m,
+    paddingVertical: espaces.s,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  varianteChoixActive: {
+    backgroundColor: couleurs.primaire,
+    borderColor: couleurs.primaire,
+  },
+  varianteChoixRupture: { opacity: 0.55 },
+  varianteChoixHaut: { flexDirection: 'row', alignItems: 'center', gap: espaces.s },
+  varianteChoixNom: { flexShrink: 1, fontSize: 13, fontWeight: '800', color: couleurs.texte },
+  varianteChoixStock: { marginTop: 4, fontSize: 11, color: couleurs.texteFaible },
+  pastilleCouleur: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: couleurs.bordure,
+  },
 
   compteur: { flexDirection: 'row', alignItems: 'flex-start', gap: espaces.m },
   champQuantite: { flex: 1, marginBottom: 0 },
