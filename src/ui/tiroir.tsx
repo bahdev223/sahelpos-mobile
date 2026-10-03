@@ -341,7 +341,9 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
               return { ...entree, titre: profilUI.libelles.achats };
             }
             if (entree.chemin === '/inventaire') {
-              return { ...entree, titre: profilUI.libelles.inventaire };
+              return infos.secteur === 'HABILLEMENT'
+                ? { ...entree, titre: 'Inventaire variantes', chemin: '/habillement/inventaire', description: 'Comptage tailles et couleurs' }
+                : { ...entree, titre: profilUI.libelles.inventaire };
             }
             return entree;
           });
