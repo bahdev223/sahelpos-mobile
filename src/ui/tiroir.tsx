@@ -384,6 +384,12 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
             }
           }
           if (infos.secteur === 'HABILLEMENT' && groupe.titre === 'Activite') {
+            entrees.splice(1, 0, {
+              titre: 'Commandes clients',
+              description: 'Réserver et préparer les vêtements',
+              chemin: '/habillement/commandes',
+              icone: 'achats',
+            });
             entrees.push({
               titre: 'Rapports Mode',
               description: 'Ventes, modèles et variantes',
