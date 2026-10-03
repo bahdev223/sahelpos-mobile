@@ -439,7 +439,7 @@ export const MIGRATIONS: string[][] = [
       id                         INTEGER PRIMARY KEY AUTOINCREMENT,
       id_local                   TEXT NOT NULL UNIQUE,
       vente_id                   INTEGER NOT NULL REFERENCES vente(id) ON DELETE CASCADE,
-      ligne_vente_id             INTEGER NOT NULL REFERENCES ligne_vente(id) ON DELETE CASCADE,
+      ligne_vente_id             INTEGER REFERENCES ligne_vente(id) ON DELETE SET NULL,
       ligne_serveur_id           INTEGER NOT NULL,
       ancienne_variante_id       INTEGER REFERENCES variante_produit(id),
       nouvelle_variante_id       INTEGER NOT NULL REFERENCES variante_produit(id),
