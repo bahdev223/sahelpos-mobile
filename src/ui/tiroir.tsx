@@ -332,9 +332,8 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
       </View>
 
       <ScrollView contentContainerStyle={st.liste}>
-        {GROUPES.map((groupe) => ({
-          ...groupe,
-          entrees: groupe.entrees.map((entree) => {
+        {GROUPES.map((groupe) => {
+          const entrees = groupe.entrees.map((entree) => {
             if (entree.chemin === '/categories') {
               return { ...entree, titre: profilUI.libelles.categories };
             }
@@ -345,8 +344,17 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
               return { ...entree, titre: profilUI.libelles.inventaire };
             }
             return entree;
-          }),
-        })).map((groupe) => (
+          });
+          if (infos.secteur === 'HABILLEMENT' && groupe.titre === 'Gestion') {
+            entrees.splice(1, 0, {
+              titre: 'Tailles & couleurs',
+              description: 'Variantes, tailles et couleurs',
+              chemin: '/habillement/referentiel',
+              icone: 'etiquette',
+            });
+          }
+          return { ...groupe, entrees };
+        }).map((groupe) => (
           <View key={groupe.titre} style={st.groupe}>
             <Text style={st.groupeTitre}>{groupe.titre.toUpperCase()}</Text>
             {groupe.entrees.map((entree) => (
