@@ -38,6 +38,13 @@ import type { BarcodeScanningResult } from 'expo-camera';
 import { useFocusEffect } from 'expo-router';
 
 import { obtenirBase } from '../../src/db/database';
+import { obtenirProduit } from '../../src/db/repositories/produit';
+import {
+  libelleVariante,
+  listerVariantesProduit,
+  trouverVarianteParCodeBarre,
+  type VarianteMobile,
+} from '../../src/db/repositories/variante';
 import { seuilAlerteStock } from '../../src/domain/stock';
 import type {
   Client,
@@ -232,6 +239,8 @@ function quantiteBaseAuPanier(panier: ArticlePanier[], produitId: number): numbe
 interface ChoixProduit {
   produit: Produit;
   unites: OptionUnite[];
+  variantes: VarianteMobile[];
+  varianteInitialeId?: number | null;
 }
 
 interface VenteTerminee {
@@ -252,7 +261,7 @@ interface VenteTerminee {
 type EtatListe = 'chargement' | 'pret' | 'erreur';
 
 export default function EcranCaisse() {
-  const { boutique, utilisateur, revisionSynchronisation } = useSession();
+  const { boutique, utilisateur, revisionSynchronisation, profilCommerce } = useSession();
 
   const [recherche, setRecherche] = useState('');
   const [categorie, setCategorie] = useState<string | null>(null);
@@ -334,23 +343,46 @@ export default function EcranCaisse() {
     }, [charger, revisionSynchronisation]),
   );
 
-  const ouvrirChoix = useCallback(async (produit: Produit) => {
+  const ouvrirChoix = useCallback(async (
+    produit: Produit,
+    varianteInitiale?: VarianteMobile | null,
+  ) => {
     let sousUnites: SousUnite[] = [];
+    let variantes: VarianteMobile[] = [];
     try {
       sousUnites = await chargerSousUnites(produit.id);
     } catch {
-      // Sans ses sous-unites le produit reste vendable a l'unite de base. Une
-      // caisse amputee vaut mieux qu'un article sur lequel toucher ne fait rien.
+      // Sans ses sous-unites le produit reste vendable a l'unite de base.
       sousUnites = [];
     }
-    setChoix({ produit, unites: optionsUnites(produit, sousUnites) });
-  }, []);
+    if (profilCommerce?.secteur === 'HABILLEMENT') {
+      try {
+        variantes = await listerVariantesProduit(produit.id);
+      } catch {
+        variantes = [];
+      }
+    }
+    setChoix({
+      produit,
+      unites: optionsUnites(produit, sousUnites),
+      variantes,
+      varianteInitialeId: varianteInitiale?.id ?? null,
+    });
+  }, [profilCommerce?.secteur]);
 
   const ajouterAuPanier = useCallback(
-    (produit: Produit, unite: OptionUnite, quantite: number) => {
+    (
+      produit: Produit,
+      unite: OptionUnite,
+      quantite: number,
+      variante?: VarianteMobile | null,
+    ) => {
       setPanier((actuel) => {
         const index = actuel.findIndex(
-          (article) => article.produit.id === produit.id && article.unite === unite.nom,
+          (article) =>
+            article.produit.id === produit.id &&
+            article.unite === unite.nom &&
+            (article.variante?.id ?? null) === (variante?.id ?? null),
         );
         if (index >= 0) {
           const copie = [...actuel];
@@ -364,6 +396,7 @@ export default function EcranCaisse() {
           ...actuel,
           {
             produit,
+            variante: variante ?? null,
             unite: unite.nom,
             facteur: unite.facteur,
             quantite,
@@ -421,13 +454,23 @@ export default function EcranCaisse() {
 
   const surCodeScanne = useCallback(
     async (code: string): Promise<string | null> => {
+      if (profilCommerce?.secteur === 'HABILLEMENT') {
+        const variante = await trouverVarianteParCodeBarre(code);
+        if (variante) {
+          const produit = await obtenirProduit(variante.produitId);
+          if (!produit) return `Le modèle de la variante ${code} est introuvable.`;
+          setScanOuvert(false);
+          await ouvrirChoix(produit, variante);
+          return null;
+        }
+      }
       const produit = await produitParCode(code);
       if (!produit) return `Aucun produit ne porte le code ${code}.`;
       setScanOuvert(false);
       await ouvrirChoix(produit);
       return null;
     },
-    [ouvrirChoix],
+    [ouvrirChoix, profilCommerce?.secteur],
   );
 
   const surVenteEnregistree = useCallback(
@@ -549,8 +592,8 @@ export default function EcranCaisse() {
       {choix ? (
         <ModaleUnite
           choix={choix}
+          panier={panier}
           devise={boutique.devise}
-          dejaAuPanier={quantiteBaseAuPanier(panier, choix.produit.id)}
           onAnnuler={() => setChoix(null)}
           onAjouter={ajouterAuPanier}
         />
