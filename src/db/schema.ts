@@ -400,5 +400,12 @@ export const MIGRATIONS: string[][] = [
     `CREATE INDEX IF NOT EXISTS idx_variante_valeur_dimension ON variante_valeur(dimension_code, valeur_code)`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_valeur_unique
        ON variante_valeur(variante_id, dimension_code)`,
+
+    `ALTER TABLE ligne_vente ADD COLUMN variante_id INTEGER REFERENCES variante_produit(id)`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_vente_variante ON ligne_vente(variante_id)`,
+    `ALTER TABLE mouvement_stock ADD COLUMN variante_id INTEGER REFERENCES variante_produit(id)`,
+    `CREATE INDEX IF NOT EXISTS idx_mouvement_variante ON mouvement_stock(variante_id)`,
+    `ALTER TABLE ligne_achat ADD COLUMN variante_id INTEGER REFERENCES variante_produit(id)`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_achat_variante ON ligne_achat(variante_id)`,
   ],
 ];
