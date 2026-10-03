@@ -66,6 +66,35 @@ interface ProduitSync {
   sous_unites?: Array<{ nom: string; facteur: number | string; prix: number | string }>;
 }
 
+interface ValeurVarianteSync {
+  id: number;
+  dimension: {
+    id: number;
+    code: string;
+    nom: string;
+    ordre: number;
+  };
+  code: string;
+  nom: string;
+  code_hex?: string | null;
+  ordre: number;
+}
+
+interface VarianteSync {
+  id_local: string;
+  produit_id_local: string;
+  sku: string;
+  code_barre?: string | null;
+  prix_override?: number | string | null;
+  prix_achat?: number | string | null;
+  stock_actuel: number | string;
+  actif: boolean | number;
+  date_creation?: string | null;
+  date_modification?: string | null;
+  supprime_le?: string | null;
+  valeurs: ValeurVarianteSync[];
+}
+
 interface ClientSync {
   id_local: string;
   nom: string;
@@ -197,6 +226,7 @@ interface PullSync {
   cursor: string;
   has_more?: boolean;
   produits: ProduitSync[];
+  variantes?: VarianteSync[];
   clients: ClientSync[];
   fournisseurs: FournisseurSync[];
   ventes: VenteSync[];
@@ -679,6 +709,10 @@ async function appliquerPull(pull: PullSync): Promise<number> {
       await appliquerProduit(produit);
       recus++;
     }
+    for (const variante of pull.variantes ?? []) {
+      await appliquerVariante(variante);
+      recus++;
+    }
     for (const client of pull.clients ?? []) {
       await appliquerClient(client);
       recus++;
@@ -801,6 +835,70 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
       su.nom,
       nombre(su.facteur, 1),
       nombre(su.prix),
+    );
+  }
+}
+
+async function appliquerVariante(v: VarianteSync): Promise<void> {
+  const produit = await lirePremier<{ id: number }>(
+    'SELECT id FROM produit WHERE id_local = ?',
+    v.produit_id_local,
+  );
+  // Le serveur ordonne produits avant variantes lors d'un bootstrap. Si une
+  // variante arrive seule avant son modele (ancien curseur), on la rejouera
+  // au prochain bootstrap complet au lieu de creer une ligne orpheline.
+  if (!produit) return;
+
+  await executer(
+    `INSERT INTO variante_produit
+       (id_local, produit_id, sku, code_barre, prix_override, prix_achat,
+        stock_actuel, actif, date_creation, date_modification)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id_local) DO UPDATE SET
+       produit_id = excluded.produit_id,
+       sku = excluded.sku,
+       code_barre = excluded.code_barre,
+       prix_override = excluded.prix_override,
+       prix_achat = excluded.prix_achat,
+       stock_actuel = excluded.stock_actuel,
+       actif = excluded.actif,
+       date_modification = excluded.date_modification`,
+    v.id_local,
+    produit.id,
+    v.sku,
+    v.code_barre ?? null,
+    v.prix_override == null ? null : nombre(v.prix_override),
+    v.prix_achat == null ? null : nombre(v.prix_achat),
+    nombre(v.stock_actuel),
+    v.supprime_le ? 0 : v.actif ? 1 : 0,
+    v.date_creation ?? maintenant(),
+    v.date_modification ?? maintenant(),
+  );
+
+  const variante = await lirePremier<{ id: number }>(
+    'SELECT id FROM variante_produit WHERE id_local = ?',
+    v.id_local,
+  );
+  if (!variante) return;
+
+  await executer('DELETE FROM variante_valeur WHERE variante_id = ?', variante.id);
+  for (const valeur of v.valeurs ?? []) {
+    await executer(
+      `INSERT INTO variante_valeur
+       (variante_id, valeur_serveur_id, dimension_id, dimension_code,
+        dimension_nom, dimension_ordre, valeur_code, valeur_nom, code_hex,
+        valeur_ordre)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      variante.id,
+      valeur.id,
+      valeur.dimension.id,
+      valeur.dimension.code,
+      valeur.dimension.nom,
+      valeur.dimension.ordre,
+      valeur.code,
+      valeur.nom,
+      valeur.code_hex ?? null,
+      valeur.ordre,
     );
   }
 }
