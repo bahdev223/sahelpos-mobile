@@ -23,7 +23,7 @@ const CLE_CURSOR = 'sync.cursor';
 const CLE_BOUTIQUE = 'sync.boutique';
 const CLE_BOOTSTRAP = 'sync.bootstrap_effectue';
 const CLE_PROTOCOLE = 'sync.protocole';
-const VERSION_PROTOCOLE = '4';
+const VERSION_PROTOCOLE = '5';
 const CLE_DERNIERE_TENTATIVE = 'sync.derniere_tentative';
 const CLE_DERNIER_SUCCES = 'sync.dernier_succes';
 const CLE_DERNIERE_ERREUR = 'sync.derniere_erreur';
@@ -34,7 +34,7 @@ const CLE_DERNIER_NOMBRE_PULL = 'sync.dernier_nombre_pull';
 const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
 const TAILLE_IMAGE_SYNC_MAX = 4 * 1024 * 1024;
 
-type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
+type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'echange' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
 
 interface LigneOutbox {
   type_objet: TypeObjet;
@@ -117,6 +117,7 @@ interface FournisseurSync extends ClientSync {
 }
 
 interface LigneVenteSync {
+  ligne_serveur_id?: number | null;
   produit_id_local: string;
   variante_id_local?: string | null;
   libelle: string;
@@ -145,6 +146,16 @@ interface VenteSync {
   date_modification?: string | null;
   supprime_le?: string | null;
   lignes: LigneVenteSync[];
+}
+
+interface EchangeSync {
+  id_local: string;
+  vente_id_local: string;
+  ligne_serveur_id: number;
+  nouvelle_variante_id_local: string;
+  quantite: number | string;
+  note?: string | null;
+  date_echange?: string | null;
 }
 
 interface MouvementSync {
@@ -533,6 +544,7 @@ async function construirePayload(pending: LigneOutbox[]) {
     clients: await lireClients(ids('client')),
     fournisseurs: await lireFournisseurs(ids('fournisseur')),
     ventes: await lireVentes(ids('vente')),
+    echanges: await lireEchanges(ids('echange')),
     mouvements: await lireMouvements(ids('mouvement')),
     achats: await lireAchats(ids('achat')),
     utilisateurs: await lireUtilisateurs(ids('utilisateur')),
@@ -693,7 +705,8 @@ async function lireVentes(ids: string[]): Promise<VenteSync[]> {
   );
   for (const vente of ventes) {
     vente.lignes = await lireTout<LigneVenteSync>(
-      `SELECT p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
+      `SELECT l.ligne_serveur_id,
+              p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
               l.libelle, l.unite, l.facteur, l.quantite, l.quantite_base,
               l.prix_unitaire, l.cout_unitaire, l.total, l.benefice_total
          FROM ligne_vente l
@@ -704,6 +717,24 @@ async function lireVentes(ids: string[]): Promise<VenteSync[]> {
     );
   }
   return ventes;
+}
+
+async function lireEchanges(ids: string[]): Promise<EchangeSync[]> {
+  if (ids.length === 0) return [];
+  return lireTout<EchangeSync>(
+    `SELECT e.id_local,
+            v.id_local AS vente_id_local,
+            e.ligne_serveur_id,
+            nv.id_local AS nouvelle_variante_id_local,
+            e.quantite,
+            e.note,
+            e.date_echange
+       FROM echange_variante e
+       JOIN vente v ON v.id = e.vente_id
+       JOIN variante_produit nv ON nv.id = e.nouvelle_variante_id
+      WHERE e.id_local IN (${placeholders(ids)})`,
+    ...ids,
+  );
 }
 
 async function lireMouvements(ids: string[]): Promise<MouvementSync[]> {
@@ -1140,13 +1171,14 @@ async function appliquerVente(v: VenteSync): Promise<void> {
         )
       : null;
     await executer(
-      `INSERT INTO ligne_vente (vente_id, produit_id, variante_id, libelle, unite, facteur,
+      `INSERT INTO ligne_vente (vente_id, produit_id, variante_id, ligne_serveur_id, libelle, unite, facteur,
                                 quantite, quantite_base, prix_unitaire,
                                 cout_unitaire, total, benefice_total)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       venteId,
       produits.get(l.produit_id_local),
       variante?.id ?? null,
+      l.ligne_serveur_id ?? null,
       l.libelle,
       l.unite,
       nombre(l.facteur, 1),
