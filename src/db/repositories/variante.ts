@@ -290,7 +290,7 @@ export async function genererMatriceVariantesLocale(
 
       const idLocal = genererIdLocal();
       const suffixe = combinaison.map((v) => skuFragment(v.code || v.nom)).join('-');
-      const sku = `${skuFragment(produit.nom).slice(0, 8) || 'MODELE'}-${suffixe || index}`.slice(0, 60);
+      const sku = `${skuFragment(produit.nom).slice(0, 8) || 'MODELE'}-${produitId}-${suffixe || index}`.slice(0, 60);
       const insertion = await executer(
         `INSERT INTO variante_produit
          (id_local, produit_id, sku, code_barre, prix_override, prix_achat,
