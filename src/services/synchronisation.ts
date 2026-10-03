@@ -118,6 +118,7 @@ interface FournisseurSync extends ClientSync {
 
 interface LigneVenteSync {
   produit_id_local: string;
+  variante_id_local?: string | null;
   libelle: string;
   unite: string;
   facteur: number | string;
@@ -627,11 +628,12 @@ async function lireVentes(ids: string[]): Promise<VenteSync[]> {
   );
   for (const vente of ventes) {
     vente.lignes = await lireTout<LigneVenteSync>(
-      `SELECT p.id_local AS produit_id_local, l.libelle, l.unite, l.facteur,
-              l.quantite, l.quantite_base, l.prix_unitaire, l.cout_unitaire,
-              l.total, l.benefice_total
+      `SELECT p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
+              l.libelle, l.unite, l.facteur, l.quantite, l.quantite_base,
+              l.prix_unitaire, l.cout_unitaire, l.total, l.benefice_total
          FROM ligne_vente l
          JOIN produit p ON p.id = l.produit_id
+         LEFT JOIN variante_produit vp ON vp.id = l.variante_id
         WHERE l.vente_id = ?`,
       vente.id,
     );
@@ -1028,13 +1030,20 @@ async function appliquerVente(v: VenteSync): Promise<void> {
     await executer('DELETE FROM ligne_vente WHERE vente_id = ?', venteId);
   }
   for (const l of v.lignes ?? []) {
+    const variante = l.variante_id_local
+      ? await lirePremier<{ id: number }>(
+          'SELECT id FROM variante_produit WHERE id_local = ?',
+          l.variante_id_local,
+        )
+      : null;
     await executer(
-      `INSERT INTO ligne_vente (vente_id, produit_id, libelle, unite, facteur,
+      `INSERT INTO ligne_vente (vente_id, produit_id, variante_id, libelle, unite, facteur,
                                 quantite, quantite_base, prix_unitaire,
                                 cout_unitaire, total, benefice_total)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       venteId,
       produits.get(l.produit_id_local),
+      variante?.id ?? null,
       l.libelle,
       l.unite,
       nombre(l.facteur, 1),
