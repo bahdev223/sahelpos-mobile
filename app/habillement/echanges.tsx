@@ -26,6 +26,7 @@ import {
 import { useSession } from '../_layout';
 import { BandeauEtat, Bouton, couleurs, espaces, rayons } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
+import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
 
 function dateCourte(iso: string): string {
   const date = new Date(iso);
@@ -69,7 +70,7 @@ export default function EchangesHabillement() {
       <BandeauEtat />
       <View style={s.entete}>
         <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Icone nom="retour" taille={23} couleur={couleurs.texte} />
+          <Icone nom="retour" taille={23} couleur={H.texte} />
         </Pressable>
         <View style={s.enteteTextes}>
           <Text style={s.titre}>Échanges taille / couleur</Text>
@@ -78,13 +79,13 @@ export default function EchangesHabillement() {
       </View>
 
       <View style={s.recherche}>
-        <Icone nom="recherche" taille={18} couleur={couleurs.texteFaible} />
+        <Icone nom="recherche" taille={18} couleur={H.texteFaible} />
         <TextInput
           value={recherche}
           onChangeText={setRecherche}
           style={s.rechercheTexte}
           placeholder="Vente, modèle, taille ou couleur"
-          placeholderTextColor={couleurs.texteFaible}
+          placeholderTextColor={H.texteFaible}
         />
       </View>
 
@@ -109,7 +110,7 @@ export default function EchangesHabillement() {
               <Text style={s.prix}>
                 {Math.round(item.prixUnitaire).toLocaleString('fr-FR')} F
               </Text>
-              <Icone nom="chevron" taille={16} couleur={couleurs.texteFaible} />
+              <Icone nom="chevron" taille={16} couleur={H.texteFaible} />
             </View>
           </Pressable>
         )}
@@ -193,7 +194,7 @@ function ModaleEchange({
       <SafeAreaView style={s.page}>
         <View style={s.entete}>
           <Pressable onPress={onFermer} hitSlop={10}>
-            <Icone nom="retour" taille={23} couleur={couleurs.texte} />
+            <Icone nom="retour" taille={23} couleur={H.texte} />
           </Pressable>
           <View style={s.enteteTextes}>
             <Text style={s.titre}>Remplacer la variante</Text>
@@ -259,7 +260,7 @@ function ModaleEchange({
             onChangeText={setNote}
             multiline
             placeholder="Ex. client change L noir contre XL noir"
-            placeholderTextColor={couleurs.texteFaible}
+            placeholderTextColor={H.texteFaible}
             style={[s.champ, s.champNote]}
           />
         </ScrollView>
@@ -279,19 +280,19 @@ function ModaleEchange({
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: couleurs.fond },
+  page: { flex: 1, backgroundColor: H.fond },
   entete: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: espaces.m,
     padding: espaces.m,
-    backgroundColor: couleurs.surface,
+    backgroundColor: H.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: couleurs.bordure,
+    borderBottomColor: H.bordure,
   },
   enteteTextes: { flex: 1 },
-  titre: { fontSize: 19, fontWeight: '900', color: couleurs.texte },
-  sousTitre: { marginTop: 2, fontSize: 11, color: couleurs.texteFaible },
+  titre: { fontSize: 19, fontWeight: '900', color: H.texte },
+  sousTitre: { marginTop: 2, fontSize: 11, color: H.texteFaible },
   recherche: {
     minHeight: 46,
     margin: espaces.m,
@@ -301,36 +302,36 @@ const s = StyleSheet.create({
     paddingHorizontal: espaces.m,
     borderRadius: rayons.m,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
-    backgroundColor: couleurs.surface,
+    borderColor: H.bordure,
+    backgroundColor: H.surface,
   },
-  rechercheTexte: { flex: 1, color: couleurs.texte, fontSize: 13 },
+  rechercheTexte: { flex: 1, color: H.texte, fontSize: 13 },
   liste: { paddingHorizontal: espaces.m, paddingBottom: espaces.xxl, gap: espaces.s },
   carte: {
     padding: espaces.m,
     borderRadius: rayons.m,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
-    backgroundColor: couleurs.surface,
+    borderColor: H.bordure,
+    backgroundColor: H.surface,
   },
   carteHaut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  venteBadge: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 10, backgroundColor: couleurs.primaireDouce },
-  venteBadgeTexte: { fontSize: 10, fontWeight: '900', color: couleurs.primaire },
-  date: { fontSize: 10, color: couleurs.texteFaible },
-  modele: { marginTop: 10, fontSize: 14, fontWeight: '900', color: couleurs.texte },
-  variante: { marginTop: 3, fontSize: 12, fontWeight: '800', color: couleurs.primaire },
+  venteBadge: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 10, backgroundColor: H.primaireClair },
+  venteBadgeTexte: { fontSize: 10, fontWeight: '900', color: H.primaire },
+  date: { fontSize: 10, color: H.texteFaible },
+  modele: { marginTop: 10, fontSize: 14, fontWeight: '900', color: H.texte },
+  variante: { marginTop: 3, fontSize: 12, fontWeight: '800', color: H.primaire },
   carteBas: { marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: espaces.s },
-  quantite: { flex: 1, fontSize: 11, color: couleurs.texteFaible },
-  prix: { fontSize: 12, fontWeight: '900', color: couleurs.texte },
+  quantite: { flex: 1, fontSize: 11, color: H.texteFaible },
+  prix: { fontSize: 12, fontWeight: '900', color: H.texte },
   vide: { alignItems: 'center', padding: espaces.xl },
-  videTitre: { fontSize: 16, fontWeight: '900', color: couleurs.texte },
-  videTexte: { marginTop: 7, textAlign: 'center', lineHeight: 18, color: couleurs.texteFaible },
+  videTitre: { fontSize: 16, fontWeight: '900', color: H.texte },
+  videTexte: { marginTop: 7, textAlign: 'center', lineHeight: 18, color: H.texteFaible },
   modalContenu: { padding: espaces.m, paddingBottom: 120 },
-  resume: { padding: espaces.m, borderRadius: rayons.m, backgroundColor: couleurs.primaireDouce },
-  resumeLabel: { fontSize: 10, fontWeight: '700', color: couleurs.texteFaible },
-  resumeValeur: { marginTop: 4, fontSize: 17, fontWeight: '900', color: couleurs.texte },
-  resumeMeta: { marginTop: 4, fontSize: 10, color: couleurs.texteFaible },
-  sectionTitre: { marginTop: espaces.l, marginBottom: espaces.s, fontSize: 13, fontWeight: '900', color: couleurs.texte },
+  resume: { padding: espaces.m, borderRadius: rayons.m, backgroundColor: H.primaireClair },
+  resumeLabel: { fontSize: 10, fontWeight: '700', color: H.texteFaible },
+  resumeValeur: { marginTop: 4, fontSize: 17, fontWeight: '900', color: H.texte },
+  resumeMeta: { marginTop: 4, fontSize: 10, color: H.texteFaible },
+  sectionTitre: { marginTop: espaces.l, marginBottom: espaces.s, fontSize: 13, fontWeight: '900', color: H.texte },
   options: { gap: espaces.s },
   option: {
     flexDirection: 'row',
@@ -341,35 +342,35 @@ const s = StyleSheet.create({
     paddingVertical: espaces.s,
     borderRadius: rayons.m,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
-    backgroundColor: couleurs.surface,
+    borderColor: H.bordure,
+    backgroundColor: H.surface,
   },
-  optionActive: { backgroundColor: couleurs.primaire, borderColor: couleurs.primaire },
-  couleur: { width: 20, height: 20, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: couleurs.bordure },
+  optionActive: { backgroundColor: H.primaire, borderColor: H.primaire },
+  couleur: { width: 20, height: 20, borderRadius: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: H.bordure },
   optionTextes: { flex: 1 },
-  optionNom: { fontSize: 13, fontWeight: '900', color: couleurs.texte },
+  optionNom: { fontSize: 13, fontWeight: '900', color: H.texte },
   optionNomActive: { color: '#fff' },
-  optionStock: { marginTop: 2, fontSize: 10, color: couleurs.texteFaible },
+  optionStock: { marginTop: 2, fontSize: 10, color: H.texteFaible },
   optionStockActive: { color: '#dceaff' },
-  aucuneOption: { color: couleurs.texteFaible, fontSize: 12, fontStyle: 'italic' },
+  aucuneOption: { color: H.texteFaible, fontSize: 12, fontStyle: 'italic' },
   champ: {
     minHeight: 48,
     paddingHorizontal: espaces.m,
     borderRadius: rayons.m,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
-    backgroundColor: couleurs.surface,
-    color: couleurs.texte,
+    borderColor: H.bordure,
+    backgroundColor: H.surface,
+    color: H.texte,
     fontSize: 14,
   },
   champNote: { minHeight: 88, paddingTop: espaces.m, textAlignVertical: 'top' },
-  aide: { marginTop: 4, fontSize: 10, color: couleurs.texteFaible },
+  aide: { marginTop: 4, fontSize: 10, color: H.texteFaible },
   pied: {
     position: 'absolute',
     left: 0, right: 0, bottom: 0,
     padding: espaces.m,
-    backgroundColor: couleurs.surface,
+    backgroundColor: H.surface,
     borderTopWidth: 1,
-    borderTopColor: couleurs.bordure,
+    borderTopColor: H.bordure,
   },
 });
