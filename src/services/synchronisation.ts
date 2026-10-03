@@ -150,6 +150,7 @@ interface VenteSync {
 interface MouvementSync {
   id_local: string;
   produit_id_local: string;
+  variante_id_local?: string | null;
   nature: string;
   source: string;
   quantite: number | string;
@@ -707,12 +708,14 @@ async function lireVentes(ids: string[]): Promise<VenteSync[]> {
 async function lireMouvements(ids: string[]): Promise<MouvementSync[]> {
   if (ids.length === 0) return [];
   return lireTout(
-    `SELECT m.id_local, p.id_local AS produit_id_local, m.nature,
+    `SELECT m.id_local, p.id_local AS produit_id_local,
+            vp.id_local AS variante_id_local, m.nature,
             m.source_operation AS source, m.quantite, m.unite, m.quantite_base,
             m.stock_avant, m.stock_apres, m.prix_unitaire, m.reference, m.motif,
             m.utilisateur, m.date_mouvement, m.date_mouvement AS date_modification
        FROM mouvement_stock m
        JOIN produit p ON p.id = m.produit_id
+       LEFT JOIN variante_produit vp ON vp.id = m.variante_id
       WHERE m.id_local IN (${placeholders(ids)})`,
     ...ids,
   );
@@ -1169,26 +1172,40 @@ async function appliquerMouvement(m: MouvementSync): Promise<void> {
       `Le mouvement ${m.id_local} depend du produit absent ${m.produit_id_local}.`,
     );
   }
+  const variante = m.variante_id_local
+    ? await lirePremier<{ id: number }>(
+        'SELECT id FROM variante_produit WHERE id_local = ?',
+        m.variante_id_local,
+      )
+    : null;
+  if (m.variante_id_local && !variante) {
+    throw new SynchronisationImpossible(
+      `Le mouvement ${m.id_local} depend de la variante absente ${m.variante_id_local}.`,
+    );
+  }
+
   // La reference est celle de toute la vente ou de tout l'achat. Chaque ligne
   // possede son propre produit et sa propre transition de stock.
   if (m.reference) {
     const memeEvenement = await lirePremier<{ id: number }>(
       `SELECT id FROM mouvement_stock
         WHERE source_operation = ? AND reference = ? AND produit_id = ?
+          AND variante_id IS ?
           AND stock_avant IS ? AND stock_apres IS ? LIMIT 1`,
-      m.source, m.reference, produit.id,
+      m.source, m.reference, produit.id, variante?.id ?? null,
       nombreOptionnel(m.stock_avant), nombreOptionnel(m.stock_apres),
     );
     if (memeEvenement) return;
   }
   await executer(
-    `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation,
+    `INSERT INTO mouvement_stock (id_local, produit_id, variante_id, nature, source_operation,
                                   quantite, unite, quantite_base, stock_avant,
                                   stock_apres, prix_unitaire, reference, motif,
                                   utilisateur, date_mouvement)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     m.id_local,
     produit.id,
+    variante?.id ?? null,
     m.nature === 'CORRECTION' ? 'AJUSTEMENT' : m.nature,
     m.source,
     nombre(m.quantite),
