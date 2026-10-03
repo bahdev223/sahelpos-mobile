@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -428,5 +428,29 @@ export const MIGRATIONS: string[][] = [
     )`,
     `CREATE INDEX IF NOT EXISTS idx_valeur_dimension_ref_dim
        ON valeur_dimension_ref(dimension_id_serveur, ordre, nom)`,
+  ],
+
+  // --- version 12 : echanges de variantes synchronisables ------------------
+  [
+    `ALTER TABLE ligne_vente ADD COLUMN ligne_serveur_id INTEGER`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_vente_serveur ON ligne_vente(ligne_serveur_id)`,
+
+    `CREATE TABLE IF NOT EXISTS echange_variante (
+      id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local                   TEXT NOT NULL UNIQUE,
+      vente_id                   INTEGER NOT NULL REFERENCES vente(id) ON DELETE CASCADE,
+      ligne_vente_id             INTEGER NOT NULL REFERENCES ligne_vente(id) ON DELETE CASCADE,
+      ligne_serveur_id           INTEGER NOT NULL,
+      ancienne_variante_id       INTEGER REFERENCES variante_produit(id),
+      nouvelle_variante_id       INTEGER NOT NULL REFERENCES variante_produit(id),
+      quantite                   REAL NOT NULL DEFAULT 1,
+      prix_ancien                REAL NOT NULL DEFAULT 0,
+      prix_nouveau               REAL NOT NULL DEFAULT 0,
+      difference_prix            REAL NOT NULL DEFAULT 0,
+      note                       TEXT,
+      date_echange               TEXT NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_echange_variante_vente ON echange_variante(vente_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_echange_variante_ligne ON echange_variante(ligne_vente_id)`,
   ],
 ];
