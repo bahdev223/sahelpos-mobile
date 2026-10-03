@@ -169,6 +169,7 @@ interface MouvementSync {
 
 interface LigneAchatSync {
   produit_id_local: string;
+  variante_id_local?: string | null;
   libelle: string;
   unite: string;
   facteur: number | string;
@@ -734,10 +735,12 @@ async function lireAchats(ids: string[]): Promise<AchatSync[]> {
   );
   for (const achat of achats) {
     achat.lignes = await lireTout<LigneAchatSync>(
-      `SELECT p.id_local AS produit_id_local, l.libelle, l.unite, l.facteur,
-              l.quantite, l.quantite_base, l.prix_unitaire, l.total
+      `SELECT p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
+              l.libelle, l.unite, l.facteur, l.quantite, l.quantite_base,
+              l.prix_unitaire, l.total
          FROM ligne_achat l
          JOIN produit p ON p.id = l.produit_id
+         LEFT JOIN variante_produit vp ON vp.id = l.variante_id
         WHERE l.achat_id = ? ORDER BY l.id`,
       achat.id,
     );
@@ -1262,11 +1265,21 @@ async function appliquerAchat(a: AchatSync): Promise<void> {
     if (!produit) {
       throw new SynchronisationImpossible(`Produit manquant pour l'achat ${a.numero}.`);
     }
+    const variante = ligne.variante_id_local
+      ? await lirePremier<{ id: number }>(
+          'SELECT id FROM variante_produit WHERE id_local = ? AND produit_id = ?',
+          ligne.variante_id_local,
+          produit.id,
+        )
+      : null;
+    if (ligne.variante_id_local && !variante) {
+      throw new SynchronisationImpossible(`Variante manquante pour l'achat ${a.numero}.`);
+    }
     await executer(
-      `INSERT INTO ligne_achat (achat_id, produit_id, libelle, unite, facteur, quantite,
+      `INSERT INTO ligne_achat (achat_id, produit_id, variante_id, libelle, unite, facteur, quantite,
                                 quantite_base, prix_unitaire, total)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      achatId, produit.id, ligne.libelle, ligne.unite, nombre(ligne.facteur, 1),
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      achatId, produit.id, variante?.id ?? null, ligne.libelle, ligne.unite, nombre(ligne.facteur, 1),
       nombre(ligne.quantite), nombre(ligne.quantite_base), nombre(ligne.prix_unitaire),
       nombre(ligne.total),
     );
