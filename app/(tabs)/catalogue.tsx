@@ -33,6 +33,7 @@ import { BandeauEtat, BARRE_HORIZONTALE, couleurs } from '../../src/ui/component
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
 import { useSession } from '../_layout';
+import { CatalogueHabillement } from '../../src/profile-ui/habillement/CatalogueHabillement';
 
 // --------------------------------------------------------------------------
 // Acces aux donnees
@@ -111,6 +112,14 @@ type Etat =
   | { phase: 'pret'; produits: LigneCatalogue[] };
 
 export default function Catalogue() {
+  const { profilCommerce } = useSession();
+  if (profilCommerce?.secteur === 'HABILLEMENT') {
+    return <CatalogueHabillement />;
+  }
+  return <CatalogueStandard />;
+}
+
+function CatalogueStandard() {
   const router = useRouter();
   const { revisionSynchronisation, synchroniserMaintenant } = useSession();
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
