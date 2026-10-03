@@ -9,6 +9,11 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ListeVide, Vignette, couleurs, formaterMontant, formaterQuantite } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { listerProduits, listerSousUnites } from '../../src/db/repositories/produit';
+import {
+  libelleVariante,
+  listerVariantesProduit,
+  type VarianteMobile,
+} from '../../src/db/repositories/variante';
 import { listerFournisseurs, type Fournisseur } from '../../src/db/repositories/fournisseur';
 import { useSession } from '../_layout';
 import { calculerLigneAchat, enregistrerAchat, type ArticleAchat, type ModePaiementAchat } from '../../src/services/achat';
@@ -24,7 +29,7 @@ const dateAujourdhui = () => new Intl.DateTimeFormat('fr-FR', {
 export default function EcranNouvelAchat() {
   const router = useRouter();
   const { commande } = useLocalSearchParams<{ commande?: string }>();
-  const { boutique } = useSession();
+  const { boutique, profilCommerce } = useSession();
   const [etape, setEtape] = useState<Etape>(1);
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [fournisseurId, setFournisseurId] = useState<number | null>(null);
@@ -42,6 +47,8 @@ export default function EcranNouvelAchat() {
   const [produitChoisi, setProduitChoisi] = useState<Produit | null>(null);
   const [unites, setUnites] = useState<Unite[]>([]);
   const [uniteChoisie, setUniteChoisie] = useState<Unite | null>(null);
+  const [variantes, setVariantes] = useState<VarianteMobile[]>([]);
+  const [varianteChoisie, setVarianteChoisie] = useState<VarianteMobile | null>(null);
   const [quantite, setQuantite] = useState('1');
   const [prix, setPrix] = useState('');
 
@@ -78,12 +85,17 @@ export default function EcranNouvelAchat() {
         nom: item.nom, facteur: item.facteur, prixIndicatif: Math.round(produit.prixAchat * item.facteur),
       })),
     ];
+    const declinaisons = profilCommerce?.secteur === 'HABILLEMENT'
+      ? await listerVariantesProduit(produit.id)
+      : [];
     setProduitChoisi(produit);
+    setVariantes(declinaisons);
+    setVarianteChoisie(null);
     setUnites(liste);
     setUniteChoisie(liste[0]);
     setQuantite('1');
     setPrix(String(liste[0].prixIndicatif || ''));
-  }, []);
+  }, [profilCommerce?.secteur]);
 
   const ajouterArticle = useCallback(() => {
     const q = Number(quantite.replace(',', '.'));
@@ -92,12 +104,27 @@ export default function EcranNouvelAchat() {
       Alert.alert('Article incomplet', 'Choisissez un produit, une unité, une quantité et un prix valides.');
       return;
     }
+    if (variantes.length > 0 && !varianteChoisie) {
+      Alert.alert('Variante requise', 'Choisissez la taille et la couleur à approvisionner.');
+      return;
+    }
     setArticles((liste) => [...liste, {
-      produitId: produitChoisi.id, libelle: produitChoisi.nom, unite: uniteChoisie.nom,
-      facteur: uniteChoisie.facteur, quantite: q, prixUnitaire: p,
+      produitId: produitChoisi.id,
+      varianteId: varianteChoisie?.id ?? null,
+      libelle: varianteChoisie
+        ? `${produitChoisi.nom} - ${libelleVariante(varianteChoisie)}`
+        : produitChoisi.nom,
+      unite: uniteChoisie.nom,
+      facteur: uniteChoisie.facteur,
+      quantite: q,
+      prixUnitaire: p,
     }]);
-    setProduitChoisi(null); setRecherche(''); setChoixOuvert(false);
-  }, [prix, produitChoisi, quantite, uniteChoisie]);
+    setProduitChoisi(null);
+    setVarianteChoisie(null);
+    setVariantes([]);
+    setRecherche('');
+    setChoixOuvert(false);
+  }, [prix, produitChoisi, quantite, uniteChoisie, varianteChoisie, variantes.length]);
 
   const suivant = useCallback(async () => {
     if (etape === 1) {
@@ -177,10 +204,16 @@ export default function EcranNouvelAchat() {
     </View>
     <AjoutArticle
       visible={choixOuvert} recherche={recherche} produits={produits} produit={produitChoisi}
+      variante={varianteChoisie} variantes={variantes}
       unite={uniteChoisie} unites={unites} quantite={quantite} prix={prix} devise={boutique.devise}
-      onFermer={() => { setChoixOuvert(false); setProduitChoisi(null); }}
-      onRecherche={(valeur) => { setRecherche(valeur); setProduitChoisi(null); }}
+      onFermer={() => { setChoixOuvert(false); setProduitChoisi(null); setVariantes([]); setVarianteChoisie(null); }}
+      onRecherche={(valeur) => { setRecherche(valeur); setProduitChoisi(null); setVariantes([]); setVarianteChoisie(null); }}
       onProduit={(produit) => void ouvrirProduit(produit)}
+      onVariante={(variante) => {
+        setVarianteChoisie(variante);
+        const cout = variante.prixAchat ?? produitChoisi?.prixAchat ?? 0;
+        setPrix(String(cout || ''));
+      }}
       onUnite={() => {
         if (!unites.length) return;
         const index = unites.findIndex((item) => item.nom === uniteChoisie?.nom);
