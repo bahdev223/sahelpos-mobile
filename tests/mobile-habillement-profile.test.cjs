@@ -14,6 +14,13 @@ const fichiers = [
   'app/habillement/referentiel.tsx',
   'app/habillement/inventaire.tsx',
   'app/habillement/echanges.tsx',
+  'app/habillement/approvisionnement-matrice.tsx',
+  'app/habillement/showroom.tsx',
+  'app/habillement/rapports.tsx',
+  'app/habillement/commandes/index.tsx',
+  'app/habillement/commandes/nouvelle.tsx',
+  'app/habillement/commandes/[id].tsx',
+  'src/services/commande-client.ts',
   'src/domain/commerce.ts',
   'src/db/repositories/variante.ts',
   'src/profile-ui/habillement/CatalogueHabillement.tsx',
@@ -58,6 +65,9 @@ test('offline schema contains variant, reference and exchange structures', () =>
     'valeur_dimension_ref',
     'ligne_serveur_id',
     'echange_variante',
+    'commande_client',
+    'ligne_commande_client',
+    'conversion_demandee',
   ]) {
     assert.match(schema, new RegExp(attendu));
   }
@@ -70,6 +80,7 @@ test('commerce resolver exposes habillement labels and capabilities', () => {
     'SIZE_DIMENSION',
     'COLOR_DIMENSION',
     'VARIANT_EXCHANGE',
+    'PURCHASE_MATRIX',
     "catalogue: 'Modeles'",
     "categories: 'Collections'",
   ]) {
@@ -86,4 +97,6 @@ test('checkout, purchases and inventory carry variant identity', () => {
   assert.ok(sync.includes('variante_id_local'));
   assert.ok(sync.includes('ligne_serveur_id'));
   assert.ok(sync.includes("ids('echange')"));
+  assert.ok(sync.includes("ids('commande_client')"));
+  assert.ok(sync.includes('commandes_clients'));
 });
