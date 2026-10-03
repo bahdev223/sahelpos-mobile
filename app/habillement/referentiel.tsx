@@ -24,10 +24,12 @@ export default function ReferentielHabillement() {
     void (async () => {
       const db = await obtenirBase();
       setLignes(await db.getAllAsync<Ligne>(
-        `SELECT DISTINCT dimension_code, dimension_nom, dimension_ordre,
-                         valeur_code, valeur_nom, code_hex, valeur_ordre
-           FROM variante_valeur
-          ORDER BY dimension_ordre, valeur_ordre, valeur_nom`,
+        `SELECT d.code AS dimension_code, d.nom AS dimension_nom, d.ordre AS dimension_ordre,
+                         v.code AS valeur_code, v.nom AS valeur_nom, v.code_hex,
+                         v.ordre AS valeur_ordre
+           FROM valeur_dimension_ref v
+           JOIN dimension_variante_ref d ON d.id_serveur = v.dimension_id_serveur
+          ORDER BY d.ordre, v.ordre, v.nom`,
       ));
     })();
   }, []));
