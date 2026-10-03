@@ -34,6 +34,7 @@ import {
   type EtatSynchronisation,
 } from '../src/services/synchronisation';
 import type { Role, Utilisateur } from '../src/domain/types';
+import type { ProfilCommerceMobile } from '../src/domain/commerce';
 import type { LargeurPapier } from '../src/services/impression/escpos';
 import { Chargement, Erreur, couleurs } from '../src/ui/components';
 import { FournisseurTiroir } from '../src/ui/tiroir';
@@ -79,6 +80,7 @@ export const BOUTIQUE_PAR_DEFAUT: Boutique = {
 export interface ValeurSession {
   utilisateur: Utilisateur | null;
   boutique: Boutique;
+  profilCommerce: ProfilCommerceMobile | null;
   installe: boolean;
   ouvrirSession: (utilisateur: Utilisateur) => void;
   fermerSession: () => void;
@@ -159,6 +161,7 @@ export default function DispositionRacine() {
   const [messageErreur, setMessageErreur] = useState('');
   const [installe, setInstalle] = useState(false);
   const [boutique, setBoutique] = useState<Boutique>(BOUTIQUE_PAR_DEFAUT);
+  const [profilCommerce, setProfilCommerce] = useState<ProfilCommerceMobile | null>(null);
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
   const [revisionSynchronisation, setRevisionSynchronisation] = useState(0);
   const [etatSynchronisation, setEtatSynchronisation] = useState<EtatSynchronisation>({
@@ -190,6 +193,8 @@ export default function DispositionRacine() {
         'SELECT COUNT(*) AS n FROM utilisateur WHERE actif = 1',
       );
       setBoutique(fabriquerBoutique(table));
+      const abonnement = await etatAbonnementCourant();
+      setProfilCommerce(abonnement.droit?.commerce ?? null);
       setInstalle(table[CLES_PARAMETRES.installation] === '1' && (comptes?.n ?? 0) > 0);
       setEtat('pret');
     } catch (erreur) {
@@ -252,6 +257,8 @@ export default function DispositionRacine() {
         // relit ces seuls parametres sans repasser la racine en ecran de
         // chargement et sans interrompre la vente en cours.
         setBoutique(fabriquerBoutique(await lireParametres()));
+        const droitActualise = await etatAbonnementCourant();
+        setProfilCommerce(droitActualise.droit?.commerce ?? null);
         setRevisionSynchronisation((precedente) => precedente + 1);
       } finally {
         setEtatSynchronisation(await lireEtatSynchronisation().catch(() => ({
@@ -283,6 +290,7 @@ export default function DispositionRacine() {
     () => ({
       utilisateur,
       boutique,
+      profilCommerce,
       installe,
       ouvrirSession,
       fermerSession,
@@ -294,6 +302,7 @@ export default function DispositionRacine() {
     [
       utilisateur,
       boutique,
+      profilCommerce,
       installe,
       ouvrirSession,
       fermerSession,
@@ -408,6 +417,9 @@ export default function DispositionRacine() {
       <FournisseurTiroir
         infos={{
           boutique: boutique.nom,
+          secteur: profilCommerce?.secteur ?? 'COMMERCE_GENERAL',
+          secteurLibelle: profilCommerce?.secteur_libelle ?? 'Commerce',
+          capabilitiesCommerce: profilCommerce?.capabilities_effectives ?? [],
           utilisateur: utilisateur.nom || utilisateur.login,
           role: utilisateur.role,
           onDeconnexion: fermerSession,
