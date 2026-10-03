@@ -29,6 +29,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { couleurs } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import type { NomIcone } from '../../src/ui/icones';
+import { useSession } from '../_layout';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
 
 /**
  * Les pictogrammes de la barre sont un peu plus grands que dans le corps du
@@ -43,6 +45,9 @@ function icone(nom: NomIcone) {
 
 export default function DispositionOnglets() {
   const marges = useSafeAreaInsets();
+  const { profilCommerce } = useSession();
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
+  const l = profilUI.libelles;
 
   return (
     <Tabs
@@ -64,14 +69,14 @@ export default function DispositionOnglets() {
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
       }}
     >
-      <Tabs.Screen name="accueil" options={{ title: 'Accueil', tabBarIcon: icone('accueil') }} />
-      <Tabs.Screen name="caisse" options={{ title: 'Caisse', tabBarIcon: icone('caisse') }} />
+      <Tabs.Screen name="accueil" options={{ title: l.accueil, tabBarIcon: icone('accueil') }} />
+      <Tabs.Screen name="caisse" options={{ title: l.caisse, tabBarIcon: icone('caisse') }} />
       <Tabs.Screen
         name="catalogue"
-        options={{ title: 'Catalogue', tabBarIcon: icone('catalogue') }}
+        options={{ title: l.catalogue, tabBarIcon: icone('catalogue') }}
       />
-      <Tabs.Screen name="achats" options={{ title: 'Achats', tabBarIcon: icone('achats') }} />
-      <Tabs.Screen name="stock" options={{ title: 'Stock', tabBarIcon: icone('stock') }} />
+      <Tabs.Screen name="achats" options={{ title: l.achats, tabBarIcon: icone('achats') }} />
+      <Tabs.Screen name="stock" options={{ title: l.stock, tabBarIcon: icone('stock') }} />
       <Tabs.Screen name="ventes" options={{ href: null }} />
     </Tabs>
   );
