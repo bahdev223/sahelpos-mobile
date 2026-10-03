@@ -289,12 +289,186 @@ function EtapeReglement({ devise, total, reste, montantPaye, modePaiement, saisi
 
 function BlocTotal({ titre, valeur, vert = false }: { titre: string; valeur: string; vert?: boolean }) { return <View style={[styles.blocTotal, vert ? styles.totalVert : styles.totalRouge]}><View style={[styles.totalIcone, vert ? styles.totalIconeVerte : styles.totalIconeRouge]}><Icone nom={vert ? 'caisse' : 'argent'} taille={22} couleur={vert ? '#08944a' : '#e5263c'} /></View><Text style={styles.totalTitre}>{titre}</Text><Text style={[styles.totalMontant, !vert && styles.totalMontantRouge]}>{valeur}</Text></View>; }
 
-function AjoutArticle({ visible, recherche, produits, produit, unite, unites, quantite, prix, devise, onFermer, onRecherche, onProduit, onUnite, onQuantite, onPrix, onAjouter }: {
-  visible: boolean; recherche: string; produits: Produit[]; produit: Produit | null; unite: Unite | null; unites: Unite[]; quantite: string; prix: string; devise: string;
-  onFermer: () => void; onRecherche: (valeur: string) => void; onProduit: (produit: Produit) => void; onUnite: () => void; onQuantite: (valeur: string) => void; onPrix: (valeur: string) => void; onAjouter: () => void;
+function AjoutArticle({
+  visible,
+  recherche,
+  produits,
+  produit,
+  variante,
+  variantes,
+  unite,
+  unites,
+  quantite,
+  prix,
+  devise,
+  onFermer,
+  onRecherche,
+  onProduit,
+  onVariante,
+  onUnite,
+  onQuantite,
+  onPrix,
+  onAjouter,
+}: {
+  visible: boolean;
+  recherche: string;
+  produits: Produit[];
+  produit: Produit | null;
+  variante: VarianteMobile | null;
+  variantes: VarianteMobile[];
+  unite: Unite | null;
+  unites: Unite[];
+  quantite: string;
+  prix: string;
+  devise: string;
+  onFermer: () => void;
+  onRecherche: (valeur: string) => void;
+  onProduit: (produit: Produit) => void;
+  onVariante: (variante: VarianteMobile) => void;
+  onUnite: () => void;
+  onQuantite: (valeur: string) => void;
+  onPrix: (valeur: string) => void;
+  onAjouter: () => void;
 }) {
   const total = (Number(quantite.replace(',', '.')) || 0) * (Number(prix.replace(',', '.')) || 0);
-  return <Modal visible={visible} animationType="slide" onRequestClose={onFermer}><SafeAreaView style={styles.page} edges={['top', 'bottom']}><View style={styles.header}><Pressable onPress={onFermer} style={styles.retour}><Icone nom="retour" taille={27} couleur="#061541" /></Pressable><Text style={styles.titre}>Ajouter un article</Text><View style={styles.placeholderHeader} /></View><ScrollView contentContainerStyle={styles.modalContenu} showsVerticalScrollIndicator={false}><View style={styles.recherche}><Icone nom="recherche" taille={23} couleur="#09245b" /><TextInput value={recherche} onChangeText={onRecherche} autoFocus placeholder="Rechercher un produit..." placeholderTextColor="#7185aa" style={styles.inputRecherche} /></View>{produit ? <View style={styles.produitChoisi}><Vignette chemin={produit.cheminImage} nom={produit.nom} taille={70} /><View style={styles.produitChoisiInfo}><Text style={styles.articleNom}>{produit.nom}</Text><Text style={styles.articleMeta}>Stock actuel : {formaterQuantite(produit.quantiteBase)} {produit.uniteBase}</Text></View></View> : <FlatList data={produits} scrollEnabled={false} keyExtractor={(item) => String(item.id)} contentContainerStyle={styles.listeProduits} ListEmptyComponent={<ListeVide titre="Aucun produit" message="Créez d’abord vos produits dans le catalogue." />} renderItem={({ item }) => <Pressable onPress={() => onProduit(item)} style={styles.produitLigne}><Vignette chemin={item.cheminImage} nom={item.nom} taille={56} /><View style={styles.produitChoisiInfo}><Text style={styles.articleNom}>{item.nom}</Text><Text style={styles.articleMeta}>{item.categorie || item.uniteBase}</Text></View><Icone nom="chevron" taille={18} couleur="#09245b" /></Pressable>} />}{produit && <><Text style={styles.label}>Unité <Text style={styles.requis}>*</Text></Text><Pressable onPress={onUnite} style={styles.lecture}><Text style={styles.lectureTexte}>{unite?.nom || 'Unité'}</Text><Icone nom="chevron" taille={18} couleur="#0c2857" /></Pressable><View style={styles.deuxChamps}><View style={styles.demiChamp}><Text style={styles.label}>Quantité <Text style={styles.requis}>*</Text></Text><TextInput value={quantite} onChangeText={onQuantite} keyboardType="numeric" style={styles.inputSimple} /></View><View style={styles.demiChamp}><Text style={styles.label}>Prix unitaire ({devise}) <Text style={styles.requis}>*</Text></Text><TextInput value={prix} onChangeText={onPrix} keyboardType="numeric" style={styles.inputSimple} /></View></View><View style={styles.totalLigne}><Text style={styles.totalLigneTitre}>Total ligne</Text><Text style={styles.totalLigneValeur}>{formaterMontant(total, devise)}</Text></View><Pressable onPress={onAjouter} style={styles.ajouterArticle}><Icone nom="plus" taille={22} couleur="#fff" /><Text style={styles.ajouterArticleTexte}>Ajouter cet article</Text></Pressable></>}</ScrollView></SafeAreaView></Modal>;
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onFermer}>
+      <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <Pressable onPress={onFermer} style={styles.retour}>
+            <Icone nom="retour" taille={27} couleur="#061541" />
+          </Pressable>
+          <Text style={styles.titre}>Ajouter un article</Text>
+          <View style={styles.placeholderHeader} />
+        </View>
+        <ScrollView contentContainerStyle={styles.modalContenu} showsVerticalScrollIndicator={false}>
+          <View style={styles.recherche}>
+            <Icone nom="recherche" taille={23} couleur="#09245b" />
+            <TextInput
+              value={recherche}
+              onChangeText={onRecherche}
+              autoFocus
+              placeholder="Rechercher un modèle..."
+              placeholderTextColor="#7185aa"
+              style={styles.inputRecherche}
+            />
+          </View>
+
+          {produit ? (
+            <>
+              <View style={styles.produitChoisi}>
+                <Vignette chemin={produit.cheminImage} nom={produit.nom} taille={70} />
+                <View style={styles.produitChoisiInfo}>
+                  <Text style={styles.articleNom}>{produit.nom}</Text>
+                  <Text style={styles.articleMeta}>
+                    {variantes.length > 0
+                      ? `${variantes.length} variante(s) disponible(s)`
+                      : `Stock actuel : ${formaterQuantite(produit.quantiteBase)} ${produit.uniteBase}`}
+                  </Text>
+                </View>
+              </View>
+
+              {variantes.length > 0 ? (
+                <View>
+                  <Text style={styles.label}>
+                    Taille / couleur <Text style={styles.requis}>*</Text>
+                  </Text>
+                  <View style={styles.variantesAchat}>
+                    {variantes.map((option) => {
+                      const active = variante?.id === option.id;
+                      const couleur = option.valeurs.find((v) => v.codeHex)?.codeHex ?? null;
+                      return (
+                        <Pressable
+                          key={option.idLocal}
+                          onPress={() => onVariante(option)}
+                          style={[styles.varianteAchat, active && styles.varianteAchatActive]}
+                        >
+                          {couleur ? (
+                            <View style={[styles.varianteCouleur, { backgroundColor: couleur }]} />
+                          ) : null}
+                          <View style={styles.varianteAchatTextes}>
+                            <Text style={[styles.varianteAchatNom, active && styles.varianteAchatNomActive]}>
+                              {libelleVariante(option)}
+                            </Text>
+                            <Text style={[styles.varianteAchatStock, active && styles.varianteAchatStockActive]}>
+                              Stock {formaterQuantite(option.stockActuel)}
+                            </Text>
+                          </View>
+                          {active ? <Icone nom="coche" taille={16} couleur="#fff" /> : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
+
+              <Text style={styles.label}>Unité <Text style={styles.requis}>*</Text></Text>
+              <Pressable onPress={onUnite} style={styles.lecture}>
+                <Text style={styles.lectureTexte}>{unite?.nom || 'Unité'}</Text>
+                <Icone nom="chevron" taille={18} couleur="#0c2857" />
+              </Pressable>
+
+              <View style={styles.deuxChamps}>
+                <View style={styles.demiChamp}>
+                  <Text style={styles.label}>Quantité <Text style={styles.requis}>*</Text></Text>
+                  <TextInput
+                    value={quantite}
+                    onChangeText={onQuantite}
+                    keyboardType="numeric"
+                    style={styles.inputSimple}
+                  />
+                </View>
+                <View style={styles.demiChamp}>
+                  <Text style={styles.label}>
+                    Prix unitaire ({devise}) <Text style={styles.requis}>*</Text>
+                  </Text>
+                  <TextInput
+                    value={prix}
+                    onChangeText={onPrix}
+                    keyboardType="numeric"
+                    style={styles.inputSimple}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.totalLigne}>
+                <Text style={styles.totalLigneTitre}>Total ligne</Text>
+                <Text style={styles.totalLigneValeur}>{formaterMontant(total, devise)}</Text>
+              </View>
+
+              <Pressable onPress={onAjouter} style={styles.ajouterArticle}>
+                <Icone nom="plus" taille={22} couleur="#fff" />
+                <Text style={styles.ajouterArticleTexte}>Ajouter cet article</Text>
+              </Pressable>
+            </>
+          ) : (
+            <FlatList
+              data={produits}
+              scrollEnabled={false}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={styles.listeProduits}
+              ListEmptyComponent={
+                <ListeVide
+                  titre="Aucun modèle"
+                  message="Créez d’abord vos modèles dans le catalogue."
+                />
+              }
+              renderItem={({ item }) => (
+                <Pressable onPress={() => onProduit(item)} style={styles.produitLigne}>
+                  <Vignette chemin={item.cheminImage} nom={item.nom} taille={56} />
+                  <View style={styles.produitChoisiInfo}>
+                    <Text style={styles.articleNom}>{item.nom}</Text>
+                    <Text style={styles.articleMeta}>{item.categorie || item.uniteBase}</Text>
+                  </View>
+                  <Icone nom="chevron" taille={18} couleur="#09245b" />
+                </Pressable>
+              )}
+            />
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -308,6 +482,20 @@ const styles = StyleSheet.create({
   groupe: { gap: 8 }, label: { color: '#10224a', fontSize: 16, fontWeight: '800' }, requis: { color: '#ed3048' }, fournisseurLigne: { flexDirection: 'row', gap: 11 }, selecteur: { flex: 1, minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: '#d2ddeb', borderRadius: 12, backgroundColor: '#fff' }, selecteurTexte: { flex: 1, color: '#10224a', fontSize: 16, fontWeight: '800' }, placeholder: { color: '#7185aa', fontWeight: '500' }, plus: { width: 60, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: couleurs.primaire },
   saisie: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: '#d2ddeb', borderRadius: 12, backgroundColor: '#fff' }, input: { flex: 1, minHeight: 55, color: '#10224a', fontSize: 16 }, lecture: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: '#d2ddeb', borderRadius: 12, backgroundColor: '#fff' }, lectureTexte: { flex: 1, color: '#10224a', fontSize: 16 },
   recherche: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 14, borderWidth: 1, borderColor: '#d4dfed', borderRadius: 12, backgroundColor: '#fff' }, rechercheTexte: { flex: 1, color: '#7185aa', fontSize: 15 }, scan: { width: 49, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: '#dfe7f1' }, inputRecherche: { flex: 1, minHeight: 51, color: '#10224a', fontSize: 16 },
+  variantesAchat: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  varianteAchat: {
+    minWidth: '46%', flexGrow: 1, minHeight: 58, flexDirection: 'row',
+    alignItems: 'center', gap: 8, paddingHorizontal: 11, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#d4dfed', borderRadius: 12, backgroundColor: '#fff',
+  },
+  varianteAchatActive: { backgroundColor: couleurs.primaire, borderColor: couleurs.primaire },
+  varianteCouleur: { width: 18, height: 18, borderRadius: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: '#b8c6d8' },
+  varianteAchatTextes: { flex: 1, minWidth: 0 },
+  varianteAchatNom: { color: '#10224a', fontSize: 13, fontWeight: '900' },
+  varianteAchatNomActive: { color: '#fff' },
+  varianteAchatStock: { marginTop: 2, color: '#63779a', fontSize: 10, fontWeight: '700' },
+  varianteAchatStockActive: { color: '#dceaff' },
+
   filtres: { flexDirection: 'row', gap: 7, flexWrap: 'wrap' }, filtre: { minHeight: 39, justifyContent: 'center', paddingHorizontal: 13, borderRadius: 12, backgroundColor: '#edf2f8' }, filtreActif: { backgroundColor: couleurs.primaire }, filtreTexte: { color: '#587096', fontSize: 13, fontWeight: '800' }, filtreTexteActif: { color: '#fff' },
   titreSection: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, titreSectionTexte: { flexShrink: 1, color: '#061541', fontSize: 20, fontWeight: '900' }, ajouter: { minHeight: 41, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, borderWidth: 1, borderColor: '#cfe0fe', borderRadius: 12, backgroundColor: '#f6faff' }, ajouterTexte: { color: couleurs.primaire, fontSize: 13, fontWeight: '900' },
   vide: { minHeight: 180, alignItems: 'center', justifyContent: 'center', padding: 22, borderWidth: 1, borderColor: '#e1e8f2', borderRadius: 14, backgroundColor: '#fff' }, videTitre: { marginTop: 12, color: '#536a8f', fontSize: 16, fontWeight: '900' }, videTexte: { marginTop: 5, color: '#7185a5', fontSize: 14, textAlign: 'center' },
