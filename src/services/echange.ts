@@ -270,15 +270,24 @@ export async function echangerVarianteLocal(
       );
     }
 
+    const venteAvant = await lirePremier<{ total: number; montant_paye: number }>(
+      'SELECT total, montant_paye FROM vente WHERE id = ?',
+      ligne.venteId,
+    );
+    const nouveauTotal = Math.max(0, (venteAvant?.total ?? 0) + differencePrix);
+    const montantPaye = venteAvant?.montant_paye ?? 0;
+    const statut = montantPaye >= nouveauTotal
+      ? 'payee'
+      : montantPaye > 0
+        ? 'partielle'
+        : 'impayee';
     await executer(
-      'UPDATE vente SET total = MAX(0, total + ?) WHERE id = ?',
-      differencePrix,
+      'UPDATE vente SET total = ?, statut = ? WHERE id = ?',
+      nouveauTotal,
+      statut,
       ligne.venteId,
     );
-    const vente = await lirePremier<{ total: number }>(
-      'SELECT total FROM vente WHERE id = ?',
-      ligne.venteId,
-    );
+    const vente = { total: nouveauTotal };
 
     const idLocal = genererIdLocal();
     await executer(
