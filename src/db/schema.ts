@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -407,5 +407,26 @@ export const MIGRATIONS: string[][] = [
     `CREATE INDEX IF NOT EXISTS idx_mouvement_variante ON mouvement_stock(variante_id)`,
     `ALTER TABLE ligne_achat ADD COLUMN variante_id INTEGER REFERENCES variante_produit(id)`,
     `CREATE INDEX IF NOT EXISTS idx_ligne_achat_variante ON ligne_achat(variante_id)`,
+  ],
+
+  // --- version 11 : referentiel tailles/couleurs independant ---------------
+  [
+    `CREATE TABLE IF NOT EXISTS dimension_variante_ref (
+      id_serveur INTEGER PRIMARY KEY,
+      code       TEXT NOT NULL UNIQUE,
+      nom        TEXT NOT NULL,
+      ordre      INTEGER NOT NULL DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS valeur_dimension_ref (
+      id_serveur          INTEGER PRIMARY KEY,
+      dimension_id_serveur INTEGER NOT NULL,
+      code                TEXT NOT NULL,
+      nom                 TEXT NOT NULL,
+      code_hex            TEXT,
+      ordre               INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY(dimension_id_serveur) REFERENCES dimension_variante_ref(id_serveur) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_valeur_dimension_ref_dim
+       ON valeur_dimension_ref(dimension_id_serveur, ordre, nom)`,
   ],
 ];
