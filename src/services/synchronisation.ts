@@ -34,7 +34,7 @@ const CLE_DERNIER_NOMBRE_PULL = 'sync.dernier_nombre_pull';
 const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
 const TAILLE_IMAGE_SYNC_MAX = 4 * 1024 * 1024;
 
-type TypeObjet = 'produit' | 'client' | 'fournisseur' | 'vente' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
+type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
 
 interface LigneOutbox {
   type_objet: TypeObjet;
@@ -512,6 +512,7 @@ async function construirePayload(pending: LigneOutbox[]) {
     pending.filter((l) => l.type_objet === typeObjet).map((l) => l.id_local);
   return {
     produits: await lireProduits(ids('produit')),
+    variantes: await lireVariantes(ids('variante')),
     clients: await lireClients(ids('client')),
     fournisseurs: await lireFournisseurs(ids('fournisseur')),
     ventes: await lireVentes(ids('vente')),
@@ -588,6 +589,53 @@ async function imageLocalePourSync(
 
 async function imageProduitPourSync(chemin: string | null | undefined): Promise<Pick<ProduitSync, 'image_base64' | 'image_nom' | 'image_supprimee'>> {
   return imageLocalePourSync(chemin, 'image', 'produit');
+}
+
+async function lireVariantes(ids: string[]): Promise<VarianteSync[]> {
+  if (ids.length === 0) return [];
+  const variantes = await lireTout<VarianteSync & { id: number }>(
+    `SELECT vp.id, vp.id_local, p.id_local AS produit_id_local, vp.sku,
+            vp.code_barre, vp.prix_override, vp.prix_achat, vp.stock_actuel,
+            vp.actif, vp.date_creation, vp.date_modification
+       FROM variante_produit vp
+       JOIN produit p ON p.id = vp.produit_id
+      WHERE vp.id_local IN (${placeholders(ids)})`,
+    ...ids,
+  );
+  for (const variante of variantes) {
+    variante.valeurs = await lireTout<{
+      id: number;
+      dimension: { id: number; code: string; nom: string; ordre: number };
+      code: string;
+      nom: string;
+      code_hex?: string | null;
+      ordre: number;
+    }>(
+      `SELECT valeur_serveur_id AS id,
+              dimension_id AS dimension_id,
+              dimension_code AS dimension_code,
+              dimension_nom AS dimension_nom,
+              dimension_ordre AS dimension_ordre,
+              valeur_code AS code, valeur_nom AS nom, code_hex,
+              valeur_ordre AS ordre
+         FROM variante_valeur
+        WHERE variante_id = ?`,
+      variante.id,
+    ).then((lignes) => lignes.map((ligne: any) => ({
+      id: ligne.id,
+      dimension: {
+        id: ligne.dimension_id,
+        code: ligne.dimension_code,
+        nom: ligne.dimension_nom,
+        ordre: ligne.dimension_ordre,
+      },
+      code: ligne.code,
+      nom: ligne.nom,
+      code_hex: ligne.code_hex,
+      ordre: ligne.ordre,
+    })));
+  }
+  return variantes;
 }
 
 async function lireClients(ids: string[]): Promise<ClientSync[]> {
