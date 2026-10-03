@@ -16,6 +16,7 @@ import { corrigerStockVariante } from '../../src/db/repositories/variante';
 import { useSession } from '../_layout';
 import { BandeauEtat, Bouton, couleurs, espaces, rayons } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
+import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
 
 interface LigneInventaireVariante {
   id: number;
@@ -149,7 +150,7 @@ export default function InventaireHabillement() {
       <BandeauEtat />
       <View style={s.entete}>
         <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Icone nom="retour" taille={23} couleur={couleurs.texte} />
+          <Icone nom="retour" taille={23} couleur={H.texte} />
         </Pressable>
         <View style={s.enteteTextes}>
           <Text style={s.titre}>Inventaire par variantes</Text>
@@ -158,13 +159,13 @@ export default function InventaireHabillement() {
       </View>
 
       <View style={s.recherche}>
-        <Icone nom="recherche" taille={18} couleur={couleurs.texteFaible} />
+        <Icone nom="recherche" taille={18} couleur={H.texteFaible} />
         <TextInput
           style={s.rechercheTexte}
           value={recherche}
           onChangeText={setRecherche}
           placeholder="Modèle, taille, couleur ou SKU"
-          placeholderTextColor={couleurs.texteFaible}
+          placeholderTextColor={H.texteFaible}
         />
       </View>
 
@@ -241,17 +242,17 @@ export default function InventaireHabillement() {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: couleurs.fond },
+  page: { flex: 1, backgroundColor: H.fond },
   entete: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: espaces.m,
     padding: espaces.m,
-    backgroundColor: couleurs.surface,
+    backgroundColor: H.surface,
   },
   enteteTextes: { flex: 1 },
-  titre: { fontSize: 19, fontWeight: '900', color: couleurs.texte },
-  sousTitre: { marginTop: 2, fontSize: 11, color: couleurs.texteFaible },
+  titre: { fontSize: 19, fontWeight: '900', color: H.texte },
+  sousTitre: { marginTop: 2, fontSize: 11, color: H.texteFaible },
   recherche: {
     minHeight: 46,
     margin: espaces.m,
@@ -261,31 +262,31 @@ const s = StyleSheet.create({
     paddingHorizontal: espaces.m,
     borderRadius: rayons.m,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
-    backgroundColor: couleurs.surface,
+    borderColor: H.bordure,
+    backgroundColor: H.surface,
   },
-  rechercheTexte: { flex: 1, fontSize: 13, color: couleurs.texte },
+  rechercheTexte: { flex: 1, fontSize: 13, color: H.texte },
   liste: { paddingHorizontal: espaces.m, paddingBottom: 120, gap: espaces.s },
   carte: {
     padding: espaces.m,
     borderRadius: rayons.m,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
-    backgroundColor: couleurs.surface,
+    borderColor: H.bordure,
+    backgroundColor: H.surface,
   },
   carteEcart: { borderColor: couleurs.avertissement },
   ligneHaut: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: espaces.m },
   identite: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: espaces.s },
-  couleur: { width: 26, height: 26, borderRadius: 13, borderWidth: StyleSheet.hairlineWidth, borderColor: couleurs.bordure },
+  couleur: { width: 26, height: 26, borderRadius: 13, borderWidth: StyleSheet.hairlineWidth, borderColor: H.bordure },
   textes: { flex: 1, minWidth: 0 },
-  modele: { fontSize: 14, fontWeight: '900', color: couleurs.texte },
-  variante: { marginTop: 2, fontSize: 12, fontWeight: '800', color: couleurs.primaire },
-  sku: { marginTop: 2, fontSize: 9, color: couleurs.texteFaible },
+  modele: { fontSize: 14, fontWeight: '900', color: H.texte },
+  variante: { marginTop: 2, fontSize: 12, fontWeight: '800', color: H.primaire },
+  sku: { marginTop: 2, fontSize: 9, color: H.texteFaible },
   theorique: { alignItems: 'flex-end' },
-  theoriqueLabel: { fontSize: 9, color: couleurs.texteFaible },
-  theoriqueValeur: { marginTop: 2, fontSize: 20, fontWeight: '900', color: couleurs.texte },
+  theoriqueLabel: { fontSize: 9, color: H.texteFaible },
+  theoriqueValeur: { marginTop: 2, fontSize: 20, fontWeight: '900', color: H.texte },
   comptage: { marginTop: espaces.m, flexDirection: 'row', alignItems: 'center', gap: espaces.s },
-  comptageLabel: { flex: 1, fontSize: 11, color: couleurs.texteFaible, fontWeight: '700' },
+  comptageLabel: { flex: 1, fontSize: 11, color: H.texteFaible, fontWeight: '700' },
   champ: {
     width: 82,
     minHeight: 42,
@@ -293,22 +294,22 @@ const s = StyleSheet.create({
     textAlign: 'right',
     borderRadius: rayons.s,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
-    backgroundColor: couleurs.fond,
-    color: couleurs.texte,
+    borderColor: H.bordure,
+    backgroundColor: H.fond,
+    color: H.texte,
     fontWeight: '900',
   },
   champEcart: { borderColor: couleurs.avertissement },
   ecart: { minWidth: 58, fontSize: 11, fontWeight: '900', color: couleurs.avertissementFonce },
   vide: { padding: espaces.xl, alignItems: 'center' },
-  videTitre: { fontSize: 16, fontWeight: '900', color: couleurs.texte },
-  videTexte: { marginTop: 7, textAlign: 'center', color: couleurs.texteFaible, lineHeight: 18 },
+  videTitre: { fontSize: 16, fontWeight: '900', color: H.texte },
+  videTexte: { marginTop: 7, textAlign: 'center', color: H.texteFaible, lineHeight: 18 },
   pied: {
     position: 'absolute',
     left: 0, right: 0, bottom: 0,
     padding: espaces.m,
-    backgroundColor: couleurs.surface,
+    backgroundColor: H.surface,
     borderTopWidth: 1,
-    borderTopColor: couleurs.bordure,
+    borderTopColor: H.bordure,
   },
 });
