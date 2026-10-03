@@ -80,12 +80,15 @@ async function convertir(ligne: LigneVariante): Promise<VarianteMobile> {
   };
 }
 
-export async function listerVariantesProduit(produitId: number): Promise<VarianteMobile[]> {
+export async function listerVariantesProduit(
+  produitId: number,
+  actifsSeulement = true,
+): Promise<VarianteMobile[]> {
   const lignes = await lireTout<LigneVariante>(
     `SELECT id, id_local, produit_id, sku, code_barre, prix_override,
             prix_achat, stock_actuel, actif
        FROM variante_produit
-      WHERE produit_id = ? AND actif = 1
+      WHERE produit_id = ? ${actifsSeulement ? 'AND actif = 1' : ''}
       ORDER BY sku`,
     produitId,
   );
