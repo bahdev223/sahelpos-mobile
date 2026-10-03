@@ -23,7 +23,7 @@ const CLE_CURSOR = 'sync.cursor';
 const CLE_BOUTIQUE = 'sync.boutique';
 const CLE_BOOTSTRAP = 'sync.bootstrap_effectue';
 const CLE_PROTOCOLE = 'sync.protocole';
-const VERSION_PROTOCOLE = '5';
+const VERSION_PROTOCOLE = '6';
 const CLE_DERNIERE_TENTATIVE = 'sync.derniere_tentative';
 const CLE_DERNIER_SUCCES = 'sync.dernier_succes';
 const CLE_DERNIERE_ERREUR = 'sync.derniere_erreur';
@@ -34,7 +34,7 @@ const CLE_DERNIER_NOMBRE_PULL = 'sync.dernier_nombre_pull';
 const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
 const TAILLE_IMAGE_SYNC_MAX = 4 * 1024 * 1024;
 
-type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'echange' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
+type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'echange' | 'commande_client' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
 
 interface LigneOutbox {
   type_objet: TypeObjet;
@@ -215,6 +215,34 @@ interface AchatSync {
   paiements: PaiementAchatSync[];
 }
 
+interface LigneCommandeClientSync {
+  serveur_id?: number | null;
+  produit_id_local: string;
+  variante_id_local?: string | null;
+  libelle: string;
+  quantite_commandee: number | string;
+  quantite_reservee: number | string;
+  quantite_preparee: number | string;
+  prix_unitaire: number | string;
+  total: number | string;
+}
+
+interface CommandeClientSync {
+  id_local: string;
+  serveur_id?: number | null;
+  numero: string;
+  client_id_local?: string | null;
+  statut: string;
+  total: number | string;
+  montant_paye: number | string;
+  note?: string | null;
+  date_creation: string;
+  date_confirmation?: string | null;
+  date_prete?: string | null;
+  date_fin?: string | null;
+  lignes: LigneCommandeClientSync[];
+}
+
 interface BoutiqueSync {
   nom?: string;
   adresse?: string | null;
@@ -260,6 +288,7 @@ interface PullSync {
   ventes: VenteSync[];
   mouvements?: MouvementSync[];
   achats?: AchatSync[];
+  commandes_clients?: CommandeClientSync[];
   utilisateurs?: UtilisateurSync[];
   boutique?: BoutiqueSync;
   annonces?: AnnonceSync[];
@@ -547,9 +576,43 @@ async function construirePayload(pending: LigneOutbox[]) {
     echanges: await lireEchanges(ids('echange')),
     mouvements: await lireMouvements(ids('mouvement')),
     achats: await lireAchats(ids('achat')),
+    commandes_clients: await lireCommandesClients(ids('commande_client')),
     utilisateurs: await lireUtilisateurs(ids('utilisateur')),
     boutique: ids('boutique').length > 0 ? await lireBoutique() : undefined,
   };
+}
+
+async function lireCommandesClients(ids: string[]): Promise<CommandeClientSync[]> {
+  if (ids.length === 0) return [];
+  const commandes = await lireTout<CommandeClientSync & { id: number }>(
+    `SELECT c.id, c.id_local, c.serveur_id, c.numero,
+            cl.id_local AS client_id_local, c.statut, c.total, c.montant_paye,
+            c.note, c.date_creation, c.date_confirmation, c.date_prete, c.date_fin
+       FROM commande_client c
+       LEFT JOIN client cl ON cl.id = c.client_id
+      WHERE c.id_local IN (${placeholders(ids)})`,
+    ...ids,
+  );
+  for (const commande of commandes) {
+    commande.lignes = await lireTout<LigneCommandeClientSync>(
+      `SELECT l.serveur_id,
+              p.id_local AS produit_id_local,
+              vp.id_local AS variante_id_local,
+              l.libelle,
+              l.quantite_commandee,
+              l.quantite_reservee,
+              l.quantite_preparee,
+              l.prix_unitaire,
+              l.total
+         FROM ligne_commande_client l
+         JOIN produit p ON p.id = l.produit_id
+         LEFT JOIN variante_produit vp ON vp.id = l.variante_id
+        WHERE l.commande_id = ?
+        ORDER BY l.id`,
+      commande.id,
+    );
+  }
+  return commandes;
 }
 
 async function lireUtilisateurs(ids: string[]): Promise<UtilisateurSync[]> {
@@ -837,6 +900,10 @@ async function appliquerPull(pull: PullSync): Promise<number> {
     }
     for (const achat of pull.achats ?? []) {
       await appliquerAchat(achat);
+      recus++;
+    }
+    for (const commande of pull.commandes_clients ?? []) {
+      await appliquerCommandeClient(commande);
       recus++;
     }
     if (pull.boutique) {
@@ -1288,6 +1355,108 @@ async function appliquerMouvement(m: MouvementSync): Promise<void> {
       );
     }
   }
+}
+
+async function appliquerCommandeClient(c: CommandeClientSync): Promise<void> {
+  const client = c.client_id_local
+    ? await lirePremier<{ id: number }>(
+        'SELECT id FROM client WHERE id_local = ?',
+        c.client_id_local,
+      )
+    : null;
+
+  const existante = await lirePremier<{ id: number }>(
+    'SELECT id FROM commande_client WHERE id_local = ? OR (serveur_id IS NOT NULL AND serveur_id = ?)',
+    c.id_local,
+    c.serveur_id ?? -1,
+  );
+
+  const commandeId = existante?.id ?? (await executer(
+    `INSERT INTO commande_client
+     (id_local, serveur_id, numero, client_id, statut, total, montant_paye,
+      note, date_creation, date_confirmation, date_prete, date_fin, sync_statut)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
+    c.id_local,
+    c.serveur_id ?? null,
+    c.numero,
+    client?.id ?? null,
+    c.statut,
+    nombre(c.total),
+    nombre(c.montant_paye),
+    c.note ?? null,
+    c.date_creation,
+    c.date_confirmation ?? null,
+    c.date_prete ?? null,
+    c.date_fin ?? null,
+  )).lastInsertRowId;
+
+  if (existante) {
+    await executer(
+      `UPDATE commande_client
+          SET id_local = ?, serveur_id = ?, numero = ?, client_id = ?, statut = ?,
+              total = ?, montant_paye = ?, note = ?, date_creation = ?,
+              date_confirmation = ?, date_prete = ?, date_fin = ?, sync_statut = 'SYNCED'
+        WHERE id = ?`,
+      c.id_local,
+      c.serveur_id ?? null,
+      c.numero,
+      client?.id ?? null,
+      c.statut,
+      nombre(c.total),
+      nombre(c.montant_paye),
+      c.note ?? null,
+      c.date_creation,
+      c.date_confirmation ?? null,
+      c.date_prete ?? null,
+      c.date_fin ?? null,
+      commandeId,
+    );
+    await executer('DELETE FROM ligne_commande_client WHERE commande_id = ?', commandeId);
+  }
+
+  for (const ligne of c.lignes ?? []) {
+    const produit = await lirePremier<{ id: number }>(
+      'SELECT id FROM produit WHERE id_local = ?',
+      ligne.produit_id_local,
+    );
+    if (!produit) {
+      throw new SynchronisationImpossible(
+        `La commande ${c.numero} dépend d'un modèle absent.`,
+      );
+    }
+    const variante = ligne.variante_id_local
+      ? await lirePremier<{ id: number }>(
+          'SELECT id FROM variante_produit WHERE id_local = ? AND produit_id = ?',
+          ligne.variante_id_local,
+          produit.id,
+        )
+      : null;
+    await executer(
+      `INSERT INTO ligne_commande_client
+       (commande_id, serveur_id, produit_id, variante_id, libelle,
+        quantite_commandee, quantite_reservee, quantite_preparee,
+        prix_unitaire, total)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      commandeId,
+      ligne.serveur_id ?? null,
+      produit.id,
+      variante?.id ?? null,
+      ligne.libelle,
+      nombre(ligne.quantite_commandee),
+      nombre(ligne.quantite_reservee),
+      nombre(ligne.quantite_preparee),
+      nombre(ligne.prix_unitaire),
+      nombre(ligne.total),
+    );
+  }
+
+  // Le serveur vient de confirmer cet état : l'outbox locale ne doit plus
+  // rejouer l'opération déjà appliquée.
+  await executer(
+    'DELETE FROM sync_outbox WHERE type_objet = ? AND id_local = ?',
+    'commande_client',
+    c.id_local,
+  );
 }
 
 async function appliquerAchat(a: AchatSync): Promise<void> {
