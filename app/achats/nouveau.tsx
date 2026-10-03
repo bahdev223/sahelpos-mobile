@@ -30,6 +30,7 @@ export default function EcranNouvelAchat() {
   const router = useRouter();
   const { commande } = useLocalSearchParams<{ commande?: string }>();
   const { boutique, profilCommerce } = useSession();
+  const habillement = profilCommerce?.secteur === 'HABILLEMENT';
   const [etape, setEtape] = useState<Etape>(1);
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [fournisseurId, setFournisseurId] = useState<number | null>(null);
@@ -154,8 +155,12 @@ export default function EcranNouvelAchat() {
         modePaiement, recevoirMaintenant,
       });
       Alert.alert(
-        recevoirMaintenant ? 'Achat reçu' : 'Achat enregistré',
-        recevoirMaintenant ? `${achat.numero} : la marchandise est entrée en stock.` : `${achat.numero} : achat en attente de réception.`,
+        recevoirMaintenant
+          ? (habillement ? 'Approvisionnement reçu' : 'Achat reçu')
+          : (habillement ? 'Approvisionnement enregistré' : 'Achat enregistré'),
+        recevoirMaintenant
+          ? `${achat.numero} : la marchandise est entrée en stock.`
+          : `${achat.numero} : ${habillement ? 'approvisionnement' : 'achat'} en attente de réception.`,
         [{ text: 'Voir', onPress: () => router.replace(`/achats/${achat.achatId}`) }],
       );
     } catch (erreur) {
@@ -168,7 +173,7 @@ export default function EcranNouvelAchat() {
     <Stack.Screen options={{ headerShown: false }} />
     <View style={styles.header}>
       <Pressable onPress={retour} style={styles.retour} hitSlop={10}><Icone nom="retour" taille={27} couleur="#061541" /></Pressable>
-      <Text style={styles.titre}>Nouvel achat</Text>
+      <Text style={styles.titre}>{habillement ? 'Nouvel approvisionnement' : 'Nouvel achat'}</Text>
       <View style={styles.brouillon}><Icone nom="document" taille={17} couleur={couleurs.primaire} /><Text style={styles.brouillonTexte}>Brouillon</Text></View>
     </View>
     <ScrollView contentContainerStyle={styles.contenu} showsVerticalScrollIndicator={false}>
