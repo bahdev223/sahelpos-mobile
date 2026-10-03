@@ -105,7 +105,15 @@ export default function FicheModeleHabillement() {
         <View style={s.section}>
           <View style={s.sectionEntete}>
             <Text style={s.sectionTitre}>Variantes</Text>
-            <Text style={s.sectionCompteur}>{variantes.length}</Text>
+            <Pressable
+              onPress={() =>
+                router.push({ pathname: '/habillement/variantes/[id]', params: { id: String(produit.id) } })
+              }
+              style={s.gererVariantes}
+            >
+              <Text style={s.gererVariantesTexte}>Gérer</Text>
+              <Icone nom="chevron" taille={14} couleur={couleurs.primaire} />
+            </Pressable>
           </View>
           {variantes.map((variante) => (
             <View key={variante.idLocal} style={s.variante}>
@@ -161,6 +169,12 @@ const s = StyleSheet.create({
   sectionEntete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitre: { fontSize: 15, fontWeight: '900', color: couleurs.texte },
   sectionCompteur: { color: couleurs.primaire, fontWeight: '900' },
+  gererVariantes: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10,
+    backgroundColor: couleurs.primaireDouce,
+  },
+  gererVariantesTexte: { fontSize: 11, fontWeight: '900', color: couleurs.primaire },
   choix: { flexDirection: 'row', flexWrap: 'wrap', gap: espaces.s, marginTop: espaces.m },
   valeur: {
     flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 11,
