@@ -34,6 +34,7 @@ import { listerAlertesStock } from '../db/repositories/produit';
 import { Icone, IconePastille, Pastille } from './icones';
 import type { NomIcone } from './icones';
 import { couleurs, espaces, rayons } from './theme';
+import { resoudreProfilUIMobile, type SecteurCommerce } from '../domain/commerce';
 
 const LARGEUR = Math.min(320, Dimensions.get('window').width * 0.86);
 const DUREE = 220;
@@ -183,6 +184,9 @@ export function useTiroir(): ValeurTiroir {
 
 export interface InfosTiroir {
   boutique: string;
+  secteur: SecteurCommerce;
+  secteurLibelle: string;
+  capabilitiesCommerce: string[];
   utilisateur: string;
   role: string;
   /** Nombre d'alertes de stock, affiche en pastille sur l'entree correspondante. */
@@ -253,6 +257,18 @@ export function FournisseurTiroir({
 
 function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () => void }) {
   const router = useRouter();
+  const profilUI = resoudreProfilUIMobile({
+    version: 1,
+    secteur: infos.secteur,
+    secteur_libelle: infos.secteurLibelle,
+    mode_vente: 'DETAIL',
+    mode_approvisionnement: 'CLASSIQUE',
+    mode_catalogue: 'SIMPLE',
+    capabilities_effectives: infos.capabilitiesCommerce,
+    capabilities_non_supportees: [],
+    compatible: true,
+    raison: '',
+  });
   const marges = useSafeAreaInsets();
   const [alertes, setAlertes] = useState(infos.alertes ?? 0);
 
@@ -310,13 +326,27 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
             <Text style={st.compteNom} numberOfLines={1}>
               {infos.utilisateur}
             </Text>
-            <Text style={st.compteRole}>{infos.role}</Text>
+            <Text style={st.compteRole}>{infos.role} · {profilUI.nom}</Text>
           </View>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={st.liste}>
-        {GROUPES.map((groupe) => (
+        {GROUPES.map((groupe) => ({
+          ...groupe,
+          entrees: groupe.entrees.map((entree) => {
+            if (entree.chemin === '/categories') {
+              return { ...entree, titre: profilUI.libelles.categories };
+            }
+            if (entree.chemin === '/achats') {
+              return { ...entree, titre: profilUI.libelles.achats };
+            }
+            if (entree.chemin === '/inventaire') {
+              return { ...entree, titre: profilUI.libelles.inventaire };
+            }
+            return entree;
+          }),
+        })).map((groupe) => (
           <View key={groupe.titre} style={st.groupe}>
             <Text style={st.groupeTitre}>{groupe.titre.toUpperCase()}</Text>
             {groupe.entrees.map((entree) => (
