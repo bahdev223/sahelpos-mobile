@@ -12,6 +12,7 @@ import { BandeauEtat, couleurs, espaces, rayons } from '../../ui/components';
 import { Icone } from '../../ui/icones';
 import { BoutonMenu } from '../../ui/tiroir';
 import { uriImage, formaterFrancs } from '../../../app/produit/nouveau';
+import { HABILLEMENT_MOBILE_THEME as H } from './theme';
 
 interface Modele {
   id: number;
@@ -108,18 +109,18 @@ export function CatalogueHabillement() {
           <Text style={s.sousTitre}>Tailles · couleurs · variantes</Text>
         </View>
         <Pressable style={s.boutonIcone} onPress={() => router.push('/habillement/referentiel')}>
-          <Icone nom="etiquette" taille={20} couleur={couleurs.primaire} />
+          <Icone nom="etiquette" taille={20} couleur={H.primaire} />
         </Pressable>
       </View>
 
       <View style={s.recherche}>
-        <Icone nom="recherche" taille={18} couleur={couleurs.texteFaible} />
+        <Icone nom="recherche" taille={18} couleur={H.texteFaible} />
         <TextInput
           style={s.saisie}
           value={recherche}
           onChangeText={setRecherche}
           placeholder="Rechercher un modèle ou une collection"
-          placeholderTextColor={couleurs.texteFaible}
+          placeholderTextColor={H.texteFaible}
         />
       </View>
 
@@ -185,55 +186,55 @@ export function CatalogueHabillement() {
         onPress={() => router.push('/habillement/modele/nouveau')}
         accessibilityLabel="Nouveau modèle"
       >
-        <Icone nom="plus" taille={28} couleur={couleurs.texteInverse} />
+        <Icone nom="plus" taille={28} couleur={'#FFFFFF'} />
       </Pressable>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: couleurs.fond },
+  page: { flex: 1, backgroundColor: H.fond },
   entete: {
     flexDirection: 'row', alignItems: 'center', gap: espaces.m,
-    paddingHorizontal: espaces.m, paddingVertical: espaces.m, backgroundColor: couleurs.surface,
+    paddingHorizontal: espaces.m, paddingVertical: espaces.m, backgroundColor: H.surface,
   },
   enteteTextes: { flex: 1 },
-  titre: { fontSize: 21, fontWeight: '900', color: couleurs.texte },
-  sousTitre: { marginTop: 2, fontSize: 12, color: couleurs.texteFaible },
+  titre: { fontSize: 21, fontWeight: '900', color: H.texte },
+  sousTitre: { marginTop: 2, fontSize: 12, color: H.texteFaible },
   boutonIcone: {
     width: 42, height: 42, borderRadius: rayons.m, borderWidth: 1,
-    borderColor: couleurs.bordure, alignItems: 'center', justifyContent: 'center',
+    borderColor: H.bordure, alignItems: 'center', justifyContent: 'center',
   },
   recherche: {
     margin: espaces.m, marginBottom: espaces.s, minHeight: 48, paddingHorizontal: espaces.m,
     flexDirection: 'row', alignItems: 'center', gap: espaces.s, borderRadius: rayons.m,
-    borderWidth: 1, borderColor: couleurs.bordure, backgroundColor: couleurs.surface,
+    borderWidth: 1, borderColor: H.bordure, backgroundColor: H.surface,
   },
-  saisie: { flex: 1, color: couleurs.texte, fontSize: 14 },
+  saisie: { flex: 1, color: H.texte, fontSize: 14 },
   raccourcis: { gap: espaces.s, paddingHorizontal: espaces.m, paddingBottom: espaces.m },
-  puce: { paddingVertical: 9, paddingHorizontal: 13, borderRadius: 20, backgroundColor: couleurs.primaireDouce },
-  puceTexte: { color: couleurs.primaire, fontSize: 12, fontWeight: '800' },
+  puce: { paddingVertical: 9, paddingHorizontal: 13, borderRadius: 20, backgroundColor: H.primaireClair },
+  puceTexte: { color: H.primaire, fontSize: 12, fontWeight: '800' },
   liste: { paddingHorizontal: espaces.m, paddingBottom: 110, gap: espaces.m },
   ligne: { gap: espaces.m },
   carte: {
     flex: 1, minWidth: 0, borderRadius: rayons.l, overflow: 'hidden',
-    backgroundColor: couleurs.surface, borderWidth: 1, borderColor: couleurs.bordure,
+    backgroundColor: H.surface, borderWidth: 1, borderColor: H.bordure,
   },
   image: { width: '100%', aspectRatio: 1 },
-  imageVide: { alignItems: 'center', justifyContent: 'center', backgroundColor: couleurs.primaireDouce },
-  initiale: { fontSize: 42, fontWeight: '900', color: couleurs.primaire },
+  imageVide: { alignItems: 'center', justifyContent: 'center', backgroundColor: H.primaireClair },
+  initiale: { fontSize: 42, fontWeight: '900', color: H.primaire },
   corps: { padding: 11 },
-  nom: { color: couleurs.texte, fontSize: 14, lineHeight: 18, fontWeight: '900' },
-  collection: { marginTop: 3, color: couleurs.texteFaible, fontSize: 11 },
-  prix: { marginTop: 7, color: couleurs.primaire, fontSize: 15, fontWeight: '900' },
+  nom: { color: H.texte, fontSize: 14, lineHeight: 18, fontWeight: '900' },
+  collection: { marginTop: 3, color: H.texteFaible, fontSize: 11 },
+  prix: { marginTop: 7, color: H.primaire, fontSize: 15, fontWeight: '900' },
   meta: { flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginTop: 7 },
-  metaTexte: { fontSize: 10, color: couleurs.texteFaible, fontWeight: '700' },
-  options: { marginTop: 5, fontSize: 10, color: couleurs.texte },
+  metaTexte: { fontSize: 10, color: H.texteFaible, fontWeight: '700' },
+  options: { marginTop: 5, fontSize: 10, color: H.texte },
   vide: { padding: 40, alignItems: 'center' },
-  videTitre: { fontSize: 17, fontWeight: '900', color: couleurs.texte },
-  videTexte: { marginTop: 8, textAlign: 'center', color: couleurs.texteFaible, lineHeight: 19 },
+  videTitre: { fontSize: 17, fontWeight: '900', color: H.texte },
+  videTexte: { marginTop: 8, textAlign: 'center', color: H.texteFaible, lineHeight: 19 },
   fab: {
     position: 'absolute', right: 20, bottom: 24, width: 58, height: 58, borderRadius: 29,
-    backgroundColor: couleurs.primaire, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: H.primaire, alignItems: 'center', justifyContent: 'center',
   },
 });
