@@ -351,7 +351,9 @@ export async function recevoirAchat(achatId: number): Promise<void> {
         avantVariante ?? avant, apresVariante ?? apres, l.prix_unitaire,
         a.numero, `Achat ${a.numero}`, horodatage,
       );
-      await marquerChangement('mouvement', mouvementId);
+      // Ne pas pousser ce mouvement séparément : le serveur rejoue la
+      // réception depuis l'objet achat et produira son propre mouvement.
+      // Le pousser ici doublerait l'entrée de stock.
     }
 
     await executer(
