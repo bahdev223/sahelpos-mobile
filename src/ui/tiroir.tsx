@@ -362,7 +362,13 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
             return entree;
           });
           if (infos.secteur === 'HABILLEMENT' && groupe.titre === 'Gestion') {
-            entrees.splice(1, 0, {
+            entrees.unshift({
+              titre: 'Showroom',
+              description: 'Vue visuelle des modèles',
+              chemin: '/habillement/showroom',
+              icone: 'oeil',
+            });
+            entrees.splice(2, 0, {
               titre: 'Tailles & couleurs',
               description: 'Variantes, tailles et couleurs',
               chemin: '/habillement/referentiel',
@@ -376,6 +382,14 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
                 icone: 'mouvements',
               });
             }
+          }
+          if (infos.secteur === 'HABILLEMENT' && groupe.titre === 'Activite') {
+            entrees.push({
+              titre: 'Rapports Mode',
+              description: 'Ventes, modèles et variantes',
+              chemin: '/habillement/rapports',
+              icone: 'graphique',
+            });
           }
           return { ...groupe, entrees };
         }).map((groupe) => (
