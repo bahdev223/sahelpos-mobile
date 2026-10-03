@@ -28,7 +28,7 @@ const dateAujourdhui = () => new Intl.DateTimeFormat('fr-FR', {
 
 export default function EcranNouvelAchat() {
   const router = useRouter();
-  const { commande } = useLocalSearchParams<{ commande?: string }>();
+  const { commande, matrice } = useLocalSearchParams<{ commande?: string; matrice?: string }>();
   const { boutique, profilCommerce } = useSession();
   const habillement = profilCommerce?.secteur === 'HABILLEMENT';
   const [etape, setEtape] = useState<Etape>(1);
@@ -54,6 +54,28 @@ export default function EcranNouvelAchat() {
   const [prix, setPrix] = useState('');
 
   useEffect(() => { listerFournisseurs().then(setFournisseurs).catch(() => setFournisseurs([])); }, []);
+  useEffect(() => {
+    if (!matrice || articles.length) return;
+    try {
+      const lignes = JSON.parse(matrice) as ArticleAchat[];
+      if (!Array.isArray(lignes) || !lignes.length) return;
+      const valides = lignes.filter((ligne) =>
+        Number.isFinite(Number(ligne.produitId)) &&
+        Number.isFinite(Number(ligne.quantite)) &&
+        Number(ligne.quantite) > 0 &&
+        Number.isFinite(Number(ligne.prixUnitaire)) &&
+        Number(ligne.prixUnitaire) > 0
+      );
+      if (!valides.length) return;
+      setArticles(valides);
+      // La matrice représente déjà l'étape "Articles". On arrive directement
+      // sur les informations fournisseur, puis le flux normal continue.
+      setEtape(1);
+    } catch {
+      // Un paramètre mal formé ne doit jamais casser la saisie manuelle.
+    }
+  }, [articles.length, matrice]);
+
   useEffect(() => {
     if (!commande) return;
     try {
@@ -188,7 +210,12 @@ export default function EcranNouvelAchat() {
         onNouveau={() => router.push('/fournisseurs')} onReference={setReference} onNote={setNote}
       />}
       {etape === 2 && <EtapeArticles
-        articles={articles} devise={boutique.devise} total={total} onAjouter={() => setChoixOuvert(true)}
+        articles={articles}
+        devise={boutique.devise}
+        total={total}
+        habillement={habillement}
+        onAjouter={() => setChoixOuvert(true)}
+        onMatrice={() => router.push('/habillement/approvisionnement-matrice')}
         onRetirer={(index) => setArticles((liste) => liste.filter((_, i) => i !== index))}
       />}
       {etape === 3 && <EtapeReglement
@@ -258,11 +285,35 @@ function Champ({ label, valeur, onChange, placeholder }: { label: string; valeur
   return <View style={styles.groupe}><Text style={styles.label}>{label}</Text><View style={styles.saisie}><Icone nom="document" taille={23} couleur="#0c2857" /><TextInput value={valeur} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="#7185aa" style={styles.input} /></View></View>;
 }
 
-function EtapeArticles({ articles, devise, total, onAjouter, onRetirer }: { articles: ArticleAchat[]; devise: string; total: number; onAjouter: () => void; onRetirer: (index: number) => void }) {
+function EtapeArticles({
+  articles, devise, total, habillement, onAjouter, onMatrice, onRetirer,
+}: {
+  articles: ArticleAchat[];
+  devise: string;
+  total: number;
+  habillement: boolean;
+  onAjouter: () => void;
+  onMatrice: () => void;
+  onRetirer: (index: number) => void;
+}) {
   return <View style={styles.ecran}>
     <View style={styles.recherche}><Icone nom="recherche" taille={23} couleur="#09245b" /><Text style={styles.rechercheTexte}>Rechercher un produit...</Text><View style={styles.scan}><Icone nom="codeBarres" taille={21} couleur="#09245b" /></View></View>
     <View style={styles.filtres}><Filtre titre="Tous" actif /><Filtre titre="Alimentaire" /><Filtre titre="Boisson" /><Filtre titre="Hygiène" /><Filtre titre="Autre" /></View>
-    <View style={styles.titreSection}><Text style={styles.titreSectionTexte}>Articles ({articles.length})</Text><Pressable onPress={onAjouter} style={styles.ajouter}><Icone nom="plus" taille={20} couleur={couleurs.primaire} /><Text style={styles.ajouterTexte}>Ajouter</Text></Pressable></View>
+    <View style={styles.titreSection}>
+      <Text style={styles.titreSectionTexte}>Articles ({articles.length})</Text>
+      <View style={styles.actionsArticles}>
+        {habillement ? (
+          <Pressable onPress={onMatrice} style={styles.matriceBouton}>
+            <Icone nom="catalogue" taille={18} couleur={couleurs.primaire} />
+            <Text style={styles.matriceBoutonTexte}>Matrice</Text>
+          </Pressable>
+        ) : null}
+        <Pressable onPress={onAjouter} style={styles.ajouter}>
+          <Icone nom="plus" taille={20} couleur={couleurs.primaire} />
+          <Text style={styles.ajouterTexte}>Ajouter</Text>
+        </Pressable>
+      </View>
+    </View>
     {articles.length === 0 ? <View style={styles.vide}><Icone nom="stock" taille={45} couleur="#a2afc1" /><Text style={styles.videTitre}>Aucun article ajouté</Text><Text style={styles.videTexte}>Appuyez sur « Ajouter » pour choisir vos produits.</Text></View> : articles.map((article, index) => <CarteArticle key={`${article.produitId}-${index}`} article={article} devise={devise} onRetirer={() => onRetirer(index)} />)}
     <View style={styles.resumeArticles}><View><Text style={styles.resumeLegende}>Total</Text><Text style={styles.resumeValeur}>{formaterMontant(total, devise)}</Text></View><View style={styles.compteur}><Text style={styles.resumeLegende}>Articles</Text><Text style={styles.resumeValeur}>{articles.length}</Text></View></View>
   </View>;
@@ -502,7 +553,14 @@ const styles = StyleSheet.create({
   varianteAchatStockActive: { color: '#dceaff' },
 
   filtres: { flexDirection: 'row', gap: 7, flexWrap: 'wrap' }, filtre: { minHeight: 39, justifyContent: 'center', paddingHorizontal: 13, borderRadius: 12, backgroundColor: '#edf2f8' }, filtreActif: { backgroundColor: couleurs.primaire }, filtreTexte: { color: '#587096', fontSize: 13, fontWeight: '800' }, filtreTexteActif: { color: '#fff' },
-  titreSection: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, titreSectionTexte: { flexShrink: 1, color: '#061541', fontSize: 20, fontWeight: '900' }, ajouter: { minHeight: 41, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, borderWidth: 1, borderColor: '#cfe0fe', borderRadius: 12, backgroundColor: '#f6faff' }, ajouterTexte: { color: couleurs.primaire, fontSize: 13, fontWeight: '900' },
+  titreSection: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  actionsArticles: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  matriceBouton: {
+    minHeight: 41, flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 11, borderWidth: 1, borderColor: '#e2d1c3',
+    borderRadius: 12, backgroundColor: '#f5ece5',
+  },
+  matriceBoutonTexte: { color: couleurs.primaire, fontSize: 13, fontWeight: '900' }, titreSectionTexte: { flexShrink: 1, color: '#061541', fontSize: 20, fontWeight: '900' }, ajouter: { minHeight: 41, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, borderWidth: 1, borderColor: '#cfe0fe', borderRadius: 12, backgroundColor: '#f6faff' }, ajouterTexte: { color: couleurs.primaire, fontSize: 13, fontWeight: '900' },
   vide: { minHeight: 180, alignItems: 'center', justifyContent: 'center', padding: 22, borderWidth: 1, borderColor: '#e1e8f2', borderRadius: 14, backgroundColor: '#fff' }, videTitre: { marginTop: 12, color: '#536a8f', fontSize: 16, fontWeight: '900' }, videTexte: { marginTop: 5, color: '#7185a5', fontSize: 14, textAlign: 'center' },
   carteArticle: { minHeight: 128, flexDirection: 'row', gap: 11, padding: 12, borderWidth: 1, borderColor: '#e0e8f2', borderRadius: 14, backgroundColor: '#fff' }, miniature: { width: 61, height: 75, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#eef5ff' }, articleCentre: { flex: 1 }, articleNom: { color: '#071a43', fontSize: 16, fontWeight: '900' }, articleMeta: { marginTop: 3, color: '#63779a', fontSize: 13 }, quantite: { height: 34, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', marginTop: 9, borderRadius: 8, backgroundColor: '#f0f6ff' }, quantiteBouton: { width: 33, alignItems: 'center' }, quantiteTexte: { minWidth: 29, textAlign: 'center', color: '#092158', fontSize: 15, fontWeight: '800' }, articleDroite: { alignItems: 'flex-end', justifyContent: 'space-between' }, corbeille: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#fff0f2' }, articleMontant: { color: '#061541', fontSize: 16, fontWeight: '900' },
   resumeArticles: { minHeight: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 13, borderTopWidth: 1, borderTopColor: '#e4ebf4' }, compteur: { minWidth: 80, paddingLeft: 19, borderLeftWidth: 1, borderLeftColor: '#e4ebf4' }, resumeLegende: { color: '#607595', fontSize: 13 }, resumeValeur: { marginTop: 3, color: '#061541', fontSize: 20, fontWeight: '900' },
