@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { obtenirBase } from '../../src/db/database';
 import { BandeauEtat, couleurs, espaces, rayons } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
+import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
 
 interface Ligne {
   dimension_code: string;
@@ -46,7 +47,7 @@ export default function ReferentielHabillement() {
       <BandeauEtat />
       <View style={s.entete}>
         <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Icone nom="retour" taille={24} couleur={couleurs.texte} />
+          <Icone nom="retour" taille={24} couleur={H.texte} />
         </Pressable>
         <View>
           <Text style={s.titre}>Tailles & couleurs</Text>
@@ -81,28 +82,28 @@ export default function ReferentielHabillement() {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: couleurs.fond },
+  page: { flex: 1, backgroundColor: H.fond },
   entete: {
     flexDirection: 'row', alignItems: 'center', gap: espaces.m,
-    padding: espaces.m, backgroundColor: couleurs.surface,
+    padding: espaces.m, backgroundColor: H.surface,
   },
-  titre: { fontSize: 19, fontWeight: '900', color: couleurs.texte },
-  sousTitre: { marginTop: 2, fontSize: 11, color: couleurs.texteFaible },
+  titre: { fontSize: 19, fontWeight: '900', color: H.texte },
+  sousTitre: { marginTop: 2, fontSize: 11, color: H.texteFaible },
   contenu: { padding: espaces.m, paddingBottom: espaces.xxl, gap: espaces.m },
   carte: {
     padding: espaces.m, borderRadius: rayons.l, borderWidth: 1,
-    borderColor: couleurs.bordure, backgroundColor: couleurs.surface,
+    borderColor: H.bordure, backgroundColor: H.surface,
   },
-  dimension: { fontSize: 15, fontWeight: '900', color: couleurs.texte },
+  dimension: { fontSize: 15, fontWeight: '900', color: H.texte },
   valeurs: { flexDirection: 'row', flexWrap: 'wrap', gap: espaces.s, marginTop: espaces.m },
   puce: {
     flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 8,
-    paddingHorizontal: 11, borderRadius: 18, backgroundColor: couleurs.fond,
-    borderWidth: 1, borderColor: couleurs.bordure,
+    paddingHorizontal: 11, borderRadius: 18, backgroundColor: H.fond,
+    borderWidth: 1, borderColor: H.bordure,
   },
-  couleur: { width: 16, height: 16, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: couleurs.bordure },
-  puceTexte: { color: couleurs.texte, fontWeight: '700', fontSize: 12 },
+  couleur: { width: 16, height: 16, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: H.bordure },
+  puceTexte: { color: H.texte, fontWeight: '700', fontSize: 12 },
   vide: { alignItems: 'center', padding: espaces.xl },
-  videTitre: { fontSize: 16, fontWeight: '900', color: couleurs.texte },
-  videTexte: { marginTop: 8, textAlign: 'center', color: couleurs.texteFaible, lineHeight: 19 },
+  videTitre: { fontSize: 16, fontWeight: '900', color: H.texte },
+  videTexte: { marginTop: 8, textAlign: 'center', color: H.texteFaible, lineHeight: 19 },
 });
