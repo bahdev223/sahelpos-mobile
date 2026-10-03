@@ -26,6 +26,8 @@ import {
 import { BandeauEtat } from '../../../src/ui/components';
 import { Icone } from '../../../src/ui/icones';
 import { couleurs } from '../../../src/ui/theme';
+import { marquerChangement } from '../../../src/services/synchronisation';
+import { useSession } from '../../_layout';
 
 // --------------------------------------------------------------------------
 // Acces aux donnees
@@ -33,6 +35,7 @@ import { couleurs } from '../../../src/ui/theme';
 
 interface LigneProduit {
   id: number;
+  id_local: string;
   nom: string;
   categorie: string | null;
   code_barre: string | null;
@@ -63,7 +66,7 @@ async function chargerFiche(identifiant: number): Promise<FicheProduit | null> {
   const db = await obtenirBase();
 
   const produit = await db.getFirstAsync<LigneProduit>(
-    `SELECT id, nom, categorie, code_barre, prix_unitaire, prix_achat, unite_base,
+    `SELECT id, id_local, nom, categorie, code_barre, prix_unitaire, prix_achat, unite_base,
             quantite_base, stock_min, gestion_stock, chemin_image, actif
        FROM produit WHERE id = ?`,
     identifiant,
@@ -105,6 +108,11 @@ async function chargerFiche(identifiant: number): Promise<FicheProduit | null> {
 async function mettreAJourProduit(identifiant: number, valide: ProduitValide): Promise<void> {
   const db = await obtenirBase();
   const maintenant = new Date().toISOString();
+  const existant = await db.getFirstAsync<{ id_local: string }>(
+    'SELECT id_local FROM produit WHERE id = ?',
+    identifiant,
+  );
+  if (!existant) throw new Error('Produit introuvable.');
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
@@ -138,15 +146,22 @@ async function mettreAJourProduit(identifiant: number, valide: ProduitValide): P
       );
     }
   });
+  await marquerChangement('produit', existant.id_local);
 }
 
 export async function desactiverProduit(identifiant: number): Promise<void> {
   const db = await obtenirBase();
+  const existant = await db.getFirstAsync<{ id_local: string }>(
+    'SELECT id_local FROM produit WHERE id = ?',
+    identifiant,
+  );
+  if (!existant) throw new Error('Produit introuvable.');
   await db.runAsync(
     'UPDATE produit SET actif = 0, date_modification = ? WHERE id = ?',
     new Date().toISOString(),
     identifiant,
   );
+  await marquerChangement('produit', existant.id_local);
 }
 
 /** Suppression definitive : emporte les sous-unites et tout l'historique de stock. */
@@ -194,6 +209,8 @@ type Etat =
 
 export default function FicheProduitEcran() {
   const router = useRouter();
+  const { profilCommerce } = useSession();
+  const habillement = profilCommerce?.secteur === 'HABILLEMENT';
   const parametres = useLocalSearchParams<{ id?: string }>();
   const identifiant = Number(parametres.id);
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
@@ -300,7 +317,9 @@ export default function FicheProduitEcran() {
           <Text style={s.retourTexte}>Retour</Text>
         </Pressable>
         <Text style={s.titre} numberOfLines={1}>
-          {etat.phase === 'pret' ? etat.fiche.produit.nom : 'Fiche produit'}
+          {etat.phase === 'pret'
+            ? etat.fiche.produit.nom
+            : habillement ? 'Modifier le modèle' : 'Fiche produit'}
         </Text>
       </View>
 
@@ -334,7 +353,7 @@ export default function FicheProduitEcran() {
           key={`${etat.fiche.produit.id}-${etat.saisie.nom}-${etat.fiche.produit.quantite_base}`}
           saisieInitiale={etat.saisie}
           creation={false}
-          libelleValider="Enregistrer"
+          libelleValider={habillement ? 'Enregistrer le modèle' : 'Enregistrer'}
           onValider={enregistrer}
           onAnnuler={() => router.back()}
           complement={
@@ -389,7 +408,9 @@ export default function FicheProduitEcran() {
                 <Pressable
                   style={sl.boutonSupprimer}
                   onPress={() => demanderSuppression(etat.fiche)}>
-                  <Text style={sl.boutonSupprimerTexte}>Supprimer ce produit</Text>
+                  <Text style={sl.boutonSupprimerTexte}>
+                    {habillement ? 'Supprimer ce modèle' : 'Supprimer ce produit'}
+                  </Text>
                 </Pressable>
               </View>
             </>
