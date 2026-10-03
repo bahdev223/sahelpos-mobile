@@ -1254,6 +1254,40 @@ async function appliquerMouvement(m: MouvementSync): Promise<void> {
     m.utilisateur ?? null,
     m.date_mouvement,
   );
+
+  const stockApres = nombreOptionnel(m.stock_apres);
+  if (stockApres !== null) {
+    if (variante) {
+      await executer(
+        'UPDATE variante_produit SET stock_actuel = ?, date_modification = ? WHERE id = ?',
+        stockApres,
+        m.date_modification ?? m.date_mouvement,
+        variante.id,
+      );
+      // Le stock du modèle est un cache de la somme de ses variantes. Le
+      // recalcul élimine les dérives après plusieurs opérations Web hors ligne.
+      await executer(
+        `UPDATE produit
+            SET quantite_base = (
+              SELECT COALESCE(SUM(stock_actuel), 0)
+                FROM variante_produit
+               WHERE produit_id = ? AND actif = 1
+            ),
+            date_modification = ?
+          WHERE id = ?`,
+        produit.id,
+        m.date_modification ?? m.date_mouvement,
+        produit.id,
+      );
+    } else {
+      await executer(
+        'UPDATE produit SET quantite_base = ?, date_modification = ? WHERE id = ?',
+        stockApres,
+        m.date_modification ?? m.date_mouvement,
+        produit.id,
+      );
+    }
+  }
 }
 
 async function appliquerAchat(a: AchatSync): Promise<void> {
