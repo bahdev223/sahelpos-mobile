@@ -55,3 +55,23 @@ test('missing or unknown commerce contracts fail closed', () => {
     assert.equal(lireProfilCommerce(value), null);
   }
 });
+
+
+test('habillement core profile is supported and resolves dedicated mobile labels', () => {
+  const { lireProfilCommerce, resoudreProfilUIMobile } = charger();
+  const habillement = lireProfilCommerce({
+    ...contrat,
+    secteur: 'HABILLEMENT',
+    secteur_libelle: 'Habillement',
+    capabilities_effectives: [
+      'STOCK_SIMPLE', 'PRODUCT_VARIANTS', 'SIZE_DIMENSION',
+      'COLOR_DIMENSION', 'VARIANT_EXCHANGE', 'INVENTORY',
+    ],
+  });
+  assert.equal(habillement?.compatible, true);
+  const ui = resoudreProfilUIMobile(habillement);
+  assert.equal(ui.code, 'HABILLEMENT');
+  assert.equal(ui.libelles.catalogue, 'Modeles');
+  assert.equal(ui.libelles.produits, 'Modeles');
+  assert.equal(ui.libelles.categories, 'Collections');
+});
