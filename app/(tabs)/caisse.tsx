@@ -84,6 +84,7 @@ import {
 import { useSession } from '../_layout';
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
+import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
 
 // --- Acces aux donnees ------------------------------------------------------
 
@@ -262,6 +263,7 @@ type EtatListe = 'chargement' | 'pret' | 'erreur';
 
 export default function EcranCaisse() {
   const { boutique, utilisateur, revisionSynchronisation, profilCommerce } = useSession();
+  const habillement = profilCommerce?.secteur === 'HABILLEMENT';
 
   const [recherche, setRecherche] = useState('');
   const [categorie, setCategorie] = useState<string | null>(null);
@@ -547,6 +549,7 @@ export default function EcranCaisse() {
           <CarteProduit
             produit={item}
             devise={boutique.devise}
+            habillement={habillement}
             onPress={() => void ouvrirChoix(item)}
           />
         )}
@@ -555,10 +558,28 @@ export default function EcranCaisse() {
   };
 
   return (
-    <SafeAreaView style={styles.ecran} edges={['top']}>
-      <View style={styles.enteteCaisse}>
-        <BoutonMenu />
-        <Text style={styles.enteteCaisseTitre}>Caisse</Text>
+    <SafeAreaView
+      style={[styles.ecran, habillement && { backgroundColor: H.fond }]}
+      edges={['top']}
+    >
+      <View style={[
+        styles.enteteCaisse,
+        habillement && { backgroundColor: H.primaire, paddingBottom: espaces.s },
+      ]}>
+        <BoutonMenu couleur={habillement ? '#FFFFFF' : couleurs.texte} />
+        <View style={{ flex: 1 }}>
+          <Text style={[
+            styles.enteteCaisseTitre,
+            habillement && { color: '#FFFFFF', fontWeight: '900' },
+          ]}>
+            {habillement ? 'Caisse Mode' : 'Caisse'}
+          </Text>
+          {habillement ? (
+            <Text style={{ color: H.primaireClair, fontSize: 10, marginTop: 1 }}>
+              Modèles · tailles · couleurs
+            </Text>
+          ) : null}
+        </View>
       </View>
       <View style={styles.barreRecherche}>
         <Champ
@@ -572,7 +593,11 @@ export default function EcranCaisse() {
           accessibilityRole="button"
           accessibilityLabel="Scanner un code-barres"
           onPress={() => setScanOuvert(true)}
-          style={({ pressed }) => [styles.boutonScan, pressed && styles.presse]}
+          style={({ pressed }) => [
+            styles.boutonScan,
+            habillement && { backgroundColor: H.primaire },
+            pressed && styles.presse,
+          ]}
         >
           <Icone nom="codeBarres" taille={18} couleur={couleurs.texteInverse} />
           <Text style={styles.boutonScanTexte}>Scanner</Text>
@@ -585,6 +610,7 @@ export default function EcranCaisse() {
         nbArticles={nbArticles}
         total={totalPanier}
         devise={boutique.devise}
+        habillement={habillement}
         onVoirPanier={() => setPanierOuvert(true)}
         onEncaisser={() => setPaiementOuvert(true)}
       />
@@ -708,10 +734,12 @@ function FiltresCategorie({
 function CarteProduit({
   produit,
   devise,
+  habillement,
   onPress,
 }: {
   produit: Produit;
   devise: string;
+  habillement: boolean;
   onPress: () => void;
 }) {
   const rupture = produit.gestionStock && produit.quantiteBase <= 0;
@@ -724,7 +752,11 @@ function CarteProduit({
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.carte, pressed && styles.presse]}
+      style={({ pressed }) => [
+        styles.carte,
+        habillement && { backgroundColor: H.surface, borderColor: H.bordure },
+        pressed && styles.presse,
+      ]}
     >
       <View style={styles.cartePhoto}>
         <Vignette chemin={produit.cheminImage} nom={produit.nom} taille={72} />
@@ -741,7 +773,10 @@ function CarteProduit({
       <Text style={styles.carteNom} numberOfLines={2}>
         {produit.nom}
       </Text>
-      <Text style={styles.cartePrix} numberOfLines={1}>
+      <Text
+        style={[styles.cartePrix, habillement && { color: H.primaire }]}
+        numberOfLines={1}
+      >
         {formaterMontant(produit.prixUnitaire, devise)}
       </Text>
     </Pressable>
@@ -754,18 +789,23 @@ function BarrePanier({
   nbArticles,
   total,
   devise,
+  habillement,
   onVoirPanier,
   onEncaisser,
 }: {
   nbArticles: number;
   total: number;
   devise: string;
+  habillement: boolean;
   onVoirPanier: () => void;
   onEncaisser: () => void;
 }) {
   const vide = nbArticles === 0;
   return (
-    <View style={styles.barrePanier}>
+    <View style={[
+      styles.barrePanier,
+      habillement && { backgroundColor: H.surface, borderTopColor: H.bordure },
+    ]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Voir le panier"
@@ -912,7 +952,14 @@ function ModaleUnite({
                         }}
                         style={[
                           styles.varianteChoix,
-                          actif && styles.varianteChoixActive,
+                          choix.variantes.length > 0 && {
+                            borderColor: H.bordure,
+                            backgroundColor: H.surface,
+                          },
+                          actif && [
+                            styles.varianteChoixActive,
+                            { backgroundColor: H.primaire, borderColor: H.primaire },
+                          ],
                           option.stockActuel <= 0 && styles.varianteChoixRupture,
                         ]}
                       >
