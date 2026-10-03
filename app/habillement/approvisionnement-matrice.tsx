@@ -15,6 +15,7 @@ import type { Produit } from '../../src/domain/types';
 import { Bouton, couleurs, espaces, formaterMontant, rayons } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
+import { useSession } from '../_layout';
 
 interface Cellule {
   variante: VarianteMobile;
@@ -24,6 +25,10 @@ interface Cellule {
 
 export default function ApprovisionnementMatrice() {
   const router=useRouter();
+  const { profilCommerce } = useSession();
+  const autorisee =
+    profilCommerce?.secteur === 'HABILLEMENT' &&
+    (profilCommerce?.capabilities_effectives.includes('PURCHASE_MATRIX') ?? false);
   const { produit: produitParam }=useLocalSearchParams<{produit?:string}>();
   const [modele,setModele]=useState<Produit|null>(null);
   const [variantes,setVariantes]=useState<VarianteMobile[]>([]);
@@ -106,6 +111,29 @@ export default function ApprovisionnementMatrice() {
     });
   };
 
+  if (!autorisee) {
+    return (
+      <View style={s.page}>
+        <View style={s.entete}>
+          <Pressable onPress={() => router.back()}>
+            <Icone nom="retour" taille={23} couleur={H.texte} />
+          </Pressable>
+          <View style={s.enteteTextes}>
+            <Text style={s.titre}>Approvisionnement matriciel</Text>
+            <Text style={s.sous}>Fonction non activée pour cette boutique</Text>
+          </View>
+        </View>
+        <View style={s.bloque}>
+          <Icone nom="document" taille={30} couleur={H.texteEteint} />
+          <Text style={s.bloqueTitre}>Matrice non disponible</Text>
+          <Text style={s.bloqueTexte}>
+            Utilisez l’ajout article par article ou activez cette capacité depuis la configuration du commerce.
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   if(!modele){
     return <View style={s.page}>
       <View style={s.entete}>
@@ -175,4 +203,7 @@ const s=StyleSheet.create({
   resume:{flexDirection:'row',justifyContent:'space-between',padding:espaces.l,borderRadius:rayons.m,backgroundColor:H.surface,borderWidth:1,borderColor:H.bordure},
   resumeLabel:{fontSize:10,color:H.texteFaible,fontWeight:'700'},resumeValeur:{marginTop:3,fontSize:22,fontWeight:'900',color:H.primaire},resumeMontant:{marginTop:3,fontSize:18,fontWeight:'900',color:H.texte},
   pied:{position:'absolute',left:0,right:0,bottom:0,padding:espaces.m,backgroundColor:H.surface,borderTopWidth:1,borderTopColor:H.bordure},
+  bloque:{flex:1,alignItems:'center',justifyContent:'center',padding:espaces.xl},
+  bloqueTitre:{marginTop:12,fontSize:17,fontWeight:'900',color:H.texte},
+  bloqueTexte:{marginTop:8,maxWidth:310,textAlign:'center',fontSize:12,lineHeight:18,color:H.texteFaible},
 });
