@@ -31,6 +31,8 @@ export default function EcranNouvelAchat() {
   const { commande, matrice } = useLocalSearchParams<{ commande?: string; matrice?: string }>();
   const { boutique, profilCommerce } = useSession();
   const habillement = profilCommerce?.secteur === 'HABILLEMENT';
+  const matriceAutorisee =
+    habillement && (profilCommerce?.capabilities_effectives.includes('PURCHASE_MATRIX') ?? false);
   const [etape, setEtape] = useState<Etape>(1);
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [fournisseurId, setFournisseurId] = useState<number | null>(null);
@@ -214,6 +216,7 @@ export default function EcranNouvelAchat() {
         devise={boutique.devise}
         total={total}
         habillement={habillement}
+        matriceAutorisee={matriceAutorisee}
         onAjouter={() => setChoixOuvert(true)}
         onMatrice={() => router.push('/habillement/approvisionnement-matrice')}
         onRetirer={(index) => setArticles((liste) => liste.filter((_, i) => i !== index))}
@@ -286,12 +289,13 @@ function Champ({ label, valeur, onChange, placeholder }: { label: string; valeur
 }
 
 function EtapeArticles({
-  articles, devise, total, habillement, onAjouter, onMatrice, onRetirer,
+  articles, devise, total, habillement, matriceAutorisee, onAjouter, onMatrice, onRetirer,
 }: {
   articles: ArticleAchat[];
   devise: string;
   total: number;
   habillement: boolean;
+  matriceAutorisee: boolean;
   onAjouter: () => void;
   onMatrice: () => void;
   onRetirer: (index: number) => void;
@@ -302,7 +306,7 @@ function EtapeArticles({
     <View style={styles.titreSection}>
       <Text style={styles.titreSectionTexte}>Articles ({articles.length})</Text>
       <View style={styles.actionsArticles}>
-        {habillement ? (
+        {habillement && matriceAutorisee ? (
           <Pressable onPress={onMatrice} style={styles.matriceBouton}>
             <Icone nom="catalogue" taille={18} couleur={couleurs.primaire} />
             <Text style={styles.matriceBoutonTexte}>Matrice</Text>
