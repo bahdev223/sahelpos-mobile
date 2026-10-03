@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -55,6 +55,7 @@ export const MIGRATIONS: string[][] = [
       telephone     TEXT,
       email         TEXT,
       adresse       TEXT,
+      chemin_photo  TEXT,
       date_creation TEXT    NOT NULL
     )`,
     `CREATE INDEX IF NOT EXISTS idx_client_nom ON client(nom)`,
@@ -356,5 +357,10 @@ export const MIGRATIONS: string[][] = [
     // Les colonnes sont ajoutees par `reparerSchemaVendeurs` : cette operation
     // est idempotente, meme si une ancienne version a avance user_version sans
     // avoir termine sa migration.
+  ],
+
+  // --- version 9 : photo/profil client ------------------------------------
+  [
+    `ALTER TABLE client ADD COLUMN chemin_photo TEXT`,
   ],
 ];

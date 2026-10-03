@@ -24,6 +24,8 @@ import {
   creerUtilisateur,
   desactiverUtilisateur,
   listerUtilisateurs,
+  LONGUEUR_PIN_MAX,
+  LONGUEUR_PIN_MIN,
   modifierUtilisateur,
 } from '../../src/services/auth';
 import type { Role, Utilisateur } from '../../src/domain/types';
@@ -131,7 +133,7 @@ export default function EcranUtilisateurs() {
     (u: Utilisateur) => {
       Alert.prompt?.(
         `Nouveau code pour ${u.login}`,
-        'Entre 4 et 8 chiffres.',
+        `Entre ${LONGUEUR_PIN_MIN} et ${LONGUEUR_PIN_MAX} chiffres.`,
         async (saisie) => {
           try {
             await modifierUtilisateur(u.id, { pin: saisie });
@@ -209,7 +211,21 @@ export default function EcranUtilisateurs() {
       {ouvert ? (
         <View style={styles.voile}>
           <ScrollView contentContainerStyle={styles.feuille}>
-            <Text style={styles.feuilleTitre}>Nouveau compte</Text>
+            <View style={styles.feuilleEntete}>
+              <Text style={styles.feuilleTitre}>Nouveau compte</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Fermer le formulaire"
+                hitSlop={10}
+                onPress={() => {
+                  setSelecteur(null);
+                  setOuvert(false);
+                }}
+                style={styles.fermerFeuille}
+              >
+                <Text style={styles.fermerFeuilleTexte}>X</Text>
+              </Pressable>
+            </View>
             <Champ valeur={login} onChangeText={setLogin} label="Identifiant" autoFocus />
             <Champ valeur={nom} onChangeText={setNom} label="Nom complet" placeholder="Facultatif" />
             <Champ
@@ -218,7 +234,7 @@ export default function EcranUtilisateurs() {
               label="Code"
               clavier="number-pad"
               secret
-              aide="4 a 8 chiffres. Un code court se tape vite en caisse."
+              aide="4 a 9 chiffres. Un code court se tape vite en caisse."
             />
 
             <Text style={styles.sousTitre}>Role</Text>
@@ -358,7 +374,23 @@ const styles = StyleSheet.create({
     gap: espaces.s,
     maxHeight: '92%',
   },
-  feuilleTitre: { fontSize: 18, fontWeight: '700', color: couleurs.texte },
+  feuilleEntete: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: espaces.m,
+  },
+  feuilleTitre: { flex: 1, fontSize: 18, fontWeight: '700', color: couleurs.texte },
+  fermerFeuille: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: couleurs.surfaceDouce,
+  },
+  fermerFeuilleTexte: { fontSize: 16, fontWeight: '900', color: couleurs.texteFaible },
   sousTitre: {
     fontSize: 13,
     fontWeight: '700',

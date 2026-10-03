@@ -172,7 +172,7 @@ tests/login-terminal.test.cjs
 
 ## PIN local
 
-Le PIN est un code numerique de 4 a 8 chiffres. Il remplace le mot de passe web pour ouvrir la caisse sur le telephone.
+Le PIN est un code numerique de 4 a 9 chiffres. Il remplace le mot de passe web pour ouvrir la caisse sur le telephone. La regle est partagee par le premier demarrage, la connexion et la creation des vendeurs.
 
 Service source :
 
@@ -187,7 +187,7 @@ Fonctions importantes :
 - `connecter`
 - `verifierAccesCaisse`
 
-Ne jamais comparer le PIN en clair. Ne jamais stocker le PIN en clair.
+Ne jamais comparer le PIN en clair. Ne jamais stocker le PIN en clair. Les anciennes bases peuvent contenir un PIN historique en clair : apres une verification reussie, `src/services/auth.ts` le convertit automatiquement en hash, sans supprimer la base.
 
 ## Horaires vendeur / acces caisse
 
@@ -474,4 +474,3 @@ Ce build incluait :
 - prix unitaire modifiable dans le dialogue d'ajout panier
 - headers achats/utilisateurs corriges
 - branding SahelPOS mobile
-

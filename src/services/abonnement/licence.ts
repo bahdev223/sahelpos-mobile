@@ -22,6 +22,7 @@
  * presenter, et l'application redemande une activation.
  */
 import nacl from 'tweetnacl';
+import { lireProfilCommerce, type ProfilCommerceMobile } from '../../domain/commerce';
 
 /**
  * Cle publique de SahelTech.
@@ -45,6 +46,7 @@ export interface Droit {
   /** Peut-on encaisser et enregistrer ? Faux pendant la periode de grace. */
   peutEcrire: boolean;
   fonctionnalites: string[];
+  commerce: ProfilCommerceMobile | null;
   /** Message destine au commercant. Vide si tout va bien. */
   raison: string;
   /** Vraie echeance commerciale, distincte du droit offline de 30 jours. */
@@ -146,7 +148,7 @@ export function lireDroit(licence: string): Droit {
 
   if (!nacl.sign.detached.verify(corps, signature, cle)) {
     throw new LicenceInvalide(
-      "Ce droit d acces n a pas ete emis par Néré. Ressaisissez votre code d activation.",
+      "Ce droit d acces n a pas ete emis par SahelPOS. Ressaisissez votre code d activation.",
     );
   }
 
@@ -159,7 +161,7 @@ export function lireDroit(licence: string): Droit {
 
   if (brut.version !== VERSION_ATTENDUE) {
     throw new LicenceInvalide(
-      "Ce droit vient d une version plus recente de Néré. Mettez l application a jour.",
+      "Ce droit vient d une version plus recente de SahelPOS. Mettez l application a jour.",
     );
   }
 
@@ -175,6 +177,7 @@ export function lireDroit(licence: string): Droit {
       ? (brut.fonctionnalites as unknown[]).map(String)
       : [],
     raison: String(brut.raison ?? ''),
+    commerce: lireProfilCommerce(brut.commerce),
     abonnementExpireLe: String(brut.abonnement_expire_le ?? ''),
     finGraceLe: String(brut.fin_grace_le ?? ''),
     joursRestants: Number.isFinite(Number(brut.jours_restants))

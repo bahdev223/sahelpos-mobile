@@ -23,9 +23,10 @@ interface LigneClient {
   telephone: string | null;
   email: string | null;
   adresse: string | null;
+  chemin_photo: string | null;
 }
 
-const COLONNES = 'id, id_local, nom, telephone, email, adresse';
+const COLONNES = 'id, id_local, nom, telephone, email, adresse, chemin_photo';
 
 function versClient(l: LigneClient): Client {
   return {
@@ -35,6 +36,7 @@ function versClient(l: LigneClient): Client {
     telephone: l.telephone,
     email: l.email,
     adresse: l.adresse,
+    cheminPhoto: l.chemin_photo,
   };
 }
 
@@ -75,20 +77,22 @@ export interface SaisieClient {
   telephone?: string | null;
   email?: string | null;
   adresse?: string | null;
+  cheminPhoto?: string | null;
 }
 
 export async function creerClient(saisie: SaisieClient): Promise<number> {
   const idLocal = genererIdLocal();
   const horodatage = maintenant();
   const r = await executer(
-    `INSERT INTO client (id_local, nom, telephone, email, adresse, date_creation,
+    `INSERT INTO client (id_local, nom, telephone, email, adresse, chemin_photo, date_creation,
                          date_modification)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     idLocal,
     saisie.nom.trim(),
     saisie.telephone?.trim() || null,
     saisie.email?.trim() || null,
     saisie.adresse?.trim() || null,
+    saisie.cheminPhoto ?? null,
     horodatage,
     horodatage,
   );
@@ -102,13 +106,14 @@ export async function modifierClient(id: number, saisie: SaisieClient): Promise<
     id,
   );
   await executer(
-    `UPDATE client SET nom = ?, telephone = ?, email = ?, adresse = ?,
+    `UPDATE client SET nom = ?, telephone = ?, email = ?, adresse = ?, chemin_photo = ?,
                        date_modification = ?
       WHERE id = ?`,
     saisie.nom.trim(),
     saisie.telephone?.trim() || null,
     saisie.email?.trim() || null,
     saisie.adresse?.trim() || null,
+    saisie.cheminPhoto ?? null,
     maintenant(),
     id,
   );

@@ -95,7 +95,7 @@ export default function EcranAchats() {
 
   return (
     <SafeAreaView style={styles.page} edges={['bottom']}>
-      <Stack.Screen options={{ headerShown: false }} />
+      <Stack.Screen options={{ headerShown: true, title: 'Achats' }} />
 
       {erreur ? (
         <Erreur message={erreur} onReessayer={charger} />

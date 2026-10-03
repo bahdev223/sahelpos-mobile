@@ -16,6 +16,8 @@ import {
   Text,
   View,
 } from 'react-native';
+import * as SelecteurImage from 'expo-image-picker';
+import { Directory, File, Paths } from 'expo-file-system';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 
@@ -25,6 +27,7 @@ import {
   Chargement,
   Erreur,
   ListeVide,
+  Vignette,
   couleurs,
   espaces,
   formaterMontant,
@@ -37,8 +40,23 @@ import {
 } from '../src/db/repositories/client';
 import type { Client } from '../src/domain/types';
 
+const DOSSIER_CLIENTS = 'clients';
+
 interface ClientAffiche extends Client {
   resteDu: number;
+}
+
+function nouvelleCle(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function rangerPhotoClient(uriSource: string): Promise<string> {
+  const dossier = new Directory(Paths.document, DOSSIER_CLIENTS);
+  if (!dossier.exists) dossier.create({ intermediates: true });
+  const nomFichier = `${nouvelleCle()}.jpg`;
+  const destination = new File(dossier, nomFichier);
+  await new File(uriSource).copy(destination);
+  return `${DOSSIER_CLIENTS}/${nomFichier}`;
 }
 
 export default function EcranClients() {
@@ -52,6 +70,7 @@ export default function EcranClients() {
   const [nouveauNom, setNouveauNom] = useState('');
   const [nouveauTelephone, setNouveauTelephone] = useState('');
   const [nouvelleAdresse, setNouvelleAdresse] = useState('');
+  const [nouvellePhoto, setNouvellePhoto] = useState<string | null>(null);
   const [enregistrement, setEnregistrement] = useState(false);
 
   const charger = useCallback(async () => {
@@ -100,10 +119,12 @@ export default function EcranClients() {
         nom: nouveauNom,
         telephone: nouveauTelephone,
         adresse: nouvelleAdresse,
+        cheminPhoto: nouvellePhoto,
       });
       setNouveauNom('');
       setNouveauTelephone('');
       setNouvelleAdresse('');
+      setNouvellePhoto(null);
       setFormulaireOuvert(false);
       await charger();
     } catch (e) {
@@ -111,7 +132,23 @@ export default function EcranClients() {
     } finally {
       setEnregistrement(false);
     }
-  }, [nouveauNom, nouveauTelephone, nouvelleAdresse, charger]);
+  }, [nouveauNom, nouveauTelephone, nouvelleAdresse, nouvellePhoto, charger]);
+
+  const choisirPhoto = useCallback(async () => {
+    const permission = await SelecteurImage.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Acces aux photos', "Autorisez l'acces aux photos pour choisir le profil du client.");
+      return;
+    }
+    const resultat = await SelecteurImage.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.72,
+    });
+    if (resultat.canceled || !resultat.assets?.[0]) return;
+    setNouvellePhoto(await rangerPhotoClient(resultat.assets[0].uri));
+  }, []);
 
   if (chargement) return <Chargement message="Lecture des clients..." />;
 
@@ -153,6 +190,7 @@ export default function EcranClients() {
               onPress={() => router.push(`/client/${item.id}`)}
               style={({ pressed }) => [styles.ligne, pressed && styles.lignePressee]}
             >
+              <Vignette chemin={item.cheminPhoto} nom={item.nom} taille={50} />
               <View style={styles.ligneGauche}>
                 <Text style={styles.nom}>{item.nom}</Text>
                 {item.telephone ? (
@@ -183,6 +221,13 @@ export default function EcranClients() {
         <View style={styles.voile}>
           <View style={styles.feuille}>
             <Text style={styles.feuilleTitre}>Nouveau client</Text>
+            <Pressable onPress={() => void choisirPhoto()} style={styles.photoClient}>
+              <Vignette chemin={nouvellePhoto} nom={nouveauNom} taille={74} />
+              <View style={styles.photoTexteBloc}>
+                <Text style={styles.photoTitre}>Photo ou logo</Text>
+                <Text style={styles.photoTexte}>Optionnel, visible dans la fiche et la liste.</Text>
+              </View>
+            </Pressable>
             <Champ
               valeur={nouveauNom}
               onChangeText={setNouveauNom}
@@ -206,7 +251,10 @@ export default function EcranClients() {
             <View style={styles.feuilleActions}>
               <Bouton
                 titre="Annuler"
-                onPress={() => setFormulaireOuvert(false)}
+                onPress={() => {
+                  setFormulaireOuvert(false);
+                  setNouvellePhoto(null);
+                }}
                 variante="secondaire"
               />
               <Bouton
@@ -242,7 +290,7 @@ const styles = StyleSheet.create({
     borderColor: couleurs.bordure,
   },
   lignePressee: { opacity: 0.7 },
-  ligneGauche: { flex: 1, marginRight: espaces.m },
+  ligneGauche: { flex: 1, marginLeft: espaces.m, marginRight: espaces.m },
   nom: { fontSize: 16, fontWeight: '600', color: couleurs.texte },
   telephone: { fontSize: 13, color: couleurs.texteFaible, marginTop: 2 },
 
@@ -271,5 +319,19 @@ const styles = StyleSheet.create({
     color: couleurs.texte,
     marginBottom: espaces.s,
   },
+  photoClient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaces.m,
+    padding: espaces.s,
+    marginBottom: espaces.s,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    borderRadius: rayons.m,
+    backgroundColor: couleurs.surfaceDouce,
+  },
+  photoTexteBloc: { flex: 1 },
+  photoTitre: { fontSize: 15, fontWeight: '700', color: couleurs.texte },
+  photoTexte: { fontSize: 12, color: couleurs.texteFaible, marginTop: 2 },
   feuilleActions: { flexDirection: 'row', gap: espaces.s, marginTop: espaces.s },
 });

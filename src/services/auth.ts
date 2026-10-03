@@ -26,7 +26,11 @@ import { marquerChangement } from './synchronisation';
 
 const SEL = 'SahelPOS360::pin::v1';
 
-export const LONGUEUR_PIN = 4;
+/** Regle unique partagee par le premier demarrage, la connexion et les vendeurs. */
+export const LONGUEUR_PIN_MIN = 4;
+export const LONGUEUR_PIN_MAX = 9;
+/** Compatibilite pour les ecrans qui utilisaient encore cette constante. */
+export const LONGUEUR_PIN = LONGUEUR_PIN_MIN;
 
 export class PinInvalide extends Error {
   constructor(message: string) {
@@ -40,9 +44,27 @@ async function hacher(pin: string): Promise<string> {
 }
 
 function verifierFormatPin(pin: string): void {
-  if (!/^\d{4,8}$/.test(pin)) {
-    throw new PinInvalide('Le code doit contenir entre 4 et 8 chiffres.');
+  if (!new RegExp(`^\\d{${LONGUEUR_PIN_MIN},${LONGUEUR_PIN_MAX}}$`).test(pin)) {
+    throw new PinInvalide(`Le code doit contenir entre ${LONGUEUR_PIN_MIN} et ${LONGUEUR_PIN_MAX} chiffres.`);
   }
+}
+
+/**
+ * Les anciennes builds enregistraient le PIN en clair avant le passage au
+ * hash. On accepte ce seul format historique pour une connexion, puis on le
+ * remplace immediatement par le hash courant. Les nouvelles ecritures ne sont
+ * jamais en clair.
+ */
+async function verifierEtModerniserPin(id: number, stocke: string, pin: string): Promise<boolean> {
+  const hash = await hacher(pin);
+  if (stocke === hash) return true;
+
+  if (stocke === pin && /^\d+$/.test(stocke)) {
+    await executer('UPDATE utilisateur SET code_pin = ? WHERE id = ?', hash, id);
+    return true;
+  }
+
+  return false;
 }
 
 interface LigneUtilisateur {
@@ -123,8 +145,29 @@ export async function creerUtilisateur(saisie: SaisieUtilisateur): Promise<numbe
   );
   const id = r.lastInsertRowId;
   const cree = await lirePremier<{ id_local: string }>('SELECT id_local FROM utilisateur WHERE id = ?', id);
-  if (cree?.id_local) await marquerChangement('utilisateur', cree.id_local);
+  if (saisie.role === 'vendeur' && cree?.id_local) {
+    await marquerChangement('utilisateur', cree.id_local);
+  }
   return id;
+}
+
+export async function initialiserCompteAdministrateur(saisie: SaisieUtilisateur): Promise<number> {
+  const login = saisie.login.trim();
+  if (!login) throw new Error("L'identifiant est requis.");
+  verifierFormatPin(saisie.pin);
+  const existant = await lirePremier<{ id: number; role: string; actif: number }>(
+    'SELECT id, role, actif FROM utilisateur WHERE login = ?',
+    login,
+  );
+  if (!existant) return creerUtilisateur({ ...saisie, login, role: 'admin' });
+  if (!versBooleen(existant.actif) || !['admin', 'patron'].includes(existant.role)) {
+    throw new Error("Ce compte n'est pas un administrateur actif de cet espace.");
+  }
+  await executer('UPDATE utilisateur SET code_pin = ? WHERE id = ?', await hacher(saisie.pin), existant.id);
+  if (existant.role === 'patron') {
+    await executer("UPDATE utilisateur SET role = 'admin' WHERE id = ?", existant.id);
+  }
+  return existant.id;
 }
 
 export async function modifierUtilisateur(
@@ -170,7 +213,11 @@ export async function modifierUtilisateur(
     id,
   );
   const modifie = await lirePremier<{ id_local: string }>('SELECT id_local FROM utilisateur WHERE id = ?', id);
-  if (modifie?.id_local) await marquerChangement('utilisateur', modifie.id_local);
+  const changementPartage = Object.keys(modifications).some((cle) => cle !== 'pin');
+  if (changementPartage && modifie?.id_local) {
+    const role = await lirePremier<{ role: string }>('SELECT role FROM utilisateur WHERE id = ?', id);
+    if (role?.role === 'vendeur') await marquerChangement('utilisateur', modifie.id_local);
+  }
 }
 
 /**
@@ -209,8 +256,8 @@ export async function connecter(login: string, pin: string): Promise<Utilisateur
   const refus = new PinInvalide('Identifiant ou code incorrect.');
   if (!l) throw refus;
 
-  const attendu = await hacher(pin);
-  if (attendu !== l.code_pin) throw refus;
+  verifierFormatPin(pin);
+  if (!(await verifierEtModerniserPin(l.id, l.code_pin, pin))) throw refus;
   if (!versBooleen(l.actif)) {
     throw new PinInvalide('Ce compte est desactive. Voyez avec le responsable.');
   }

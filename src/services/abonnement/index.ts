@@ -23,6 +23,7 @@
  */
 import { executer, lireTout } from '../../db/repositories/base';
 import { Droit, LicenceInvalide, droitPerime, lireDroit } from './licence';
+import type { SecteurCommerce, ModeVenteCommerce, ModeApprovisionnementCommerce } from '../../domain/commerce';
 
 export type { Droit } from './licence';
 export { LicenceInvalide } from './licence';
@@ -45,6 +46,9 @@ const CLE_LICENCE = 'abonnement.licence';
 const CLE_APPAREIL = 'abonnement.jeton_appareil';
 const CLE_EMPREINTE = 'abonnement.empreinte';
 const CLE_DERNIER_CONTACT = 'abonnement.dernier_contact';
+const CLE_BOUTIQUE_LOCALE = 'sync.boutique';
+const MESSAGE_BOUTIQUE_DIFFERENTE =
+  "Ce telephone est deja lie a une autre boutique. Les donnees locales sont conservees ; synchronisez l'ancienne boutique avant de changer d'espace.";
 
 // --- rangement local ------------------------------------------------------
 
@@ -65,6 +69,13 @@ async function ecrireCle(cle: string, valeur: string): Promise<void> {
     valeur,
     new Date().toISOString(),
   );
+}
+
+async function verifierBoutiqueLocale(droit: Droit): Promise<void> {
+  const boutiqueLocale = await lireCle(CLE_BOUTIQUE_LOCALE);
+  if (boutiqueLocale && boutiqueLocale !== droit.boutique) {
+    throw new Error(MESSAGE_BOUTIQUE_DIFFERENTE);
+  }
 }
 
 /**
@@ -135,6 +146,17 @@ export async function etatCourant(): Promise<EtatAbonnement> {
     };
   }
 
+  const boutiqueLocale = await lireCle(CLE_BOUTIQUE_LOCALE);
+  if (boutiqueLocale && boutiqueLocale !== droit.boutique) {
+    return {
+      active: false,
+      droit,
+      perime: false,
+      peutEcrire: false,
+      message: MESSAGE_BOUTIQUE_DIFFERENTE,
+    };
+  }
+
   const perime = droitPerime(droit);
   if (perime) {
     return {
@@ -152,8 +174,10 @@ export async function etatCourant(): Promise<EtatAbonnement> {
     active: droit.peutEntrer,
     droit,
     perime: false,
-    peutEcrire: droit.peutEcrire,
-    message: droit.raison,
+    peutEcrire: droit.peutEcrire && droit.commerce?.compatible === true,
+    message: droit.raison || (droit.commerce
+      ? droit.commerce.raison
+      : 'Connectez le telephone a Internet pour verifier le profil commerce. Le serveur doit etre a jour.'),
   };
 }
 
@@ -218,13 +242,13 @@ function messageErreurHttp(statut: number, corps: unknown): string {
   }
 
   if (statut === 404) {
-    return "Le serveur Néré n'est pas encore a jour pour l'application mobile.";
+    return "Le serveur SahelPOS n'est pas encore a jour pour l'application mobile.";
   }
   if (statut === 401 || statut === 403) {
     return "Identifiant ou mot de passe incorrect.";
   }
   if (statut >= 500) {
-    return 'Le serveur Néré a rencontre une erreur. Reessayez plus tard.';
+    return 'Le serveur SahelPOS a rencontre une erreur. Reessayez plus tard.';
   }
   return `Le serveur a refuse la demande (${statut}).`;
 }
@@ -251,7 +275,7 @@ export async function activer(code: string, libelle = ''): Promise<EtatAbonnemen
 
   // On verifie AVANT d'enregistrer : mieux vaut echouer sur-le-champ que
   // stocker un droit que l'application refusera a la prochaine ouverture.
-  lireDroit(reponse.licence);
+  await verifierBoutiqueLocale(lireDroit(reponse.licence));
 
   await ecrireCle(CLE_LICENCE, reponse.licence);
   await ecrireCle(CLE_APPAREIL, reponse.jeton_appareil);
@@ -267,6 +291,10 @@ export interface InscriptionMobile {
   telephone?: string;
   devise?: string;
   plan?: string;
+  ville?: string;
+  secteur?: SecteurCommerce;
+  modeVente?: ModeVenteCommerce;
+  modeApprovisionnement?: ModeApprovisionnementCommerce;
 }
 
 export async function connecterCompteMobile(
@@ -289,7 +317,7 @@ export async function connecterCompteMobile(
     throw new Error("Le serveur n'a pas renvoye de droit d acces.");
   }
 
-  lireDroit(reponse.licence);
+  await verifierBoutiqueLocale(lireDroit(reponse.licence));
 
   await ecrireCle(CLE_LICENCE, reponse.licence);
   await ecrireCle(CLE_APPAREIL, reponse.jeton_appareil);
@@ -301,6 +329,9 @@ export async function creerBoutiqueMobile(
   saisie: InscriptionMobile,
   libelle = '',
 ): Promise<EtatAbonnement> {
+  if (await lireCle(CLE_BOUTIQUE_LOCALE)) {
+    throw new Error(MESSAGE_BOUTIQUE_DIFFERENTE);
+  }
   const empreinte = await empreinteAppareil();
   const reponse = (await appeler('/api/public/mobile/inscription/', {
     method: 'POST',
@@ -310,6 +341,10 @@ export async function creerBoutiqueMobile(
       login: saisie.login,
       mot_de_passe: saisie.motDePasse,
       telephone: saisie.telephone ?? '',
+      ville: saisie.ville ?? '',
+      secteur: saisie.secteur ?? 'COMMERCE_GENERAL',
+      mode_vente: saisie.modeVente ?? 'DETAIL',
+      mode_approvisionnement: saisie.modeApprovisionnement ?? 'CLASSIQUE',
       devise: saisie.devise ?? 'FCFA',
       plan: saisie.plan ?? 'START',
       empreinte,
@@ -321,7 +356,7 @@ export async function creerBoutiqueMobile(
     throw new Error("Le serveur n'a pas renvoye de droit d acces.");
   }
 
-  lireDroit(reponse.licence);
+  await verifierBoutiqueLocale(lireDroit(reponse.licence));
 
   await ecrireCle(CLE_LICENCE, reponse.licence);
   await ecrireCle(CLE_APPAREIL, reponse.jeton_appareil);
@@ -346,7 +381,7 @@ export async function rafraichir(): Promise<EtatAbonnement> {
   })) as { licence?: string };
 
   if (reponse.licence) {
-    lireDroit(reponse.licence);
+    await verifierBoutiqueLocale(lireDroit(reponse.licence));
     await ecrireCle(CLE_LICENCE, reponse.licence);
     await ecrireCle(CLE_DERNIER_CONTACT, new Date().toISOString());
   }
@@ -436,7 +471,7 @@ export async function exigerEcriture(): Promise<void> {
     throw new EcritureFermee(
       etat.message ||
         "Cette application n'est pas encore activee. Ouvrez « Mon abonnement » " +
-          'dans le menu et saisissez le code recu de Néré.',
+          'dans le menu et saisissez le code recu de SahelPOS.',
     );
   }
 
@@ -450,6 +485,6 @@ export async function exigerEcriture(): Promise<void> {
   throw new EcritureFermee(
     etat.message ||
       "Votre abonnement ne permet plus d enregistrer d operations. " +
-        'Contactez Néré.',
+        'Contactez SahelPOS.',
   );
 }

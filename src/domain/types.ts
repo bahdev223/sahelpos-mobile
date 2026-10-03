@@ -86,6 +86,7 @@ export interface Client {
   telephone: string | null;
   email: string | null;
   adresse: string | null;
+  cheminPhoto: string | null;
 }
 
 export interface Utilisateur {

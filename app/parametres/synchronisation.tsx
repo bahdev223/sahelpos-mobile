@@ -1,12 +1,14 @@
 /** Etat et relance manuelle de la replication Web <-> mobile. */
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, useFocusEffect } from 'expo-router';
 
 import { Bouton, Carte, couleurs, espaces, rayons } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { useSession } from '../_layout';
+import { etatCourant, type EtatAbonnement } from '../../src/services/abonnement';
+import { MODES_VENTE, MODES_APPROVISIONNEMENT } from '../../src/domain/commerce';
 
 function dateLisible(valeur: string | null): string {
   if (!valeur) return 'Jamais';
@@ -19,6 +21,14 @@ function dateLisible(valeur: string | null): string {
 export default function EcranSynchronisation() {
   const { etatSynchronisation, synchroniserMaintenant } = useSession();
   const [enCours, setEnCours] = useState(false);
+  const [abonnement, setAbonnement] = useState<EtatAbonnement | null>(null);
+  useFocusEffect(useCallback(() => {
+    let actif = true;
+    void etatCourant().then(etat => { if (actif) setAbonnement(etat); })
+      .catch(() => { if (actif) setAbonnement(null); });
+    return () => { actif = false; };
+  }, [etatSynchronisation.derniereTentative, enCours]));
+  const commerce = abonnement?.droit?.commerce;
   const enErreur = Boolean(etatSynchronisation.derniereErreur);
   const enAttente = etatSynchronisation.enAttente > 0;
 
@@ -26,6 +36,9 @@ export default function EcranSynchronisation() {
     setEnCours(true);
     try {
       await synchroniserMaintenant();
+    } catch {
+      // L'etat partage conserve le message detaille ; le geste ne doit pas
+      // produire de rejet non gere quand le serveur reste inaccessible.
     } finally {
       setEnCours(false);
     }
@@ -39,16 +52,27 @@ export default function EcranSynchronisation() {
           <Icone nom={enErreur ? 'alerte' : 'reseau'} taille={27} couleur={enErreur ? couleurs.danger : enAttente ? '#b45309' : '#07924a'} />
         </View>
         <View style={styles.etatTextes}>
-          <Text style={styles.etatTitre}>{enErreur ? 'Synchronisation à reprendre' : enAttente ? `${etatSynchronisation.enAttente} opération(s) en attente` : 'Synchronisé'}</Text>
+          <Text style={styles.etatTitre}>{enErreur ? 'Synchronisation à reprendre' : enAttente ? `${etatSynchronisation.enAttente} opération(s) en attente` : etatSynchronisation.dernierSucces ? 'Synchronisé' : 'Première synchronisation en attente'}</Text>
           <Text style={styles.etatSousTitre}>
             {enErreur
               ? 'Les opérations restent enregistrées sur ce téléphone et seront renvoyées dès la prochaine réussite.'
               : enAttente
                 ? 'Les données restent locales et seront envoyées dès que le serveur sera joignable.'
-                : 'Les écritures restent utilisables sans Internet et sont rapprochées avec Néré Web.'}
+                : 'Les écritures restent utilisables sans Internet et sont rapprochées avec SahelPOS Web.'}
           </Text>
         </View>
       </View>
+
+      <Carte titre="Profil commerce">
+        <Ligne titre="Secteur" valeur={commerce?.secteur_libelle || 'A verifier'} />
+        {commerce ? <>
+          <Ligne titre="Vente" valeur={MODES_VENTE.find(item => item.code === commerce.mode_vente)?.titre || '-'} />
+          <Ligne titre="Approvisionnement" valeur={MODES_APPROVISIONNEMENT.find(item => item.code === commerce.mode_approvisionnement)?.titre || '-'} />
+          <Ligne titre="Catalogue" valeur={commerce.mode_catalogue === 'SIMPLE' ? 'Simple' : 'Avance'} />
+        </> : null}
+        <Ligne titre="Acces mobile" valeur={abonnement?.peutEcrire ? 'Lecture et ecriture' : 'Consultation uniquement'} />
+        {abonnement?.message ? <Text style={styles.erreurTexte}>{abonnement.message}</Text> : null}
+      </Carte>
 
       <Carte titre="Dernière activité">
         <Ligne titre="Dernier succès" valeur={dateLisible(etatSynchronisation.dernierSucces)} />

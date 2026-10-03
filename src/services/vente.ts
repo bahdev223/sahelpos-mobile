@@ -90,9 +90,26 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
     throw new Error('Le panier est vide.');
   }
 
+  for (const article of demande.articles) {
+    if (!Number.isFinite(article.quantite) || article.quantite <= 0 ||
+        !Number.isFinite(article.facteur) || article.facteur <= 0) {
+      throw new Error('La quantite et le facteur doivent etre positifs.');
+    }
+    if (!Number.isFinite(article.prixUnitaire) || article.prixUnitaire < 0 ||
+        !Number.isFinite(article.produit.prixAchat) || article.produit.prixAchat < 0) {
+      throw new Error('Le prix de vente et le cout doivent etre valides.');
+    }
+  }
+
   const db = await obtenirBase();
   const lignes = demande.articles.map(calculerLigne);
   const total = lignes.reduce((s, l) => s + l.total, 0);
+  if (!Number.isInteger(demande.montantPaye) || demande.montantPaye < 0 || demande.montantPaye > total) {
+    throw new Error('Le montant paye doit etre compris entre zero et le total.');
+  }
+  if (demande.montantPaye < total && !demande.clientId) {
+    throw new Error('Un client est obligatoire pour une vente non entierement payee.');
+  }
   const beneficeTotal = lignes.reduce((s, l) => s + l.beneficeTotal, 0);
   const maintenant = new Date().toISOString();
 
@@ -101,14 +118,21 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
   await db.withTransactionAsync(async () => {
     // Le stock est relu DANS la transaction : le lire avant laisserait une
     // fenetre ou deux ventes simultanees passeraient le meme article.
+    const demandesParProduit = new Map<number, number>();
     for (const ligne of lignes) {
+      demandesParProduit.set(
+        ligne.produitId,
+        (demandesParProduit.get(ligne.produitId) ?? 0) + ligne.quantiteBase,
+      );
+    }
+    for (const [produitId, quantiteDemandee] of demandesParProduit) {
       const p = await db.getFirstAsync<{ nom: string; quantite_base: number; gestion_stock: number }>(
         'SELECT nom, quantite_base, gestion_stock FROM produit WHERE id = ?',
-        ligne.produitId,
+        produitId,
       );
-      if (!p) throw new Error(`Produit ${ligne.produitId} introuvable.`);
-      if (p.gestion_stock && p.quantite_base < ligne.quantiteBase) {
-        throw new StockInsuffisant(p.nom, ligne.quantiteBase, p.quantite_base);
+      if (!p) throw new Error(`Produit ${produitId} introuvable.`);
+      if (p.gestion_stock && p.quantite_base < quantiteDemandee) {
+        throw new StockInsuffisant(p.nom, quantiteDemandee, p.quantite_base);
       }
     }
 

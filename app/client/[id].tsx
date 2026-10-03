@@ -6,6 +6,8 @@
  */
 import { useCallback, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import * as SelecteurImage from 'expo-image-picker';
+import { Directory, File, Paths } from 'expo-file-system';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -16,9 +18,11 @@ import {
   Chargement,
   Erreur,
   Montant,
+  Vignette,
   couleurs,
   espaces,
   formaterMontant,
+  rayons,
 } from '../../src/ui/components';
 import {
   calculerSolde,
@@ -31,11 +35,26 @@ import {
 } from '../../src/db/repositories/client';
 import type { Client } from '../../src/domain/types';
 
+const DOSSIER_CLIENTS = 'clients';
+
 function dateCourte(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const deux = (n: number) => String(n).padStart(2, '0');
   return `${deux(d.getDate())}/${deux(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function nouvelleCle(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function rangerPhotoClient(uriSource: string): Promise<string> {
+  const dossier = new Directory(Paths.document, DOSSIER_CLIENTS);
+  if (!dossier.exists) dossier.create({ intermediates: true });
+  const nomFichier = `${nouvelleCle()}.jpg`;
+  const destination = new File(dossier, nomFichier);
+  await new File(uriSource).copy(destination);
+  return `${DOSSIER_CLIENTS}/${nomFichier}`;
 }
 
 export default function EcranFicheClient() {
@@ -53,6 +72,7 @@ export default function EcranFicheClient() {
   const [nom, setNom] = useState('');
   const [telephone, setTelephone] = useState('');
   const [adresse, setAdresse] = useState('');
+  const [cheminPhoto, setCheminPhoto] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
 
   const charger = useCallback(async () => {
@@ -67,6 +87,7 @@ export default function EcranFicheClient() {
       setNom(c.nom);
       setTelephone(c.telephone ?? '');
       setAdresse(c.adresse ?? '');
+      setCheminPhoto(c.cheminPhoto);
       const [s, v] = await Promise.all([
         calculerSolde(clientId),
         listerVentesClient(clientId),
@@ -94,7 +115,7 @@ export default function EcranFicheClient() {
     }
     setEnCours(true);
     try {
-      await modifierClient(clientId, { nom, telephone, adresse });
+      await modifierClient(clientId, { nom, telephone, adresse, cheminPhoto });
       setModifie(false);
       await charger();
     } catch (e) {
@@ -102,7 +123,23 @@ export default function EcranFicheClient() {
     } finally {
       setEnCours(false);
     }
-  }, [clientId, nom, telephone, adresse, charger]);
+  }, [clientId, nom, telephone, adresse, cheminPhoto, charger]);
+
+  const choisirPhoto = useCallback(async () => {
+    const permission = await SelecteurImage.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Acces aux photos', "Autorisez l'acces aux photos pour choisir le profil du client.");
+      return;
+    }
+    const resultat = await SelecteurImage.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.72,
+    });
+    if (resultat.canceled || !resultat.assets?.[0]) return;
+    setCheminPhoto(await rangerPhotoClient(resultat.assets[0].uri));
+  }, []);
 
   const demanderSuppression = useCallback(() => {
     Alert.alert(
@@ -158,6 +195,15 @@ export default function EcranFicheClient() {
     <SafeAreaView style={styles.page} edges={['bottom']}>
       <Stack.Screen options={{ headerShown: true, title: client.nom }} />
       <ScrollView contentContainerStyle={styles.contenu}>
+        <View style={styles.resumeClient}>
+          <Vignette chemin={cheminPhoto} nom={client.nom} taille={82} />
+          <View style={styles.resumeTexte}>
+            <Text style={styles.resumeNom}>{client.nom}</Text>
+            {client.telephone ? <Text style={styles.resumeMeta}>{client.telephone}</Text> : null}
+            {client.adresse ? <Text style={styles.resumeMeta}>{client.adresse}</Text> : null}
+          </View>
+        </View>
+
         {solde ? (
           <Carte>
             <Text style={styles.ardoiseLibelle}>
@@ -183,6 +229,13 @@ export default function EcranFicheClient() {
         <Carte titre="Coordonnees">
           {modifie ? (
             <>
+              <Pressable onPress={() => void choisirPhoto()} style={styles.photoClient}>
+                <Vignette chemin={cheminPhoto} nom={nom} taille={68} />
+                <View style={styles.photoTexteBloc}>
+                  <Text style={styles.photoTitre}>Photo ou logo</Text>
+                  <Text style={styles.photoTexte}>Optionnel, visible dans la fiche et la liste.</Text>
+                </View>
+              </Pressable>
               <Champ valeur={nom} onChangeText={setNom} label="Nom" />
               <Champ
                 valeur={telephone}
@@ -198,6 +251,7 @@ export default function EcranFicheClient() {
                     setNom(client.nom);
                     setTelephone(client.telephone ?? '');
                     setAdresse(client.adresse ?? '');
+                    setCheminPhoto(client.cheminPhoto);
                     setModifie(false);
                   }}
                   variante="secondaire"
@@ -277,6 +331,20 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: couleurs.fond },
   contenu: { padding: espaces.l, paddingBottom: espaces.xxl, gap: espaces.m },
 
+  resumeClient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaces.m,
+    padding: espaces.l,
+    backgroundColor: couleurs.surface,
+    borderRadius: rayons.l,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+  },
+  resumeTexte: { flex: 1 },
+  resumeNom: { fontSize: 20, fontWeight: '800', color: couleurs.texte },
+  resumeMeta: { fontSize: 13, color: couleurs.texteFaible, marginTop: 3 },
+
   ardoiseLibelle: { fontSize: 13, color: couleurs.texteFaible, marginBottom: 4 },
   soldeDetail: { marginTop: espaces.s, gap: 2 },
   soldeTexte: { fontSize: 13, color: couleurs.texteFaible },
@@ -292,6 +360,20 @@ const styles = StyleSheet.create({
   infoValeur: { fontSize: 14, fontWeight: '600', color: couleurs.texte, flexShrink: 1 },
   boutonModifier: { marginTop: espaces.m },
   actionsEnLigne: { flexDirection: 'row', gap: espaces.s, marginTop: espaces.s },
+  photoClient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: espaces.m,
+    padding: espaces.s,
+    marginBottom: espaces.s,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    borderRadius: rayons.m,
+    backgroundColor: couleurs.surfaceDouce,
+  },
+  photoTexteBloc: { flex: 1 },
+  photoTitre: { fontSize: 15, fontWeight: '700', color: couleurs.texte },
+  photoTexte: { fontSize: 12, color: couleurs.texteFaible, marginTop: 2 },
 
   vide: { fontSize: 14, color: couleurs.texteFaible, paddingVertical: espaces.s },
   venteLigne: {

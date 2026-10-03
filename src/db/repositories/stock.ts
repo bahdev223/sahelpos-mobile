@@ -17,6 +17,7 @@ import {
   maintenant,
 } from './base';
 import { marquerChangement } from '../../services/synchronisation';
+import { exigerEcriture } from '../../services/abonnement';
 
 export interface Mouvement {
   id: number;
@@ -118,6 +119,7 @@ export class StockInsuffisantStock extends Error {
  * pendant laquelle une vente simultanee pourrait vider le produit.
  */
 export async function appliquerMouvement(e: EcritureStock): Promise<number> {
+  await exigerEcriture();
   const facteur = e.facteur ?? 1;
   const quantiteBase = e.quantite * facteur;
   if (quantiteBase <= 0) {

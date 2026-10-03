@@ -106,6 +106,7 @@ export async function listerLignesInventaire(
  * les compter n'aurait pas de sens.
  */
 export async function creerInventaire(utilisateurNom?: string): Promise<number> {
+  await exigerEcriture();
   return dansTransaction(async () => {
     const enCours = await lirePremier<{ id: number; numero: string }>(
       "SELECT id, numero FROM inventaire WHERE statut = 'BROUILLON' LIMIT 1",
@@ -158,6 +159,7 @@ export async function saisirComptage(
   produitId: number,
   stockPhysique: number,
 ): Promise<void> {
+  await exigerEcriture();
   await exigerBrouillon(inventaireId);
 
   const ligne = await lirePremier<{ stock_theorique: number; prix_achat: number }>(
@@ -285,6 +287,7 @@ export async function validerInventaire(
 }
 
 export async function annulerInventaire(inventaireId: number): Promise<void> {
+  await exigerEcriture();
   await exigerBrouillon(inventaireId);
   await executer("UPDATE inventaire SET statut = 'ANNULE' WHERE id = ?", inventaireId);
 }

@@ -181,7 +181,8 @@ async function chargerClients(): Promise<Client[]> {
     telephone: string | null;
     email: string | null;
     adresse: string | null;
-  }>('SELECT id, id_local, nom, telephone, email, adresse FROM client ORDER BY nom LIMIT 200');
+    chemin_photo: string | null;
+  }>('SELECT id, id_local, nom, telephone, email, adresse, chemin_photo FROM client ORDER BY nom LIMIT 200');
   return lignes.map((l) => ({
     id: l.id,
     idLocal: l.id_local,
@@ -189,6 +190,7 @@ async function chargerClients(): Promise<Client[]> {
     telephone: l.telephone,
     email: l.email,
     adresse: l.adresse,
+    cheminPhoto: l.chemin_photo,
   }));
 }
 
@@ -782,9 +784,11 @@ function ModaleUnite({
 }) {
   const [indexUnite, setIndexUnite] = useState(0);
   const [quantiteTexte, setQuantiteTexte] = useState('1');
+  const [prixTexte, setPrixTexte] = useState(String(choix.unites[0]?.prix ?? ''));
 
   const unite = choix.unites[indexUnite] ?? choix.unites[0];
   const quantite = lireNombre(quantiteTexte);
+  const prixUnitaire = lireNombre(prixTexte);
   const produit = choix.produit;
 
   const disponible = stockDansUnite(produit, unite.facteur);
@@ -797,14 +801,14 @@ function ModaleUnite({
           unite: unite.nom,
           facteur: unite.facteur,
           quantite,
-          prixUnitaire: unite.prix,
+          prixUnitaire: prixUnitaire,
         })
       : null;
 
   let refus: string | null = null;
   if (quantite <= 0) {
     refus = 'Indiquez une quantite superieure a zero.';
-  } else if (unite.prix <= 0) {
+  } else if (prixUnitaire <= 0) {
     refus = "Ce produit n'a pas de prix de vente pour cette unite.";
   } else if (produit.gestionStock && quantite > resteApresPanier) {
     refus = `Stock insuffisant : ${formaterQuantite(
@@ -833,7 +837,10 @@ function ModaleUnite({
                         key={option.nom}
                         accessibilityRole="button"
                         accessibilityState={{ selected: actif }}
-                        onPress={() => setIndexUnite(index)}
+                        onPress={() => {
+                          setIndexUnite(index);
+                          setPrixTexte(String(option.prix));
+                        }}
                         style={[styles.puce, actif && styles.puceActive]}
                       >
                         <Text style={[styles.puceNom, actif && styles.puceNomActive]}>
@@ -883,10 +890,19 @@ function ModaleUnite({
               </Pressable>
             </View>
 
+            <Champ
+              valeur={prixTexte}
+              onChangeText={setPrixTexte}
+              label="Prix unitaire"
+              clavier="numeric"
+              alignerADroite
+              style={styles.champEspace}
+            />
+
             <Carte style={styles.resume}>
               <LigneResume
                 libelle="Prix unitaire"
-                valeur={formaterMontant(unite.prix, devise)}
+                valeur={formaterMontant(prixUnitaire, devise)}
               />
               <LigneResume
                 libelle="Disponible"
@@ -909,7 +925,7 @@ function ModaleUnite({
           <View style={styles.piedFeuille}>
             <Bouton
               titre="Ajouter au panier"
-              onPress={() => onAjouter(produit, unite, quantite)}
+              onPress={() => onAjouter(produit, { ...unite, prix: prixUnitaire }, quantite)}
               desactive={refus !== null}
               grand
             />

@@ -246,6 +246,9 @@ async function reparerSchemaCritique(db: SQLite.SQLiteDatabase): Promise<void> {
       if (!colonnes.has('date_modification')) {
         await db.execAsync('ALTER TABLE client ADD COLUMN date_modification TEXT');
       }
+      if (!colonnes.has('chemin_photo')) {
+        await db.execAsync('ALTER TABLE client ADD COLUMN chemin_photo TEXT');
+      }
     }
 
     if (await tableExiste(db, 'fournisseur')) {

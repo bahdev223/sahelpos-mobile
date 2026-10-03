@@ -344,21 +344,24 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
           </View>
         ))}
 
-        {infos.onDeconnexion ? (
+        <Text style={st.pied}>SahelPOS Mobile</Text>
+      </ScrollView>
+      {infos.onDeconnexion ? (
+        <View style={[st.piedFixe, { paddingBottom: marges.bottom + espaces.s }]}>
           <Pressable
             onPress={() => {
               onFermer();
               setTimeout(() => infos.onDeconnexion?.(), DUREE);
             }}
             style={({ pressed }) => [st.deconnexion, pressed && st.entreePressee]}
+            accessibilityRole="button"
+            accessibilityLabel="Se déconnecter"
           >
             <Icone nom="deconnexion" taille={20} couleur={couleurs.danger} />
-            <Text style={st.deconnexionTexte}>Fermer la session</Text>
+            <Text style={st.deconnexionTexte}>Se déconnecter</Text>
           </Pressable>
-        ) : null}
-
-        <Text style={st.pied}>Néré Mobile</Text>
-      </ScrollView>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -466,15 +469,17 @@ const st = StyleSheet.create({
   },
   badgeTexte: { fontSize: 12, fontWeight: '700', color: couleurs.texteInverse },
 
+  piedFixe: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
   deconnexion: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: espaces.m,
     minHeight: 52,
     paddingHorizontal: espaces.l,
-    marginTop: espaces.s,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: couleurs.bordure,
   },
   deconnexionTexte: { fontSize: 15, fontWeight: '600', color: couleurs.danger },
   pied: {

@@ -15,7 +15,7 @@ import {
 import { File, Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import { deposer } from './notifications/journal';
-import { jetonAppareil } from './abonnement';
+import { jetonAppareil, rafraichir } from './abonnement';
 
 const SERVEUR = 'https://sahelpos.saheltech.tech';
 const DELAI_RESEAU = 20000;
@@ -72,6 +72,12 @@ interface ClientSync {
   telephone?: string | null;
   email?: string | null;
   adresse?: string | null;
+  chemin_photo?: string | null;
+  photo_url?: string | null;
+  photo_version?: string | null;
+  photo_base64?: string | null;
+  photo_nom?: string | null;
+  photo_supprimee?: boolean;
   date_creation?: string | null;
   date_modification?: string | null;
   supprime_le?: string | null;
@@ -313,6 +319,7 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
   }
   await ecrireParam(CLE_DERNIERE_TENTATIVE, maintenant());
   try {
+    const abonnement = await rafraichir();
     // Un arret brutal peut laisser des lignes marquees SENDING. Sans accuse
     // local elles doivent etre rejouees; Django les deduplique par id_local.
     await executer("UPDATE sync_outbox SET statut = 'PENDING' WHERE statut = 'SENDING'");
@@ -321,6 +328,9 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
     );
     let pousses = 0;
     if (pending.length > 0) {
+      if (!abonnement.peutEcrire) {
+        throw new SynchronisationImpossible(abonnement.message || 'Ecritures mobiles non autorisees pour ce profil.');
+      }
       await dansTransaction(async () => {
         for (const item of pending) {
           await executer(
@@ -403,12 +413,13 @@ export async function bootstrapInitial(boutiqueId: string): Promise<ResultatSync
   const boutiqueCourante = await lireParam(CLE_BOUTIQUE);
   const dejaPret = await lireParam(CLE_BOOTSTRAP);
   const protocole = await lireParam(CLE_PROTOCOLE);
+  if (boutiqueCourante && boutiqueCourante !== boutiqueId) {
+    const message = "Ce telephone est deja lie a une autre boutique. Ses donnees locales sont conservees. Synchronisez l'ancienne boutique avant tout changement d'espace.";
+    await ecrireParam(CLE_DERNIERE_ERREUR, message);
+    throw new SynchronisationImpossible(message);
+  }
   if (boutiqueCourante === boutiqueId && dejaPret === '1' && protocole === VERSION_PROTOCOLE) {
     return synchroniser();
-  }
-
-  if (boutiqueCourante && boutiqueCourante !== boutiqueId) {
-    await viderDonneesMetier();
   }
 
   await ecrireParam(CLE_BOUTIQUE, boutiqueId);
@@ -427,24 +438,6 @@ export async function bootstrapInitial(boutiqueId: string): Promise<ResultatSync
         : "La premiere synchronisation n'a pas pu etre terminee.",
     );
   }
-}
-
-async function viderDonneesMetier(): Promise<void> {
-  await dansTransaction(async () => {
-    await executer('DELETE FROM sync_outbox');
-    await executer('DELETE FROM ligne_vente');
-    await executer('DELETE FROM vente');
-    await executer('DELETE FROM mouvement_stock');
-    await executer('DELETE FROM ligne_achat');
-    await executer('DELETE FROM paiement_achat');
-    await executer('DELETE FROM achat');
-    await executer('DELETE FROM ligne_inventaire');
-    await executer('DELETE FROM inventaire');
-    await executer('DELETE FROM sous_unite');
-    await executer('DELETE FROM produit');
-    await executer('DELETE FROM client');
-    await executer('DELETE FROM fournisseur');
-  });
 }
 
 async function appeler<T>(
@@ -537,34 +530,46 @@ async function lireProduits(ids: string[]): Promise<ProduitSync[]> {
  * recues du Web restent des references distantes et ne sont jamais renvoyees
  * comme si elles etaient des fichiers du telephone.
  */
-async function imageProduitPourSync(chemin: string | null | undefined): Promise<Pick<ProduitSync, 'image_base64' | 'image_nom' | 'image_supprimee'>> {
-  if (!chemin) return { image_base64: null, image_nom: null, image_supprimee: true };
+async function imageLocalePourSync(
+  chemin: string | null | undefined,
+  prefixe: 'image' | 'photo',
+  libelle: string,
+): Promise<Record<string, string | boolean | null>> {
+  if (!chemin) return { [`${prefixe}_base64`]: null, [`${prefixe}_nom`]: null, [`${prefixe}_supprimee`]: true };
   if (/^(https?:\/\/|\/media\/|content:\/\/)/i.test(chemin)) return {};
 
   const uri = chemin.startsWith('file://') ? chemin : new File(Paths.document, chemin).uri;
   const fichier = new File(uri);
   const informations = await FileSystem.getInfoAsync(uri);
   if (!informations.exists) {
-    throw new Error(`La photo locale du produit est introuvable : ${chemin}`);
+    throw new Error(`La photo locale du ${libelle} est introuvable : ${chemin}`);
   }
   if ((informations.size ?? 0) > TAILLE_IMAGE_SYNC_MAX) {
-    throw new Error('La photo du produit depasse 4 Mo. Reduisez-la puis relancez la synchronisation.');
+    throw new Error(`La photo du ${libelle} depasse 4 Mo. Reduisez-la puis relancez la synchronisation.`);
   }
 
   return {
-    image_base64: await FileSystem.readAsStringAsync(uri, { encoding: 'base64' }),
-    image_nom: fichier.name || 'produit.jpg',
-    image_supprimee: false,
+    [`${prefixe}_base64`]: await FileSystem.readAsStringAsync(uri, { encoding: 'base64' }),
+    [`${prefixe}_nom`]: fichier.name || `${libelle}.jpg`,
+    [`${prefixe}_supprimee`]: false,
   };
+}
+
+async function imageProduitPourSync(chemin: string | null | undefined): Promise<Pick<ProduitSync, 'image_base64' | 'image_nom' | 'image_supprimee'>> {
+  return imageLocalePourSync(chemin, 'image', 'produit');
 }
 
 async function lireClients(ids: string[]): Promise<ClientSync[]> {
   if (ids.length === 0) return [];
-  return lireTout(
-    `SELECT id_local, nom, telephone, email, adresse, date_creation, date_modification
+  const clients = await lireTout<ClientSync & { chemin_photo?: string | null }>(
+    `SELECT id_local, nom, telephone, email, adresse, chemin_photo, date_creation, date_modification
        FROM client WHERE id_local IN (${placeholders(ids)})`,
     ...ids,
   );
+  for (const client of clients) {
+    Object.assign(client, await imageLocalePourSync(client.chemin_photo, 'photo', 'client'));
+  }
+  return clients;
 }
 
 async function lireFournisseurs(ids: string[]): Promise<FournisseurSync[]> {
@@ -682,6 +687,10 @@ async function appliquerPull(pull: PullSync): Promise<number> {
       await appliquerFournisseur(fournisseur);
       recus++;
     }
+    for (const utilisateur of pull.utilisateurs ?? []) {
+      await appliquerUtilisateur(utilisateur);
+      recus++;
+    }
     for (const vente of pull.ventes ?? []) {
       await appliquerVente(vente);
       recus++;
@@ -692,10 +701,6 @@ async function appliquerPull(pull: PullSync): Promise<number> {
     }
     for (const achat of pull.achats ?? []) {
       await appliquerAchat(achat);
-      recus++;
-    }
-    for (const utilisateur of pull.utilisateurs ?? []) {
-      await appliquerUtilisateur(utilisateur);
       recus++;
     }
     if (pull.boutique) {
@@ -721,6 +726,9 @@ async function appliquerPull(pull: PullSync): Promise<number> {
 }
 
 async function appliquerUtilisateur(u: UtilisateurSync): Promise<void> {
+  const role = u.role === 'patron' || u.role === 'admin'
+    ? 'admin'
+    : u.role === 'gerant' ? 'gerant' : 'vendeur';
   await executer(
     `INSERT INTO utilisateur (id_local, login, nom, code_pin, role, actif,
                               caisse_ouvre_a, caisse_ferme_a, date_creation, date_modification)
@@ -730,7 +738,7 @@ async function appliquerUtilisateur(u: UtilisateurSync): Promise<void> {
        actif = excluded.actif, caisse_ouvre_a = excluded.caisse_ouvre_a,
        caisse_ferme_a = excluded.caisse_ferme_a,
        date_modification = excluded.date_modification`,
-    u.id_local, u.login, u.nom ?? u.login, u.role || 'vendeur', u.actif ? 1 : 0,
+    u.id_local, u.login, u.nom ?? u.login, role, u.actif ? 1 : 0,
     u.caisse_ouvre_a ?? null, u.caisse_ferme_a ?? null,
     u.date_modification ?? maintenant(), u.date_modification ?? maintenant(),
   );
@@ -813,21 +821,32 @@ async function appliquerClient(c: ClientSync): Promise<void> {
     await executer('DELETE FROM client WHERE id_local = ?', c.id_local);
     return;
   }
+  const dejaPresent = await lirePremier<{ chemin_photo: string | null }>(
+    'SELECT chemin_photo FROM client WHERE id_local = ?',
+    c.id_local,
+  );
+  const photoRecue = c.photo_url ?? c.chemin_photo ?? null;
+  const photoLocale =
+    photoRecue === null && cheminImageLocal(dejaPresent?.chemin_photo)
+      ? dejaPresent?.chemin_photo ?? null
+      : photoRecue;
   await executer(
-    `INSERT INTO client (id_local, nom, telephone, email, adresse, date_creation,
+    `INSERT INTO client (id_local, nom, telephone, email, adresse, chemin_photo, date_creation,
                          date_modification)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id_local) DO UPDATE SET
        nom = excluded.nom,
        telephone = excluded.telephone,
        email = excluded.email,
        adresse = excluded.adresse,
+       chemin_photo = excluded.chemin_photo,
        date_modification = excluded.date_modification`,
     c.id_local,
     c.nom,
     c.telephone ?? null,
     c.email ?? null,
     c.adresse ?? null,
+    urlImageVersionnee(photoLocale, c.photo_version ?? null),
     c.date_creation ?? maintenant(),
     c.date_modification ?? maintenant(),
   );
@@ -879,6 +898,20 @@ async function appliquerVente(v: VenteSync): Promise<void> {
   const vendeur = v.vendeur_id_local
     ? await lirePremier<{ id: number }>('SELECT id FROM utilisateur WHERE id_local = ?', v.vendeur_id_local)
     : null;
+  const produits = new Map<string, number>();
+  for (const ligne of v.lignes ?? []) {
+    if (produits.has(ligne.produit_id_local)) continue;
+    const produit = await lirePremier<{ id: number }>(
+      'SELECT id FROM produit WHERE id_local = ?',
+      ligne.produit_id_local,
+    );
+    if (!produit) {
+      throw new SynchronisationImpossible(
+        `La vente ${v.numero} depend du produit absent ${ligne.produit_id_local}.`,
+      );
+    }
+    produits.set(ligne.produit_id_local, produit.id);
+  }
   const venteId = existe?.id ?? (await executer(
     `INSERT INTO vente (id_local, numero, client_id, utilisateur_id, date_vente, total,
                         montant_paye, mode_paiement, statut, benefice_total)
@@ -897,18 +930,13 @@ async function appliquerVente(v: VenteSync): Promise<void> {
     await executer('DELETE FROM ligne_vente WHERE vente_id = ?', venteId);
   }
   for (const l of v.lignes ?? []) {
-    const produit = await lirePremier<{ id: number }>(
-      'SELECT id FROM produit WHERE id_local = ?',
-      l.produit_id_local,
-    );
-    if (!produit) continue;
     await executer(
       `INSERT INTO ligne_vente (vente_id, produit_id, libelle, unite, facteur,
                                 quantite, quantite_base, prix_unitaire,
                                 cout_unitaire, total, benefice_total)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       venteId,
-      produit.id,
+      produits.get(l.produit_id_local),
       l.libelle,
       l.unite,
       nombre(l.facteur, 1),
@@ -928,23 +956,27 @@ async function appliquerMouvement(m: MouvementSync): Promise<void> {
     m.id_local,
   );
   if (existe || m.supprime_le) return;
-  // Une vente ou un achat local pousse d'abord sa tete; le serveur cree alors
-  // son mouvement comptable avec son propre id_local. Cette reference est la
-  // meme operation : l'ajouter une seconde fois ne fausserait pas le stock
-  // (le produit est la source de verite), mais doublerait son journal.
-  if (m.reference) {
-    const memeEvenement = await lirePremier<{ id: number }>(
-      `SELECT id FROM mouvement_stock
-        WHERE source_operation = ? AND reference = ? LIMIT 1`,
-      m.source, m.reference,
-    );
-    if (memeEvenement) return;
-  }
   const produit = await lirePremier<{ id: number }>(
     'SELECT id FROM produit WHERE id_local = ?',
     m.produit_id_local,
   );
-  if (!produit) return;
+  if (!produit) {
+    throw new SynchronisationImpossible(
+      `Le mouvement ${m.id_local} depend du produit absent ${m.produit_id_local}.`,
+    );
+  }
+  // La reference est celle de toute la vente ou de tout l'achat. Chaque ligne
+  // possede son propre produit et sa propre transition de stock.
+  if (m.reference) {
+    const memeEvenement = await lirePremier<{ id: number }>(
+      `SELECT id FROM mouvement_stock
+        WHERE source_operation = ? AND reference = ? AND produit_id = ?
+          AND stock_avant IS ? AND stock_apres IS ? LIMIT 1`,
+      m.source, m.reference, produit.id,
+      nombreOptionnel(m.stock_avant), nombreOptionnel(m.stock_apres),
+    );
+    if (memeEvenement) return;
+  }
   await executer(
     `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation,
                                   quantite, unite, quantite_base, stock_avant,

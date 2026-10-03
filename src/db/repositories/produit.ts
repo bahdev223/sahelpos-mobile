@@ -13,6 +13,7 @@ import {
   versBooleen,
 } from './base';
 import { marquerChangement } from '../../services/synchronisation';
+import { exigerEcriture } from '../../services/abonnement';
 
 interface LigneProduit {
   id: number;
@@ -146,6 +147,7 @@ export interface SaisieProduit {
 }
 
 export async function creerProduit(saisie: SaisieProduit): Promise<number> {
+  await exigerEcriture();
   return dansTransaction(async () => {
     const idLocal = genererIdLocal();
     const horodatage = maintenant();
@@ -186,6 +188,7 @@ export async function creerProduit(saisie: SaisieProduit): Promise<number> {
 }
 
 export async function modifierProduit(id: number, saisie: SaisieProduit): Promise<void> {
+  await exigerEcriture();
   await dansTransaction(async () => {
     const existant = await lirePremier<{ id_local: string }>(
       'SELECT id_local FROM produit WHERE id = ?',
@@ -238,6 +241,7 @@ export async function modifierProduit(id: number, saisie: SaisieProduit): Promis
 export async function supprimerOuDesactiver(
   id: number,
 ): Promise<'supprime' | 'desactive'> {
+  await exigerEcriture();
   const usages = await lirePremier<{ n: number }>(
     `SELECT (SELECT COUNT(*) FROM ligne_vente WHERE produit_id = ?)
           + (SELECT COUNT(*) FROM ligne_inventaire WHERE produit_id = ?)

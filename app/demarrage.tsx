@@ -1,7 +1,7 @@
 /**
  * Premier demarrage mobile.
  *
- * Le telephone ne cree plus une boutique locale tout seul. SahelPOS Web est
+ * Le telephone ne cree plus un espace local tout seul. SahelPOS Web est
  * l'autorite : au premier lancement, le commercant se connecte ou cree son
  * compte Web, puis le serveur remet un droit signe utilisable hors ligne.
  */
@@ -9,6 +9,7 @@ import { useCallback, useMemo, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -18,16 +19,24 @@ import {
   View,
 } from 'react-native';
 import type { KeyboardTypeOptions, ReturnKeyTypeOptions } from 'react-native';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { obtenirBase } from '../src/db/database';
-import { genererIdLocal } from '../src/db/repositories/base';
 import type { Utilisateur } from '../src/domain/types';
+import {
+  SECTEURS_COMMERCE, MODES_VENTE, MODES_APPROVISIONNEMENT,
+  type SecteurCommerce, type ModeVenteCommerce, type ModeApprovisionnementCommerce,
+} from '../src/domain/commerce';
 import {
   connecterCompteMobile,
   creerBoutiqueMobile,
   type Droit,
 } from '../src/services/abonnement';
+import {
+  initialiserCompteAdministrateur,
+  LONGUEUR_PIN_MAX,
+  LONGUEUR_PIN_MIN,
+} from '../src/services/auth';
 import { bootstrapInitial } from '../src/services/synchronisation';
 import {
   Bouton,
@@ -41,22 +50,8 @@ import { Icone } from '../src/ui/icones';
 
 import { CLES_PARAMETRES, ecrireParametres, lireParametres, useSession } from './_layout';
 
-const LONGUEUR_PIN_MIN = 4;
-const LONGUEUR_PIN_MAX = 6;
 type ModeConnexion = 'connexion' | 'creation';
 type VueDepart = 'accueil' | 'formulaire';
-type TypeCommerce = 'alimentaire' | 'quincaillerie' | 'pharmacie' | 'autre';
-
-const TYPES_COMMERCE: Array<{
-  id: TypeCommerce;
-  titre: string;
-  icone: Parameters<typeof Icone>[0]['nom'];
-}> = [
-  { id: 'alimentaire', titre: 'Alimentaire', icone: 'caisse' },
-  { id: 'quincaillerie', titre: 'Quincaillerie', icone: 'mouvements' },
-  { id: 'pharmacie', titre: 'Pharmacie', icone: 'plus' },
-  { id: 'autre', titre: 'Autre', icone: 'menu' },
-];
 
 export function EcranDemarrage() {
   const { ouvrirSession, recharger } = useSession();
@@ -73,7 +68,9 @@ export function EcranDemarrage() {
   const [telephone, setTelephone] = useState('');
   const [ville, setVille] = useState('Bamako');
   const [devise, setDevise] = useState('FCFA');
-  const [typeCommerce, setTypeCommerce] = useState<TypeCommerce>('alimentaire');
+  const [typeCommerce, setTypeCommerce] = useState<SecteurCommerce>('ALIMENTATION');
+  const [modeVente, setModeVente] = useState<ModeVenteCommerce>('DETAIL');
+  const [modeApprovisionnement, setModeApprovisionnement] = useState<ModeApprovisionnementCommerce>('CLASSIQUE');
   const [motDePasseWeb, setMotDePasseWeb] = useState('');
   const [motDePasseWebConfirme, setMotDePasseWebConfirme] = useState('');
   const [login, setLogin] = useState('');
@@ -84,15 +81,15 @@ export function EcranDemarrage() {
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
 
   const titreEtape = useMemo(() => {
-    if (etape === 0) return mode === 'connexion' ? 'Connexion' : 'Creer ma boutique';
+    if (etape === 0) return mode === 'connexion' ? 'Connexion' : 'Creer mon espace';
     return 'Code local';
   }, [etape, mode]);
 
   const sousTitreEtape = useMemo(() => {
     if (etape === 0) {
       return mode === 'connexion'
-        ? 'Accedez a votre espace Néré'
-        : 'Configurez votre espace Néré';
+        ? 'Accedez a votre espace SahelPOS'
+        : 'Configurez votre espace SahelPOS';
     }
     return 'Protegez la caisse sur ce telephone.';
   }, [etape, mode]);
@@ -106,7 +103,7 @@ export function EcranDemarrage() {
     }
 
     if (etape === 0 && mode === 'creation') {
-      if (nomBoutique.trim().length === 0) trouvees.nomBoutique = 'Le nom de la boutique est obligatoire.';
+      if (nomBoutique.trim().length === 0) trouvees.nomBoutique = "Le nom de l'entreprise est obligatoire.";
       if (nomAdmin.trim().length === 0) trouvees.nomAdmin = 'Votre nom est obligatoire.';
       if (login.trim().length === 0) {
         trouvees.login = "L'identifiant Web est obligatoire.";
@@ -160,13 +157,17 @@ export function EcranDemarrage() {
                 login,
                 motDePasse: motDePasseWeb,
                 telephone,
+                ville,
+                secteur: typeCommerce,
+                modeVente,
+                modeApprovisionnement,
                 devise,
                 plan: 'START',
               },
               'Telephone principal',
             );
-      if (!etat.droit) throw new Error("Le serveur n'a pas renvoye la boutique.");
-      if (!etat.droit.peutEntrer) throw new Error(etat.droit.raison || "Cette boutique n'est pas active.");
+      if (!etat.droit) throw new Error("Le serveur n'a pas renvoye l'espace SahelPOS.");
+      if (!etat.droit.peutEntrer) throw new Error(etat.droit.raison || "Cet espace SahelPOS n'est pas actif.");
       await bootstrapInitial(etat.droit.boutique);
       setDroit(etat.droit);
       setNomAdmin((valeur) => valeur || (mode === 'creation' ? nomAdmin : login) || 'Gerant');
@@ -186,7 +187,8 @@ export function EcranDemarrage() {
     } finally {
       setEnCours(false);
     }
-  }, [devise, login, mode, motDePasseWeb, nomAdmin, nomBoutique, telephone, validerEtape]);
+  }, [devise, login, mode, motDePasseWeb, nomAdmin, nomBoutique, telephone, ville,
+    typeCommerce, modeVente, modeApprovisionnement, validerEtape]);
 
   const terminer = useCallback(async () => {
     if (!droit) {
@@ -197,22 +199,16 @@ export function EcranDemarrage() {
     setEnCours(true);
     setErreurGenerale(null);
     try {
-      const db = await obtenirBase();
       const identifiant = login.trim();
-      const maintenant = new Date().toISOString();
-
-      const existant = await db.getFirstAsync<{ n: number }>(
-        'SELECT COUNT(*) AS n FROM utilisateur WHERE login = ?',
-        identifiant,
-      );
-      if ((existant?.n ?? 0) > 0) {
-        setErreurs({ login: 'Cet identifiant est deja utilise.' });
-        setEnCours(false);
-        return;
-      }
-
-      const cree = { id: 0 };
+      const nomCompte = nomAdmin.trim() || identifiant;
+      const utilisateurId = await initialiserCompteAdministrateur({
+        login: identifiant,
+        nom: nomCompte,
+        pin: pin,
+        role: 'admin',
+      });
       const parametresSynchronises = await lireParametres();
+
       await ecrireParametres({
         [CLES_PARAMETRES.nom]: parametresSynchronises[CLES_PARAMETRES.nom] || droit.nom || 'Boutique',
         [CLES_PARAMETRES.adresse]: parametresSynchronises[CLES_PARAMETRES.adresse] || '',
@@ -223,25 +219,13 @@ export function EcranDemarrage() {
         [CLES_PARAMETRES.installation]: '1',
       });
 
-      await db.withTransactionAsync(async () => {
-        const insertion = await db.runAsync(
-          `INSERT INTO utilisateur (id_local, login, nom, code_pin, role, actif, date_creation, date_modification)
-           VALUES (?, ?, ?, ?, 'admin', 1, ?, ?)`,
-          genererIdLocal(),
-          identifiant,
-          nomAdmin.trim() || identifiant,
-          pin,
-          maintenant,
-          maintenant,
-        );
-        cree.id = insertion.lastInsertRowId;
-      });
+      await proposerBiometrieSysteme(utilisateurId);
 
       const compte: Utilisateur = {
-        id: cree.id,
+        id: utilisateurId,
         idLocal: '',
         login: identifiant,
-        nom: nomAdmin.trim() || identifiant,
+        nom: nomCompte,
         role: 'admin',
         actif: true,
         caisseOuvreA: null,
@@ -251,9 +235,12 @@ export function EcranDemarrage() {
       await recharger();
       ouvrirSession(compte);
     } catch (erreur) {
-      setErreurGenerale(
-        erreur instanceof Error ? erreur.message : "L'acces local n'a pas pu etre enregistre.",
-      );
+      const message = erreur instanceof Error ? erreur.message : "L'acces local n'a pas pu etre enregistre.";
+      if (/deja utilise/i.test(message)) {
+        setErreurs({ login: message });
+      } else {
+        setErreurGenerale(message);
+      }
       setEnCours(false);
     }
   }, [droit, login, nomAdmin, ouvrirSession, pin, recharger, validerEtape]);
@@ -322,7 +309,7 @@ export function EcranDemarrage() {
           </Pressable>
           <Pressable style={styles.boutonBlanc} onPress={() => afficherFormulaire('creation')}>
             <Icone nom="boutique" taille={24} couleur={couleurs.texte} />
-            <Text style={styles.boutonBlancTexte}>Creer une nouvelle boutique</Text>
+            <Text style={styles.boutonBlancTexte}>Creer mon espace</Text>
           </Pressable>
           <Pressable onPress={() => afficherFormulaire('creation')}>
             <Text style={styles.essai}>Essayer gratuitement pendant 14 jours</Text>
@@ -394,20 +381,20 @@ export function EcranDemarrage() {
                   </View>
 
                   <Pressable onPress={() => afficherFormulaire('creation')}>
-                    <Text style={styles.creerBas}>Pas encore de compte ? <Text style={styles.creerBasLien}>Creer ma boutique</Text></Text>
+                    <Text style={styles.creerBas}>Pas encore de compte ? <Text style={styles.creerBasLien}>Creer mon espace</Text></Text>
                   </Pressable>
                 </View>
               ) : (
                 <View style={styles.creationCarte}>
                   <EtapesCreation />
 
-                  <Text style={styles.creationTitre}>Parlez-nous de votre boutique</Text>
+                  <Text style={styles.creationTitre}>Votre entreprise</Text>
                   <Text style={styles.creationSousTitre}>
-                    Ces informations nous permettent de configurer votre espace.
+                    Configurez votre espace de vente en quelques minutes.
                   </Text>
 
-                  <ChampMaquette icone="boutique" label="Nom de la boutique" valeur={nomBoutique} onChangeText={setNomBoutique} placeholder="Alimentation Fatoumata" erreur={erreurs.nomBoutique} autoFocus />
-                  <Text style={styles.exempleChamp}>Ex : Alimentation Fatoumata, Quincaillerie du Marche, ...</Text>
+                  <ChampMaquette icone="boutique" label="Nom de l'entreprise" valeur={nomBoutique} onChangeText={setNomBoutique} placeholder="Diarra Commerce" erreur={erreurs.nomBoutique} autoFocus />
+                  <Text style={styles.exempleChamp}>Ex : Diarra Commerce, Alimentation Fatoumata, Quincaillerie du Marche...</Text>
 
                   <View style={styles.ligneDeuxColonnes}>
                     <View style={styles.colonneChamp}>
@@ -425,23 +412,27 @@ export function EcranDemarrage() {
                     <Text style={styles.infoCreationTexte}>Vous pourrez ajouter d'autres informations (adresse, logo, etc.) plus tard dans les parametres.</Text>
                   </View>
 
-                  <Text style={styles.commerceLabel}>Quel type de commerce ? <Text style={styles.commerceFacultatif}>(facultatif)</Text></Text>
+                  <Text style={styles.commerceLabel}>Votre premier point de vente</Text>
+                  <Text style={styles.pointVenteAide}>Secteur d'activite</Text>
                   <View style={styles.commerceGrille}>
-                    {TYPES_COMMERCE.map((item) => (
+                    {SECTEURS_COMMERCE.map((item) => (
                       <CarteCommerce
-                        key={item.id}
-                        actif={typeCommerce === item.id}
+                        key={item.code}
+                        actif={typeCommerce === item.code}
                         icone={item.icone}
                         titre={item.titre}
-                        onPress={() => setTypeCommerce(item.id)}
+                        onPress={() => setTypeCommerce(item.code)}
                       />
                     ))}
                   </View>
+                  <ChoixCommerce titre="Mode de vente" valeur={modeVente} choix={MODES_VENTE} onChange={setModeVente} />
+                  <ChoixCommerce titre="Approvisionnement" valeur={modeApprovisionnement} choix={MODES_APPROVISIONNEMENT} onChange={setModeApprovisionnement} />
+                  <Text style={styles.pointVenteAide}>Catalogue simple sur mobile. Les variantes, lots, numeros de serie et fonctions avancees restent disponibles sur le Web uniquement.</Text>
 
                   <View style={styles.creationSeparateur} />
                   <Text style={styles.creationCompteTitre}>Compte administrateur</Text>
                   <Text style={styles.creationCompteTexte}>
-                    Ce compte servira a gerer la boutique et a creer les vendeurs.
+                    Ce compte servira a gerer l'entreprise, les points de vente et les vendeurs.
                   </Text>
 
                   <ChampMaquette icone="utilisateurs" label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Fatoumata Traore" erreur={erreurs.nomAdmin} />
@@ -471,10 +462,12 @@ export function EcranDemarrage() {
           {etape === 1 ? (
             <Carte style={styles.carteCode}>
               <View style={styles.boutiqueConnectee}>
-                <Text style={styles.boutiqueLibelle}>Boutique connectee</Text>
-                <Text style={styles.boutiqueNom}>{droit?.nom || 'Boutique'}</Text>
-                <Text style={styles.boutiqueDetail}>Plan {droit?.plan || '-'} recu depuis Néré Web.</Text>
+                <Text style={styles.boutiqueLibelle}>Espace connecte</Text>
+                <Text style={styles.boutiqueNom}>{droit?.nom || 'SahelPOS'}</Text>
+                <Text style={styles.boutiqueDetail}>Plan {droit?.plan || '-'} recu depuis SahelPOS Web.</Text>
+                <Text style={styles.boutiqueDetail}>{droit?.commerce?.secteur_libelle || 'Profil a verifier'}</Text>
               </View>
+              {!droit?.commerce?.compatible ? <BandeauErreur message={droit?.commerce?.raison || 'Connectez-vous pour verifier le profil commerce.'} /> : null}
               <Champ label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Aminata Diarra" autoFocus />
               <Champ label="Identifiant local" valeur={login} onChangeText={setLogin} placeholder="aminata" erreur={erreurs.login} />
               <Champ label={`Code d'acces (${LONGUEUR_PIN_MIN} a ${LONGUEUR_PIN_MAX} chiffres)`} valeur={pin} onChangeText={(valeur) => setPin(chiffresSeuls(valeur))} placeholder="0000" clavier="number-pad" secret erreur={erreurs.pin} />
@@ -482,7 +475,7 @@ export function EcranDemarrage() {
               {erreurGenerale ? <BandeauErreur message={erreurGenerale} /> : null}
               <View style={styles.piedCode}>
                 <Bouton titre="Retour" variante="secondaire" onPress={precedent} style={styles.piedRetour} />
-                <Bouton titre="Entrer dans la caisse" onPress={suivant} enCours={enCours} grand style={styles.piedSuivant} />
+                <Bouton titre={droit?.commerce?.compatible ? 'Entrer dans la caisse' : 'Consulter mon espace'} onPress={suivant} enCours={enCours} grand style={styles.piedSuivant} />
               </View>
             </Carte>
           ) : null}
@@ -609,12 +602,52 @@ function CarteCommerce({
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: actif }}
+      accessibilityLabel={titre}
       style={[styles.commerceCarte, actif && styles.commerceCarteActive]}
     >
       <Icone nom={icone} taille={27} couleur={actif ? couleurs.primaire : couleurs.texte} />
       <Text style={[styles.commerceTitre, actif && styles.commerceTitreActive]}>{titre}</Text>
     </Pressable>
   );
+}
+
+function ChoixCommerce<T extends string>({ titre, valeur, choix, onChange }: {
+  titre: string;
+  valeur: T;
+  choix: ReadonlyArray<{ code: T; titre: string }>;
+  onChange: (code: T) => void;
+}) {
+  const [ouvert, setOuvert] = useState(false);
+  return <View style={styles.champBloc}>
+    <Text style={styles.champLabel}>{titre}</Text>
+    <Pressable style={styles.choixChamp} onPress={() => setOuvert(true)} accessibilityRole="button"
+      accessibilityLabel={`${titre} : ${choix.find(item => item.code === valeur)?.titre}`} accessibilityState={{ expanded: ouvert }}>
+      <Text style={styles.choixTexte}>{choix.find(item => item.code === valeur)?.titre}</Text>
+      <Icone nom="chevron" taille={20} />
+    </Pressable>
+    <Modal visible={ouvert} transparent animationType="fade" onRequestClose={() => setOuvert(false)}>
+      <View style={styles.choixFond}>
+        <View style={styles.choixDialogue} accessibilityViewIsModal>
+          <View style={styles.choixEntete}>
+            <Text style={styles.commerceLabel}>{titre}</Text>
+            <Pressable onPress={() => setOuvert(false)} accessibilityRole="button" accessibilityLabel="Fermer" style={styles.retour}>
+              <Icone nom="fermer" taille={22} />
+            </Pressable>
+          </View>
+          <ScrollView>
+            {choix.map(item => <Pressable key={item.code} style={styles.choixChamp}
+              accessibilityRole="radio" accessibilityState={{ selected: item.code === valeur }}
+              onPress={() => { onChange(item.code); setOuvert(false); }}>
+              <Text style={styles.choixTexte}>{item.titre}</Text>
+              {item.code === valeur ? <Icone nom="coche" couleur={couleurs.primaire} taille={22} /> : null}
+            </Pressable>)}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  </View>;
 }
 
 function BandeauErreur({ message }: { message: string }) {
@@ -633,6 +666,29 @@ function normaliserLogin(valeur: string): string {
   const sansAccents = valeur.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const propre = sansAccents.toLowerCase().replace(/[^a-z0-9]+/g, '');
   return propre || 'gerant';
+}
+
+async function proposerBiometrieSysteme(utilisateurId: number): Promise<void> {
+  try {
+    const materiel = await LocalAuthentication.hasHardwareAsync();
+    if (!materiel) return;
+    const enrole = await LocalAuthentication.isEnrolledAsync();
+    if (!enrole) return;
+
+    const resultat = await LocalAuthentication.authenticateAsync({
+      promptMessage: 'Activer la biometrie SahelPOS',
+      cancelLabel: 'Plus tard',
+      fallbackLabel: 'Code PIN',
+      disableDeviceFallback: false,
+    });
+    if (!resultat.success) return;
+
+    await ecrireParametres({
+      [CLES_PARAMETRES.biometrieUtilisateur]: String(utilisateurId),
+    });
+  } catch {
+    // Le PIN local reste la voie principale si Android refuse ou annule le prompt.
+  }
 }
 
 export default EcranDemarrage;
@@ -787,6 +843,14 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: couleurs.texte,
   },
+  pointVenteAide: {
+    marginTop: -6,
+    marginBottom: 12,
+    color: '#60708e',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
   commerceFacultatif: { color: '#60708e', fontWeight: '700' },
   commerceGrille: {
     flexDirection: 'row',
@@ -795,7 +859,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   commerceCarte: {
-    width: '48%',
+    width: '47%',
     minHeight: 82,
     borderRadius: 14,
     borderWidth: 1,
@@ -804,13 +868,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 10,
   },
   commerceCarteActive: {
     borderColor: couleurs.primaire,
     borderWidth: 2,
     backgroundColor: '#f7fbff',
   },
-  commerceTitre: { fontSize: 14, fontWeight: '800', color: couleurs.texte },
+  commerceTitre: { fontSize: 14, fontWeight: '800', color: couleurs.texte, textAlign: 'center' },
+  choixChamp: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderWidth: 1, borderColor: couleurs.bordure, borderRadius: 8, marginTop: 6 },
+  choixTexte: { flex: 1, color: couleurs.texte, fontSize: 15 },
+  choixFond: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.4)' },
+  choixDialogue: { backgroundColor: couleurs.surface, borderRadius: 8, padding: 16, maxHeight: '80%' },
+  choixEntete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   commerceTitreActive: { color: couleurs.primaire },
   creationSeparateur: {
     height: 1,
