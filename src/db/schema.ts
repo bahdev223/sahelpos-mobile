@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -452,5 +452,43 @@ export const MIGRATIONS: string[][] = [
     )`,
     `CREATE INDEX IF NOT EXISTS idx_echange_variante_vente ON echange_variante(vente_id)`,
     `CREATE INDEX IF NOT EXISTS idx_echange_variante_ligne ON echange_variante(ligne_vente_id)`,
+  ],
+
+  // --- version 13 : commandes clients Habillement --------------------------
+  [
+    `CREATE TABLE IF NOT EXISTS commande_client (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local            TEXT NOT NULL UNIQUE,
+      serveur_id          INTEGER,
+      numero              TEXT NOT NULL,
+      client_id           INTEGER REFERENCES client(id),
+      statut              TEXT NOT NULL DEFAULT 'BROUILLON',
+      total               REAL NOT NULL DEFAULT 0,
+      montant_paye        REAL NOT NULL DEFAULT 0,
+      note                TEXT,
+      date_creation       TEXT NOT NULL,
+      date_confirmation   TEXT,
+      date_prete          TEXT,
+      date_fin            TEXT,
+      sync_statut         TEXT NOT NULL DEFAULT 'LOCAL'
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_commande_client_serveur ON commande_client(serveur_id) WHERE serveur_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_commande_client_statut ON commande_client(statut, date_creation)`,
+
+    `CREATE TABLE IF NOT EXISTS ligne_commande_client (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      commande_id          INTEGER NOT NULL REFERENCES commande_client(id) ON DELETE CASCADE,
+      serveur_id           INTEGER,
+      produit_id           INTEGER NOT NULL REFERENCES produit(id),
+      variante_id          INTEGER REFERENCES variante_produit(id),
+      libelle              TEXT NOT NULL,
+      quantite_commandee   REAL NOT NULL,
+      quantite_reservee    REAL NOT NULL DEFAULT 0,
+      quantite_preparee    REAL NOT NULL DEFAULT 0,
+      prix_unitaire        REAL NOT NULL,
+      total                REAL NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_commande_client_commande ON ligne_commande_client(commande_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_commande_client_variante ON ligne_commande_client(variante_id)`,
   ],
 ];
