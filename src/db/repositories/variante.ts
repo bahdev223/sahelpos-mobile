@@ -1,5 +1,6 @@
 import { genererIdLocal, lirePremier, lireTout, executer, dansTransaction, maintenant } from './base';
 import { marquerChangement } from '../../services/synchronisation';
+import { exigerEcriture } from '../../services/abonnement';
 
 export interface ValeurVarianteMobile {
   dimensionCode: string;
@@ -329,4 +330,86 @@ export async function genererMatriceVariantesLocale(
   });
 
   return crees;
+}
+
+
+export async function corrigerStockVariante(
+  varianteId: number,
+  stockPhysique: number,
+  motif = 'Inventaire variantes',
+): Promise<void> {
+  await exigerEcriture();
+  if (!Number.isFinite(stockPhysique) || stockPhysique < 0) {
+    throw new Error('Le stock physique doit etre positif ou nul.');
+  }
+
+  await dansTransaction(async () => {
+    const variante = await lirePremier<{
+      id: number;
+      id_local: string;
+      produit_id: number;
+      stock_actuel: number;
+      prix_achat: number | null;
+    }>(
+      `SELECT id, id_local, produit_id, stock_actuel, prix_achat
+         FROM variante_produit WHERE id = ? AND actif = 1`,
+      varianteId,
+    );
+    if (!variante) throw new Error('Variante introuvable.');
+
+    const produit = await lirePremier<{
+      quantite_base: number;
+      prix_achat: number;
+      unite_base: string;
+    }>(
+      'SELECT quantite_base, prix_achat, unite_base FROM produit WHERE id = ?',
+      variante.produit_id,
+    );
+    if (!produit) throw new Error('Modele introuvable.');
+
+    const ancien = Number(variante.stock_actuel || 0);
+    const nouveau = Math.round(stockPhysique * 1000) / 1000;
+    const delta = Math.round((nouveau - ancien) * 1000) / 1000;
+    if (delta === 0) return;
+
+    const horodatage = maintenant();
+    await executer(
+      `UPDATE variante_produit
+          SET stock_actuel = ?, date_modification = ?
+        WHERE id = ?`,
+      nouveau,
+      horodatage,
+      variante.id,
+    );
+    await executer(
+      `UPDATE produit
+          SET quantite_base = MAX(0, quantite_base + ?), date_modification = ?
+        WHERE id = ?`,
+      delta,
+      horodatage,
+      variante.produit_id,
+    );
+
+    const mouvementId = genererIdLocal();
+    await executer(
+      `INSERT INTO mouvement_stock
+       (id_local, produit_id, variante_id, nature, source_operation, quantite,
+        unite, quantite_base, stock_avant, stock_apres, prix_unitaire,
+        reference, motif, utilisateur, date_mouvement)
+       VALUES (?, ?, ?, 'AJUSTEMENT', 'INVENTAIRE', ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+      mouvementId,
+      variante.produit_id,
+      variante.id,
+      nouveau,
+      produit.unite_base,
+      delta,
+      ancien,
+      nouveau,
+      variante.prix_achat ?? produit.prix_achat,
+      `INV-VAR-${variante.id_local.slice(0, 8)}`,
+      motif,
+      horodatage,
+    );
+    await marquerChangement('mouvement', mouvementId);
+  });
 }
