@@ -80,3 +80,109 @@ export function lireProfilCommerce(value: unknown): ProfilCommerceMobile | null 
       ? profil.raison : 'Consultation uniquement : ce profil exige des fonctions disponibles sur le Web, pas sur cette version mobile.'),
   };
 }
+
+
+export interface LibellesProfilMobile {
+  accueil: string;
+  caisse: string;
+  catalogue: string;
+  achats: string;
+  stock: string;
+  produits: string;
+  produit: string;
+  nouveauProduit: string;
+  inventaire: string;
+  categories: string;
+}
+
+export interface ProfilUIMobile {
+  code: SecteurCommerce;
+  nom: string;
+  libelles: LibellesProfilMobile;
+  /** Capacites qui modifient reellement le comportement de cette UI. */
+  capabilities: string[];
+}
+
+const LIBELLES_STANDARD: LibellesProfilMobile = {
+  accueil: 'Accueil',
+  caisse: 'Caisse',
+  catalogue: 'Catalogue',
+  achats: 'Achats',
+  stock: 'Stock',
+  produits: 'Produits',
+  produit: 'Produit',
+  nouveauProduit: 'Nouveau produit',
+  inventaire: 'Inventaire',
+  categories: 'Categories',
+};
+
+const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'code'>>> = {
+  HABILLEMENT: {
+    nom: 'Pret-a-porter & Habillement',
+    libelles: {
+      ...LIBELLES_STANDARD,
+      catalogue: 'Modeles',
+      achats: 'Appro.',
+      stock: 'Stock',
+      produits: 'Modeles',
+      produit: 'Modele',
+      nouveauProduit: 'Nouveau modele',
+      inventaire: 'Inventaire',
+      categories: 'Collections',
+    },
+    capabilities: ['PRODUCT_IMAGES', 'BARCODE', 'INVENTORY', 'LOW_STOCK_ALERT'],
+  },
+  FRIPERIE: {
+    nom: 'Friperie',
+    libelles: {
+      ...LIBELLES_STANDARD,
+      catalogue: 'Articles',
+      achats: 'Arrivages',
+      produits: 'Articles',
+      produit: 'Article',
+      nouveauProduit: 'Nouvel article',
+      categories: 'Lots / categories',
+    },
+    capabilities: ['PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT'],
+  },
+  ELECTRONIQUE: {
+    nom: 'Electronique',
+    libelles: {
+      ...LIBELLES_STANDARD,
+      catalogue: 'Articles',
+      produits: 'Articles',
+      produit: 'Article',
+      nouveauProduit: 'Nouvel article',
+    },
+    capabilities: ['BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT'],
+  },
+};
+
+export function resoudreProfilUIMobile(
+  profil: ProfilCommerceMobile | null | undefined,
+): ProfilUIMobile {
+  const code = profil?.secteur ?? 'COMMERCE_GENERAL';
+  const specifique = PROFILS_UI_MOBILE[code];
+  if (specifique) {
+    return { code, ...specifique };
+  }
+  return {
+    code,
+    nom: profil?.secteur_libelle || SECTEURS_COMMERCE.find(item => item.code === code)?.titre || 'Commerce',
+    libelles: LIBELLES_STANDARD,
+    capabilities: profil?.capabilities_effectives ?? [],
+  };
+}
+
+export function capabilityCommerceActive(
+  profil: ProfilCommerceMobile | null | undefined,
+  code: string,
+): boolean {
+  return !!profil?.capabilities_effectives.includes(code);
+}
+
+export function profilNecessiteWeb(
+  profil: ProfilCommerceMobile | null | undefined,
+): boolean {
+  return !!profil && !profil.compatible;
+}
