@@ -35,6 +35,7 @@ import { Icone, IconePastille, Pastille } from './icones';
 import type { NomIcone } from './icones';
 import { couleurs, espaces, rayons } from './theme';
 import { resoudreProfilUIMobile, type SecteurCommerce } from '../domain/commerce';
+import { HABILLEMENT_MOBILE_THEME as H } from '../profile-ui/habillement/theme';
 
 const LARGEUR = Math.min(320, Dimensions.get('window').width * 0.86);
 const DUREE = 220;
@@ -245,7 +246,11 @@ export function FournisseurTiroir({
             <Pressable style={st.plein} onPress={fermer} accessibilityLabel="Fermer le menu" />
           </Animated.View>
           <Animated.View
-            style={[st.panneau, { transform: [{ translateX: glissement }] }]}
+            style={[
+              st.panneau,
+              infos.secteur === 'HABILLEMENT' && { backgroundColor: H.surface },
+              { transform: [{ translateX: glissement }] },
+            ]}
           >
             <ContenuTiroir infos={infos} onFermer={fermer} />
           </Animated.View>
@@ -270,6 +275,12 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
     raison: '',
   });
   const marges = useSafeAreaInsets();
+  const habillement = infos.secteur === 'HABILLEMENT';
+  const accent = habillement ? H.primaire : couleurs.primaire;
+  const accentClair = habillement ? H.primaireClair : couleurs.primaireDouce;
+  const fond = habillement ? H.fond : couleurs.fond;
+  const texte = habillement ? H.texte : couleurs.texte;
+  const texteFaible = habillement ? H.texteFaible : couleurs.texteFaible;
   const [alertes, setAlertes] = useState(infos.alertes ?? 0);
 
   useEffect(() => {
@@ -299,7 +310,10 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
 
   return (
     <View style={st.contenu}>
-      <View style={[st.entete, { paddingTop: marges.top + espaces.m }]}>
+      <View style={[
+        st.entete,
+        { paddingTop: marges.top + espaces.m, backgroundColor: accent },
+      ]}>
         <View style={st.enteteHaut}>
           <View style={st.ecussonLogo}>
             <Image
@@ -366,17 +380,26 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
           return { ...groupe, entrees };
         }).map((groupe) => (
           <View key={groupe.titre} style={st.groupe}>
-            <Text style={st.groupeTitre}>{groupe.titre.toUpperCase()}</Text>
+            <Text style={[st.groupeTitre, { color: texteFaible }]}>
+              {groupe.titre.toUpperCase()}
+            </Text>
             {groupe.entrees.map((entree) => (
               <Pressable
                 key={entree.chemin}
                 onPress={() => aller(entree.chemin)}
-                style={({ pressed }) => [st.entree, pressed && st.entreePressee]}
+                style={({ pressed }) => [
+                  st.entree,
+                  pressed && [st.entreePressee, { backgroundColor: fond }],
+                ]}
               >
-                <IconePastille nom={entree.icone} />
+                <IconePastille
+                  nom={entree.icone}
+                  couleur={accent}
+                  fond={accentClair}
+                />
                 <View style={st.entreeTextes}>
-                  <Text style={st.entreeTitre}>{entree.titre}</Text>
-                  <Text style={st.entreeDescription} numberOfLines={1}>
+                  <Text style={[st.entreeTitre, { color: texte }]}>{entree.titre}</Text>
+                  <Text style={[st.entreeDescription, { color: texteFaible }]} numberOfLines={1}>
                     {entree.description}
                   </Text>
                 </View>
