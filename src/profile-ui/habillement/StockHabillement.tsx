@@ -9,6 +9,7 @@ import { useSession } from '../../../app/_layout';
 import { BandeauEtat, couleurs, espaces, rayons } from '../../ui/components';
 import { Icone } from '../../ui/icones';
 import { BoutonMenu } from '../../ui/tiroir';
+import { HABILLEMENT_MOBILE_THEME as H } from './theme';
 
 interface LigneStockVariante {
   id: number;
@@ -130,12 +131,12 @@ export function StockHabillement() {
 
       <View style={s.outils}>
         <View style={s.recherche}>
-          <Icone nom="recherche" taille={18} couleur={couleurs.texteFaible} />
+          <Icone nom="recherche" taille={18} couleur={H.texteFaible} />
           <TextInput
             value={recherche}
             onChangeText={setRecherche}
             placeholder="Modèle, taille, couleur ou SKU"
-            placeholderTextColor={couleurs.texteFaible}
+            placeholderTextColor={H.texteFaible}
             style={s.saisie}
           />
         </View>
@@ -183,58 +184,58 @@ export function StockHabillement() {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: couleurs.fond },
+  page: { flex: 1, backgroundColor: H.fond },
   entete: {
     flexDirection: 'row', alignItems: 'center', gap: espaces.m,
-    padding: espaces.m, backgroundColor: couleurs.surface,
+    padding: espaces.m, backgroundColor: H.surface,
   },
   enteteTextes: { flex: 1 },
-  titre: { fontSize: 19, fontWeight: '900', color: couleurs.texte },
-  sousTitre: { marginTop: 2, fontSize: 11, color: couleurs.texteFaible },
+  titre: { fontSize: 19, fontWeight: '900', color: H.texte },
+  sousTitre: { marginTop: 2, fontSize: 11, color: H.texteFaible },
   ruptureBadge: {
     paddingVertical: 6, paddingHorizontal: 9, borderRadius: 14,
     backgroundColor: couleurs.dangerDouce,
   },
   ruptureBadgeOk: { backgroundColor: couleurs.succesDouce },
-  ruptureBadgeTexte: { fontSize: 10, fontWeight: '900', color: couleurs.texte },
+  ruptureBadgeTexte: { fontSize: 10, fontWeight: '900', color: H.texte },
   outils: {
     flexDirection: 'row', gap: espaces.s, padding: espaces.m,
   },
   recherche: {
     flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center',
     gap: espaces.s, paddingHorizontal: espaces.m, borderRadius: rayons.m,
-    backgroundColor: couleurs.surface, borderWidth: 1, borderColor: couleurs.bordure,
+    backgroundColor: H.surface, borderWidth: 1, borderColor: H.bordure,
   },
-  saisie: { flex: 1, color: couleurs.texte, fontSize: 13 },
+  saisie: { flex: 1, color: H.texte, fontSize: 13 },
   filtre: {
     minHeight: 46, justifyContent: 'center', paddingHorizontal: espaces.m,
-    borderRadius: rayons.m, backgroundColor: couleurs.surface,
-    borderWidth: 1, borderColor: couleurs.bordure,
+    borderRadius: rayons.m, backgroundColor: H.surface,
+    borderWidth: 1, borderColor: H.bordure,
   },
-  filtreActif: { backgroundColor: couleurs.primaire, borderColor: couleurs.primaire },
-  filtreTexte: { fontSize: 12, fontWeight: '800', color: couleurs.texte },
-  filtreTexteActif: { color: couleurs.texteInverse },
+  filtreActif: { backgroundColor: H.primaire, borderColor: H.primaire },
+  filtreTexte: { fontSize: 12, fontWeight: '800', color: H.texte },
+  filtreTexteActif: { color: '#FFFFFF' },
   liste: { paddingHorizontal: espaces.m, paddingBottom: espaces.xxl, gap: espaces.s },
   carte: {
     minHeight: 82, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: espaces.m, padding: espaces.m, borderRadius: rayons.m,
-    backgroundColor: couleurs.surface, borderWidth: 1, borderColor: couleurs.bordure,
+    backgroundColor: H.surface, borderWidth: 1, borderColor: H.bordure,
   },
   gauche: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: espaces.m },
   couleur: {
     width: 28, height: 28, borderRadius: 14, borderWidth: StyleSheet.hairlineWidth,
-    borderColor: couleurs.bordure,
+    borderColor: H.bordure,
   },
   textes: { flex: 1, minWidth: 0 },
-  modele: { fontSize: 14, fontWeight: '900', color: couleurs.texte },
-  variante: { marginTop: 3, fontSize: 12, fontWeight: '700', color: couleurs.primaire },
-  meta: { marginTop: 3, fontSize: 10, color: couleurs.texteFaible },
+  modele: { fontSize: 14, fontWeight: '900', color: H.texte },
+  variante: { marginTop: 3, fontSize: 12, fontWeight: '700', color: H.primaire },
+  meta: { marginTop: 3, fontSize: 10, color: H.texteFaible },
   droite: { alignItems: 'flex-end' },
   stock: { fontSize: 21, fontWeight: '900', color: couleurs.succesFonce },
   stockRupture: { color: couleurs.danger },
-  unite: { fontSize: 10, color: couleurs.texteFaible },
-  prix: { marginTop: 4, fontSize: 10, fontWeight: '700', color: couleurs.texte },
+  unite: { fontSize: 10, color: H.texteFaible },
+  prix: { marginTop: 4, fontSize: 10, fontWeight: '700', color: H.texte },
   vide: { alignItems: 'center', padding: espaces.xl },
-  videTitre: { fontSize: 16, fontWeight: '900', color: couleurs.texte },
-  videTexte: { marginTop: 7, textAlign: 'center', color: couleurs.texteFaible },
+  videTitre: { fontSize: 16, fontWeight: '900', color: H.texte },
+  videTexte: { marginTop: 7, textAlign: 'center', color: H.texteFaible },
 });
