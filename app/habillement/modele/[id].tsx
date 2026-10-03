@@ -10,6 +10,7 @@ import type { Produit } from '../../../src/domain/types';
 import { BandeauEtat, couleurs, espaces, rayons } from '../../../src/ui/components';
 import { Icone } from '../../../src/ui/icones';
 import { uriImage, formaterFrancs } from '../../produit/nouveau';
+import { HABILLEMENT_MOBILE_THEME as H } from '../../../src/profile-ui/habillement/theme';
 
 export default function FicheModeleHabillement() {
   const router = useRouter();
@@ -51,14 +52,14 @@ export default function FicheModeleHabillement() {
       <BandeauEtat />
       <View style={s.entete}>
         <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Icone nom="retour" taille={24} couleur={couleurs.texte} />
+          <Icone nom="retour" taille={24} couleur={H.texte} />
         </Pressable>
         <View style={s.enteteTextes}>
           <Text style={s.titre} numberOfLines={1}>{produit.nom}</Text>
           <Text style={s.sousTitre}>Fiche modèle · {variantes.length} variantes</Text>
         </View>
         <Pressable onPress={() => router.push({ pathname: '/produit/modifier/[id]', params: { id: String(produit.id) } })}>
-          <Icone nom="crayon" taille={21} couleur={couleurs.primaire} />
+          <Icone nom="crayon" taille={21} couleur={H.primaire} />
         </Pressable>
       </View>
 
@@ -112,7 +113,7 @@ export default function FicheModeleHabillement() {
               style={s.gererVariantes}
             >
               <Text style={s.gererVariantesTexte}>Gérer</Text>
-              <Icone nom="chevron" taille={14} couleur={couleurs.primaire} />
+              <Icone nom="chevron" taille={14} couleur={H.primaire} />
             </Pressable>
           </View>
           {variantes.map((variante) => (
@@ -141,58 +142,58 @@ export default function FicheModeleHabillement() {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: couleurs.fond },
+  page: { flex: 1, backgroundColor: H.fond },
   entete: {
     flexDirection: 'row', alignItems: 'center', gap: espaces.m,
-    padding: espaces.m, backgroundColor: couleurs.surface,
+    padding: espaces.m, backgroundColor: H.surface,
   },
   enteteTextes: { flex: 1 },
-  titre: { fontSize: 18, fontWeight: '900', color: couleurs.texte },
-  sousTitre: { marginTop: 2, fontSize: 11, color: couleurs.texteFaible },
+  titre: { fontSize: 18, fontWeight: '900', color: H.texte },
+  sousTitre: { marginTop: 2, fontSize: 11, color: H.texteFaible },
   contenu: { padding: espaces.m, paddingBottom: espaces.xxl },
-  hero: { width: '100%', aspectRatio: 1.35, borderRadius: rayons.l, backgroundColor: couleurs.surface },
-  heroVide: { alignItems: 'center', justifyContent: 'center', backgroundColor: couleurs.primaireDouce },
-  initiale: { fontSize: 64, fontWeight: '900', color: couleurs.primaire },
+  hero: { width: '100%', aspectRatio: 1.35, borderRadius: rayons.l, backgroundColor: H.surface },
+  heroVide: { alignItems: 'center', justifyContent: 'center', backgroundColor: H.primaireClair },
+  initiale: { fontSize: 64, fontWeight: '900', color: H.primaire },
   carteResume: {
     flexDirection: 'row', gap: espaces.s, marginTop: espaces.m,
   },
   kpi: {
     flex: 1, minWidth: 0, padding: espaces.m, borderRadius: rayons.m,
-    borderWidth: 1, borderColor: couleurs.bordure, backgroundColor: couleurs.surface,
+    borderWidth: 1, borderColor: H.bordure, backgroundColor: H.surface,
   },
-  kpiLabel: { fontSize: 10, color: couleurs.texteFaible, fontWeight: '700' },
-  kpiValeur: { marginTop: 5, fontSize: 14, color: couleurs.texte, fontWeight: '900' },
+  kpiLabel: { fontSize: 10, color: H.texteFaible, fontWeight: '700' },
+  kpiValeur: { marginTop: 5, fontSize: 14, color: H.texte, fontWeight: '900' },
   section: {
     marginTop: espaces.l, padding: espaces.m, borderRadius: rayons.l,
-    borderWidth: 1, borderColor: couleurs.bordure, backgroundColor: couleurs.surface,
+    borderWidth: 1, borderColor: H.bordure, backgroundColor: H.surface,
   },
   sectionEntete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitre: { fontSize: 15, fontWeight: '900', color: couleurs.texte },
-  sectionCompteur: { color: couleurs.primaire, fontWeight: '900' },
+  sectionTitre: { fontSize: 15, fontWeight: '900', color: H.texte },
+  sectionCompteur: { color: H.primaire, fontWeight: '900' },
   gererVariantes: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10,
-    backgroundColor: couleurs.primaireDouce,
+    backgroundColor: H.primaireClair,
   },
-  gererVariantesTexte: { fontSize: 11, fontWeight: '900', color: couleurs.primaire },
+  gererVariantesTexte: { fontSize: 11, fontWeight: '900', color: H.primaire },
   choix: { flexDirection: 'row', flexWrap: 'wrap', gap: espaces.s, marginTop: espaces.m },
   valeur: {
     flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 11,
-    paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: couleurs.bordure,
-    backgroundColor: couleurs.fond,
+    paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: H.bordure,
+    backgroundColor: H.fond,
   },
-  couleur: { width: 16, height: 16, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: couleurs.bordure },
-  valeurTexte: { color: couleurs.texte, fontSize: 12, fontWeight: '700' },
+  couleur: { width: 16, height: 16, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: H.bordure },
+  valeurTexte: { color: H.texte, fontSize: 12, fontWeight: '700' },
   variante: {
     flexDirection: 'row', alignItems: 'center', gap: espaces.m, paddingVertical: espaces.m,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: couleurs.bordure,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: H.bordure,
   },
   varianteTextes: { flex: 1 },
-  varianteNom: { fontSize: 13, fontWeight: '800', color: couleurs.texte },
-  varianteSku: { marginTop: 3, fontSize: 10, color: couleurs.texteFaible },
+  varianteNom: { fontSize: 13, fontWeight: '800', color: H.texte },
+  varianteSku: { marginTop: 3, fontSize: 10, color: H.texteFaible },
   varianteDroite: { alignItems: 'flex-end' },
-  variantePrix: { fontSize: 13, fontWeight: '900', color: couleurs.primaire },
+  variantePrix: { fontSize: 13, fontWeight: '900', color: H.primaire },
   varianteStock: { marginTop: 3, fontSize: 10, fontWeight: '800' },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  texteFaible: { color: couleurs.texteFaible },
+  texteFaible: { color: H.texteFaible },
 });
