@@ -16,6 +16,7 @@ import {
 import { BandeauEtat, Bouton, couleurs, espaces, rayons } from '../../../src/ui/components';
 import { Icone } from '../../../src/ui/icones';
 import { useSession } from '../../_layout';
+import { HABILLEMENT_MOBILE_THEME as H } from '../../../src/profile-ui/habillement/theme';
 
 type Etape = 'modele' | 'variantes';
 
@@ -122,7 +123,7 @@ export default function NouveauModeleHabillement() {
         <BandeauEtat />
         <View style={s.entete}>
           <Pressable onPress={() => router.back()} hitSlop={10}>
-            <Icone nom="retour" taille={23} couleur={couleurs.texte} />
+            <Icone nom="retour" taille={23} couleur={H.texte} />
           </Pressable>
           <View style={s.enteteTextes}>
             <Text style={s.titre}>Nouveau modèle</Text>
@@ -158,7 +159,7 @@ export default function NouveauModeleHabillement() {
       <BandeauEtat />
       <View style={s.entete}>
         <Pressable onPress={() => setEtape('modele')} hitSlop={10}>
-          <Icone nom="retour" taille={23} couleur={couleurs.texte} />
+          <Icone nom="retour" taille={23} couleur={H.texte} />
         </Pressable>
         <View style={s.enteteTextes}>
           <Text style={s.titre}>Tailles & couleurs</Text>
@@ -212,7 +213,7 @@ export default function NouveauModeleHabillement() {
                       <Text style={[s.optionTexte, actif && s.optionTexteActive]}>
                         {option.nom}
                       </Text>
-                      {actif ? <Icone nom="coche" taille={15} couleur={couleurs.texteInverse} /> : null}
+                      {actif ? <Icone nom="coche" taille={15} couleur={'#FFFFFF'} /> : null}
                     </Pressable>
                   );
                 })}
@@ -250,37 +251,37 @@ export default function NouveauModeleHabillement() {
 }
 
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: couleurs.fond },
+  page: { flex: 1, backgroundColor: H.fond },
   entete: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: espaces.m,
     padding: espaces.m,
-    backgroundColor: couleurs.surface,
+    backgroundColor: H.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: couleurs.bordure,
+    borderBottomColor: H.bordure,
   },
   enteteTextes: { flex: 1 },
-  titre: { fontSize: 19, fontWeight: '900', color: couleurs.texte },
-  sousTitre: { marginTop: 2, fontSize: 11, color: couleurs.texteFaible },
+  titre: { fontSize: 19, fontWeight: '900', color: H.texte },
+  sousTitre: { marginTop: 2, fontSize: 11, color: H.texteFaible },
   contenu: { padding: espaces.m, paddingBottom: 120, gap: espaces.m },
   info: {
     padding: espaces.m,
     borderRadius: rayons.l,
-    backgroundColor: couleurs.primaireDouce,
+    backgroundColor: H.primaireClair,
   },
-  infoTitre: { fontSize: 15, fontWeight: '900', color: couleurs.primaireFonce },
-  infoTexte: { marginTop: 5, fontSize: 12, lineHeight: 18, color: couleurs.texte },
+  infoTitre: { fontSize: 15, fontWeight: '900', color: H.primaireFonce },
+  infoTexte: { marginTop: 5, fontSize: 12, lineHeight: 18, color: H.texte },
   carte: {
     padding: espaces.m,
     borderRadius: rayons.l,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
-    backgroundColor: couleurs.surface,
+    borderColor: H.bordure,
+    backgroundColor: H.surface,
   },
   carteEntete: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  dimension: { fontSize: 15, fontWeight: '900', color: couleurs.texte },
-  compteur: { fontSize: 10, fontWeight: '700', color: couleurs.texteFaible },
+  dimension: { fontSize: 15, fontWeight: '900', color: H.texte },
+  compteur: { fontSize: 10, fontWeight: '700', color: H.texteFaible },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: espaces.s, marginTop: espaces.m },
   option: {
     flexDirection: 'row',
@@ -290,44 +291,44 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
-    backgroundColor: couleurs.fond,
+    borderColor: H.bordure,
+    backgroundColor: H.fond,
   },
-  optionActive: { backgroundColor: couleurs.primaire, borderColor: couleurs.primaire },
-  optionTexte: { fontSize: 12, fontWeight: '800', color: couleurs.texte },
-  optionTexteActive: { color: couleurs.texteInverse },
+  optionActive: { backgroundColor: H.primaire, borderColor: H.primaire },
+  optionTexte: { fontSize: 12, fontWeight: '800', color: H.texte },
+  optionTexteActive: { color: '#FFFFFF' },
   couleur: {
     width: 18,
     height: 18,
     borderRadius: 9,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: couleurs.bordure,
+    borderColor: H.bordure,
   },
   resume: {
     padding: espaces.l,
     borderRadius: rayons.l,
-    backgroundColor: couleurs.surface,
+    backgroundColor: H.surface,
     borderWidth: 1,
-    borderColor: couleurs.bordure,
+    borderColor: H.bordure,
   },
-  resumeTitre: { fontSize: 12, color: couleurs.texteFaible, fontWeight: '700' },
-  resumeValeur: { marginTop: 4, fontSize: 26, fontWeight: '900', color: couleurs.primaire },
-  resumeTexte: { marginTop: 4, fontSize: 11, color: couleurs.texteFaible },
+  resumeTitre: { fontSize: 12, color: H.texteFaible, fontWeight: '700' },
+  resumeValeur: { marginTop: 4, fontSize: 26, fontWeight: '900', color: H.primaire },
+  resumeTexte: { marginTop: 4, fontSize: 11, color: H.texteFaible },
   vide: { gap: espaces.m, padding: espaces.l, alignItems: 'stretch' },
-  videTitre: { textAlign: 'center', fontSize: 16, fontWeight: '900', color: couleurs.texte },
-  videTexte: { textAlign: 'center', fontSize: 12, lineHeight: 18, color: couleurs.texteFaible },
+  videTitre: { textAlign: 'center', fontSize: 16, fontWeight: '900', color: H.texte },
+  videTexte: { textAlign: 'center', fontSize: 12, lineHeight: 18, color: H.texteFaible },
   message: {
     padding: espaces.m,
     borderRadius: rayons.m,
-    backgroundColor: couleurs.surface,
-    color: couleurs.texte,
+    backgroundColor: H.surface,
+    color: H.texte,
   },
   pied: {
     position: 'absolute',
     left: 0, right: 0, bottom: 0,
     padding: espaces.m,
-    backgroundColor: couleurs.surface,
+    backgroundColor: H.surface,
     borderTopWidth: 1,
-    borderTopColor: couleurs.bordure,
+    borderTopColor: H.bordure,
   },
 });
