@@ -281,3 +281,49 @@ export async function marquerCommandePrete(id: number): Promise<void> {
 export async function annulerCommandeClient(id: number): Promise<void> {
   return changerStatut(id, 'ANNULEE');
 }
+
+
+export type ModePaiementCommande = 'especes' | 'mobile_money' | 'credit';
+
+export async function demanderConversionCommandeEnVente(
+  id: number,
+  modePaiement: ModePaiementCommande,
+  montantPaye: number,
+): Promise<void> {
+  await exigerEcriture();
+  const commande = await lirePremier<{
+    id_local: string;
+    serveur_id: number | null;
+    statut: StatutCommandeClient;
+    total: number;
+  }>(
+    'SELECT id_local, serveur_id, statut, total FROM commande_client WHERE id = ?',
+    id,
+  );
+  if (!commande) throw new Error('Commande introuvable.');
+  if (!commande.serveur_id) {
+    throw new Error('Synchronisez d’abord la commande.');
+  }
+  if (commande.statut !== 'PRETE') {
+    throw new Error('La commande doit être prête avant l’encaissement.');
+  }
+  if (!Number.isFinite(montantPaye) || montantPaye < 0 || montantPaye > commande.total) {
+    throw new Error('Le montant payé est invalide.');
+  }
+  if (modePaiement === 'credit' && montantPaye >= commande.total) {
+    throw new Error('Utilisez espèces ou Mobile Money pour une vente entièrement réglée.');
+  }
+
+  await executer(
+    `UPDATE commande_client
+        SET conversion_demandee = 1,
+            conversion_mode_paiement = ?,
+            conversion_montant_paye = ?,
+            sync_statut = 'PENDING'
+      WHERE id = ?`,
+    modePaiement,
+    Math.round(montantPaye),
+    id,
+  );
+  await marquerChangement('commande_client', commande.id_local);
+}
