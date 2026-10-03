@@ -23,7 +23,7 @@ const CLE_CURSOR = 'sync.cursor';
 const CLE_BOUTIQUE = 'sync.boutique';
 const CLE_BOOTSTRAP = 'sync.bootstrap_effectue';
 const CLE_PROTOCOLE = 'sync.protocole';
-const VERSION_PROTOCOLE = '3';
+const VERSION_PROTOCOLE = '4';
 const CLE_DERNIERE_TENTATIVE = 'sync.derniere_tentative';
 const CLE_DERNIER_SUCCES = 'sync.dernier_succes';
 const CLE_DERNIERE_ERREUR = 'sync.derniere_erreur';
@@ -223,6 +223,20 @@ interface UtilisateurSync {
   date_modification?: string | null;
 }
 
+interface DimensionVarianteRefSync {
+  id: number;
+  code: string;
+  nom: string;
+  ordre: number;
+  valeurs: Array<{
+    id: number;
+    code: string;
+    nom: string;
+    code_hex?: string | null;
+    ordre: number;
+  }>;
+}
+
 interface PullSync {
   cursor: string;
   has_more?: boolean;
@@ -236,6 +250,7 @@ interface PullSync {
   utilisateurs?: UtilisateurSync[];
   boutique?: BoutiqueSync;
   annonces?: AnnonceSync[];
+  dimensions_variantes?: DimensionVarianteRefSync[];
 }
 
 interface AnnonceSync {
@@ -791,6 +806,10 @@ async function appliquerPull(pull: PullSync): Promise<number> {
       await appliquerBoutique(pull.boutique);
       recus++;
     }
+    if (pull.dimensions_variantes) {
+      await appliquerReferentielVariantes(pull.dimensions_variantes);
+      recus += pull.dimensions_variantes.length;
+    }
     for (const annonce of pull.annonces ?? []) {
       await deposer({
         cle: `annonce:${annonce.id}`,
@@ -807,6 +826,36 @@ async function appliquerPull(pull: PullSync): Promise<number> {
     await ecrireParam(CLE_CURSOR, pull.cursor);
   });
   return recus;
+}
+
+async function appliquerReferentielVariantes(
+  dimensions: DimensionVarianteRefSync[],
+): Promise<void> {
+  await executer('DELETE FROM valeur_dimension_ref');
+  await executer('DELETE FROM dimension_variante_ref');
+  for (const dimension of dimensions) {
+    await executer(
+      `INSERT INTO dimension_variante_ref (id_serveur, code, nom, ordre)
+       VALUES (?, ?, ?, ?)`,
+      dimension.id,
+      dimension.code,
+      dimension.nom,
+      dimension.ordre,
+    );
+    for (const valeur of dimension.valeurs ?? []) {
+      await executer(
+        `INSERT INTO valeur_dimension_ref
+         (id_serveur, dimension_id_serveur, code, nom, code_hex, ordre)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        valeur.id,
+        dimension.id,
+        valeur.code,
+        valeur.nom,
+        valeur.code_hex ?? null,
+        valeur.ordre,
+      );
+    }
+  }
 }
 
 async function appliquerUtilisateur(u: UtilisateurSync): Promise<void> {
