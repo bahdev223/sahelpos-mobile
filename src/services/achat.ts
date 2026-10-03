@@ -41,6 +41,7 @@ export interface AchatResume {
 
 export interface LigneAchat {
   produitId: number;
+  varianteId?: number | null;
   libelle: string;
   unite: string;
   facteur: number;
@@ -52,6 +53,7 @@ export interface LigneAchat {
 
 export interface ArticleAchat {
   produitId: number;
+  varianteId?: number | null;
   libelle: string;
   unite: string;
   /** Combien d'unites de base vaut l'unite achetee (un carton = 24 unites). */
@@ -79,6 +81,7 @@ function arrondir(v: number): number {
 export function calculerLigneAchat(a: ArticleAchat): LigneAchat {
   return {
     produitId: a.produitId,
+    varianteId: a.varianteId ?? null,
     libelle: a.libelle,
     unite: a.unite,
     facteur: a.facteur,
@@ -165,7 +168,7 @@ export async function obtenirAchat(id: number): Promise<AchatResume | null> {
 
 export async function listerLignesAchat(achatId: number): Promise<LigneAchat[]> {
   return lireTout<LigneAchat>(
-    `SELECT produit_id AS produitId, libelle, unite, facteur, quantite,
+    `SELECT produit_id AS produitId, variante_id AS varianteId, libelle, unite, facteur, quantite,
             quantite_base AS quantiteBase, prix_unitaire AS prixUnitaire, total
      FROM ligne_achat WHERE achat_id = ? ORDER BY id`,
     achatId,
@@ -227,10 +230,10 @@ export async function enregistrerAchat(demande: DemandeAchat): Promise<ResultatA
 
     for (const l of lignes) {
       await executer(
-        `INSERT INTO ligne_achat (achat_id, produit_id, libelle, unite, facteur,
+        `INSERT INTO ligne_achat (achat_id, produit_id, variante_id, libelle, unite, facteur,
                                   quantite, quantite_base, prix_unitaire, total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        achatId, l.produitId, l.libelle, l.unite, l.facteur,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        achatId, l.produitId, l.varianteId ?? null, l.libelle, l.unite, l.facteur,
         l.quantite, l.quantiteBase, l.prixUnitaire, l.total,
       );
     }
@@ -277,13 +280,14 @@ export async function recevoirAchat(achatId: number): Promise<void> {
 
     const lignes = await lireTout<{
       produit_id: number;
+      variante_id: number | null;
       quantite: number;
       quantite_base: number;
       unite: string;
       prix_unitaire: number;
       facteur: number;
     }>(
-      `SELECT produit_id, quantite, quantite_base, unite, prix_unitaire, facteur
+      `SELECT produit_id, variante_id, quantite, quantite_base, unite, prix_unitaire, facteur
        FROM ligne_achat WHERE achat_id = ?`,
       achatId,
     );
@@ -312,20 +316,42 @@ export async function recevoirAchat(achatId: number): Promise<void> {
 
       const avant = p.quantite_base;
       const apres = avant + l.quantite_base;
+      let avantVariante: number | null = null;
+      let apresVariante: number | null = null;
+
+      if (l.variante_id) {
+        const variante = await lirePremier<{ stock_actuel: number }>(
+          'SELECT stock_actuel FROM variante_produit WHERE id = ? AND produit_id = ? AND actif = 1',
+          l.variante_id,
+          l.produit_id,
+        );
+        if (!variante) throw new Error('Une variante de cet achat est introuvable.');
+        avantVariante = variante.stock_actuel;
+        apresVariante = avantVariante + l.quantite_base;
+        await executer(
+          `UPDATE variante_produit
+              SET stock_actuel = ?, prix_achat = ?, date_modification = ?
+            WHERE id = ?`,
+          apresVariante, arrondir(prixUnitaireBase), horodatage, l.variante_id,
+        );
+      }
 
       await executer(
         `UPDATE produit SET quantite_base = ?, prix_achat = ?, date_modification = ?
          WHERE id = ?`,
         apres, arrondir(prixUnitaireBase), horodatage, l.produit_id,
       );
+      const mouvementId = genererIdLocal();
       await executer(
-        `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
+        `INSERT INTO mouvement_stock (id_local, produit_id, variante_id, nature, source_operation, quantite,
                                       unite, quantite_base, stock_avant, stock_apres,
                                       prix_unitaire, reference, motif, date_mouvement)
-         VALUES (lower(hex(randomblob(16))), ?, 'ENTREE', 'ACHAT', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        l.produit_id, l.quantite, l.unite, l.quantite_base,
-        avant, apres, l.prix_unitaire, a.numero, `Achat ${a.numero}`, horodatage,
+         VALUES (?, ?, ?, 'ENTREE', 'ACHAT', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        mouvementId, l.produit_id, l.variante_id ?? null, l.quantite, l.unite, l.quantite_base,
+        avantVariante ?? avant, apresVariante ?? apres, l.prix_unitaire,
+        a.numero, `Achat ${a.numero}`, horodatage,
       );
+      await marquerChangement('mouvement', mouvementId);
     }
 
     await executer(
