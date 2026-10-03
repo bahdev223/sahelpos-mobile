@@ -413,3 +413,23 @@ export async function corrigerStockVariante(
     await marquerChangement('mouvement', mouvementId);
   });
 }
+
+
+export async function changerEtatVariante(
+  varianteId: number,
+  actif: boolean,
+): Promise<void> {
+  await exigerEcriture();
+  const variante = await lirePremier<{ id_local: string }>(
+    'SELECT id_local FROM variante_produit WHERE id = ?',
+    varianteId,
+  );
+  if (!variante) throw new Error('Variante introuvable.');
+  await executer(
+    'UPDATE variante_produit SET actif = ?, date_modification = ? WHERE id = ?',
+    actif ? 1 : 0,
+    maintenant(),
+    varianteId,
+  );
+  await marquerChangement('variante', variante.id_local);
+}
