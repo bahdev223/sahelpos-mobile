@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -362,5 +362,43 @@ export const MIGRATIONS: string[][] = [
   // --- version 9 : photo/profil client ------------------------------------
   [
     `ALTER TABLE client ADD COLUMN chemin_photo TEXT`,
+  ],
+
+  // --- version 10 : variantes Habillement ---------------------------------
+  [
+    `CREATE TABLE IF NOT EXISTS variante_produit (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local          TEXT    NOT NULL UNIQUE,
+      produit_id        INTEGER NOT NULL REFERENCES produit(id) ON DELETE CASCADE,
+      sku               TEXT    NOT NULL,
+      code_barre        TEXT,
+      prix_override     REAL,
+      prix_achat        REAL,
+      stock_actuel      REAL    NOT NULL DEFAULT 0,
+      actif             INTEGER NOT NULL DEFAULT 1,
+      date_creation     TEXT,
+      date_modification TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_produit ON variante_produit(produit_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_sku ON variante_produit(sku)`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_code_barre ON variante_produit(code_barre)`,
+
+    `CREATE TABLE IF NOT EXISTS variante_valeur (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      variante_id        INTEGER NOT NULL REFERENCES variante_produit(id) ON DELETE CASCADE,
+      valeur_serveur_id  INTEGER,
+      dimension_id       INTEGER,
+      dimension_code     TEXT    NOT NULL,
+      dimension_nom      TEXT    NOT NULL,
+      dimension_ordre    INTEGER NOT NULL DEFAULT 0,
+      valeur_code        TEXT    NOT NULL,
+      valeur_nom         TEXT    NOT NULL,
+      code_hex           TEXT,
+      valeur_ordre       INTEGER NOT NULL DEFAULT 0
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_valeur_variante ON variante_valeur(variante_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_valeur_dimension ON variante_valeur(dimension_code, valeur_code)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_valeur_unique
+       ON variante_valeur(variante_id, dimension_code)`,
   ],
 ];
