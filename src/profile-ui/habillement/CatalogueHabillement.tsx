@@ -1,240 +1,138 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  FlatList, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text,
-  TextInput, View,
+  ActivityIndicator, FlatList, Image, Pressable, RefreshControl, ScrollView,
+  StyleSheet, Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
-
-import { obtenirBase } from '../../db/database';
-import { stockTotalVariantes } from '../../db/repositories/variante';
 import { useSession } from '../../../app/_layout';
-import { BandeauEtat, couleurs, espaces, rayons } from '../../ui/components';
+import { BandeauEtat, formaterMontant, formaterQuantite } from '../../ui/components';
 import { Icone } from '../../ui/icones';
 import { BoutonMenu } from '../../ui/tiroir';
-import { uriImage, formaterFrancs } from '../../../app/produit/nouveau';
+import { uriImage } from '../../../app/produit/nouveau';
+import {
+  chargerCatalogueHabillement, filtrerCatalogueHabillement, type ModeleCatalogueHabillement,
+} from '../../services/catalogue-habillement';
+import { DialogueModeleHabillement } from './DialogueModele';
 import { HABILLEMENT_MOBILE_THEME as H } from './theme';
-
-interface Modele {
-  id: number;
-  nom: string;
-  categorie: string | null;
-  prix: number;
-  image: string | null;
-  actif: number;
-  nbVariantes: number;
-  stockVariantes: number;
-  couleurs: string[];
-  tailles: string[];
-}
-
-async function chargerModeles(): Promise<Modele[]> {
-  const db = await obtenirBase();
-  const produits = await db.getAllAsync<{
-    id: number; nom: string; categorie: string | null; prix_unitaire: number;
-    chemin_image: string | null; actif: number;
-  }>(
-    `SELECT id, nom, categorie, prix_unitaire, chemin_image, actif
-       FROM produit ORDER BY nom COLLATE NOCASE`,
-  );
-  const resultat: Modele[] = [];
-  for (const p of produits) {
-    const variantes = await db.getAllAsync<{
-      id: number; dimension_code: string | null; valeur_nom: string | null;
-    }>(
-      `SELECT vp.id, vv.dimension_code, vv.valeur_nom
-         FROM variante_produit vp
-         LEFT JOIN variante_valeur vv ON vv.variante_id = vp.id
-        WHERE vp.produit_id = ? AND vp.actif = 1`,
-      p.id,
-    );
-    const couleursSet = new Set<string>();
-    const taillesSet = new Set<string>();
-    for (const v of variantes) {
-      const code = (v.dimension_code ?? '').toUpperCase();
-      if (code.includes('COULEUR') && v.valeur_nom) couleursSet.add(v.valeur_nom);
-      if ((code.includes('TAILLE') || code.includes('SIZE') || code.includes('POINTURE')) && v.valeur_nom) {
-        taillesSet.add(v.valeur_nom);
-      }
-    }
-    resultat.push({
-      id: p.id,
-      nom: p.nom,
-      categorie: p.categorie,
-      prix: p.prix_unitaire,
-      image: p.chemin_image,
-      actif: p.actif,
-      nbVariantes: new Set(variantes.map((v) => v.id)).size,
-      stockVariantes: await stockTotalVariantes(p.id),
-      couleurs: [...couleursSet].slice(0, 4),
-      tailles: [...taillesSet].slice(0, 5),
-    });
-  }
-  return resultat;
-}
 
 export function CatalogueHabillement() {
   const router = useRouter();
-  const { revisionSynchronisation, synchroniserMaintenant } = useSession();
-  const [modeles, setModeles] = useState<Modele[]>([]);
-  const [recherche, setRecherche] = useState('');
-  const [rafraichit, setRafraichit] = useState(false);
-
-  const charger = useCallback(async () => setModeles(await chargerModeles()), []);
-  useFocusEffect(useCallback(() => { void charger(); }, [charger, revisionSynchronisation]));
-
-  const visibles = useMemo(() => {
-    const q = recherche.trim().toLocaleLowerCase('fr');
-    return modeles.filter((m) => m.actif === 1 && (!q ||
-      m.nom.toLocaleLowerCase('fr').includes(q) ||
-      (m.categorie ?? '').toLocaleLowerCase('fr').includes(q)));
-  }, [modeles, recherche]);
-
-  const rafraichir = useCallback(async () => {
-    setRafraichit(true);
+  const { boutique, utilisateur, revisionSynchronisation, synchroniserMaintenant } = useSession();
+  const { width, fontScale } = useWindowDimensions();
+  const colonnes = width < 350 || fontScale > 1.35 ? 1 : 2;
+  const largeur = (width - 32 - (colonnes - 1) * 12) / colonnes;
+  const [modeles, setModeles] = useState<ModeleCatalogueHabillement[]>([]);
+  const [charge, setCharge] = useState(false); const [message, setMessage] = useState('');
+  const [recherche, setRecherche] = useState(''); const [categorie, setCategorie] = useState<string | null>(null);
+  const [rafraichit, setRafraichit] = useState(false); const [creation, setCreation] = useState(false);
+  const lecture = useRef(0);
+  const peutGerer = ['admin', 'gerant'].includes(utilisateur?.role ?? '');
+  const charger = useCallback(async () => {
+    const courant = ++lecture.current;
     try {
-      await synchroniserMaintenant();
-      await charger();
-    } finally {
-      setRafraichit(false);
+      const valeurs = await chargerCatalogueHabillement();
+      if (courant !== lecture.current) return;
+      setModeles(valeurs); setCharge(true); setMessage('');
+    } catch (e) {
+      if (courant !== lecture.current) return;
+      setCharge(true); setMessage(e instanceof Error ? e.message : 'Le catalogue ne peut pas être lu.');
     }
-  }, [charger, synchroniserMaintenant]);
-
+  }, []);
+  useFocusEffect(useCallback(() => { void charger(); return () => { lecture.current++; }; }, [charger, revisionSynchronisation]));
+  const visibles = useMemo(() => filtrerCatalogueHabillement(modeles, recherche, categorie), [modeles, recherche, categorie]);
+  const categories = useMemo(() => [...new Set(modeles.filter((m) => m.actif === 1)
+    .map((m) => m.categorie).filter((c): c is string => Boolean(c)))].sort((a, b) => a.localeCompare(b, 'fr')), [modeles]);
+  const rafraichir = async () => {
+    if (rafraichit) return;
+    setRafraichit(true);
+    try { await synchroniserMaintenant(); await charger(); }
+    catch (e) {
+      await charger();
+      setMessage(`Actualisation distante impossible. ${e instanceof Error ? e.message : 'Vérifiez la connexion.'}`);
+    } finally { setRafraichit(false); }
+  };
   return (
     <View style={s.page}>
       <BandeauEtat />
       <View style={s.entete}>
-        <BoutonMenu />
-        <View style={s.enteteTextes}>
-          <Text style={s.titre}>Modèles</Text>
-          <Text style={s.sousTitre}>Tailles · couleurs · variantes</Text>
-        </View>
-        <Pressable style={s.boutonIcone} onPress={() => router.push('/habillement/referentiel')}>
-          <Icone nom="etiquette" taille={20} couleur={H.primaire} />
-        </Pressable>
+        <BoutonMenu couleur={H.texte} />
+        <View style={s.titres}><Text style={s.titre}>Modèles</Text><Text style={s.aide}>Tailles · couleurs · variantes</Text></View>
+        <Pressable style={s.icone} accessibilityRole="button" accessibilityLabel="Tailles et couleurs"
+          onPress={() => router.push('/habillement/referentiel')}><Icone nom="etiquette" taille={23} couleur={H.primaire} /></Pressable>
       </View>
-
       <View style={s.recherche}>
-        <Icone nom="recherche" taille={18} couleur={H.texteFaible} />
-        <TextInput
-          style={s.saisie}
-          value={recherche}
-          onChangeText={setRecherche}
-          placeholder="Rechercher un modèle ou une collection"
-          placeholderTextColor={H.texteFaible}
-        />
+        <Icone nom="recherche" taille={20} couleur={H.texteFaible} />
+        <TextInput style={s.saisie} value={recherche} onChangeText={setRecherche} autoCorrect={false}
+          accessibilityLabel="Rechercher dans les modèles" placeholder="Modèle, taille, couleur, SKU…" placeholderTextColor={H.texteFaible} />
       </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.raccourcis}>
-        <Pressable style={s.puce} onPress={() => router.push('/habillement/referentiel')}>
-          <Text style={s.puceTexte}>Tailles & couleurs</Text>
-        </Pressable>
-        <Pressable style={s.puce} onPress={() => router.push('/habillement/inventaire')}>
-          <Text style={s.puceTexte}>Inventaire variantes</Text>
-        </Pressable>
-        <Pressable style={s.puce} onPress={() => router.push('/achats')}>
-          <Text style={s.puceTexte}>Approvisionnements</Text>
-        </Pressable>
+      <ScrollView horizontal style={s.barre} showsHorizontalScrollIndicator={false} contentContainerStyle={s.raccourcis}>
+        <Pressable style={s.puce} onPress={() => router.push('/habillement/referentiel')}><Text style={s.puceTexte}>Tailles & couleurs</Text></Pressable>
+        {peutGerer ? <>
+          <Pressable style={s.puce} onPress={() => router.push('/habillement/inventaire')}><Text style={s.puceTexte}>Inventaire</Text></Pressable>
+          <Pressable style={s.puce} onPress={() => router.push('/achats')}><Text style={s.puceTexte}>Approvisionnements</Text></Pressable>
+        </> : null}
       </ScrollView>
-
-      <FlatList
-        data={visibles}
-        numColumns={2}
-        keyExtractor={(item) => String(item.id)}
-        columnWrapperStyle={s.ligne}
-        contentContainerStyle={s.liste}
-        refreshControl={<RefreshControl refreshing={rafraichit} onRefresh={rafraichir} />}
-        renderItem={({ item }) => (
-          <Pressable
-            style={s.carte}
-            onPress={() => router.push({ pathname: '/habillement/modele/[id]', params: { id: String(item.id) } })}
-          >
-            {uriImage(item.image) ? (
-              <Image source={{ uri: uriImage(item.image)! }} style={s.image} resizeMode="cover" />
-            ) : (
-              <View style={[s.image, s.imageVide]}>
-                <Text style={s.initiale}>{item.nom.slice(0, 1).toUpperCase()}</Text>
-              </View>
-            )}
+      {categories.length ? <ScrollView horizontal style={s.barre} contentContainerStyle={s.raccourcis} showsHorizontalScrollIndicator={false}>
+        {[null, ...categories].map((c) => <Pressable key={c ?? '__toutes'} onPress={() => setCategorie(c)}
+          style={[s.puce, categorie === c && s.puceActive]} accessibilityRole="button" accessibilityState={{ selected: categorie === c }}>
+          <Text style={[s.puceTexte, categorie === c && s.texteActif]}>{c ?? 'Toutes les catégories'}</Text>
+        </Pressable>)}
+      </ScrollView> : null}
+      {message ? <View style={s.erreur}><Text accessibilityRole="alert" style={s.erreurTexte}>{message}</Text>
+        <Pressable style={s.reessayer} onPress={() => void charger()}><Text style={s.puceTexte}>Réessayer la lecture locale</Text></Pressable>
+      </View> : null}
+      {!charge ? <View style={s.vide}><ActivityIndicator color={H.primaire} /><Text style={s.aide}>Lecture des modèles…</Text></View> :
+        <FlatList key={colonnes} data={visibles} numColumns={colonnes}
+          columnWrapperStyle={colonnes === 2 ? s.ligne : undefined} keyExtractor={(m) => String(m.id)}
+          contentContainerStyle={s.liste} refreshControl={<RefreshControl refreshing={rafraichit} onRefresh={() => void rafraichir()} tintColor={H.primaire} />}
+          renderItem={({ item }) => <Pressable style={[s.carte, { width: largeur }]} accessibilityRole="button"
+            accessibilityLabel={`Ouvrir ${item.nom}`}
+            onPress={() => router.push({ pathname: '/habillement/modele/[id]', params: { id: String(item.id) } })}>
+            {uriImage(item.image) ? <Image source={{ uri: uriImage(item.image)! }} style={s.image} resizeMode="cover" /> :
+              <View style={[s.image, s.imageVide]}><Icone nom="image" taille={48} couleur={H.texteEteint} /></View>}
             <View style={s.corps}>
               <Text style={s.nom} numberOfLines={2}>{item.nom}</Text>
-              <Text style={s.collection} numberOfLines={1}>{item.categorie || 'Sans collection'}</Text>
-              <Text style={s.prix}>{formaterFrancs(item.prix)}</Text>
-              <View style={s.meta}>
-                <Text style={s.metaTexte}>{item.nbVariantes} variantes</Text>
-                <Text style={s.metaTexte}>Stock {item.stockVariantes}</Text>
+              <Text style={s.aide} numberOfLines={1}>{item.categorie || 'Sans catégorie'}</Text>
+              <Text style={s.prix}>{formaterMontant(item.prix, boutique.devise)}</Text>
+              <Text style={s.aide}>{item.nbVariantes} variante(s){item.nbVariantes ? ` · ${formaterQuantite(item.stockVariantes)} pièce(s)` : ''}</Text>
+              <View style={s.options}>
+                {item.tailles.slice(0, 5).map((taille) => <Text key={taille} style={s.taille}>{taille}</Text>)}
+                {item.tailles.length > 5 ? <Text style={s.aide}>+{item.tailles.length - 5}</Text> : null}
               </View>
-              {item.tailles.length > 0 ? (
-                <Text style={s.options} numberOfLines={1}>{item.tailles.join(' · ')}</Text>
-              ) : null}
-              {item.couleurs.length > 0 ? (
-                <Text style={s.options} numberOfLines={1}>{item.couleurs.join(' · ')}</Text>
-              ) : null}
+              <View style={s.options}>
+                {item.couleurs.slice(0, 5).map((c) => <View key={c.code} accessible accessibilityLabel={`Couleur ${c.nom}`}
+                  style={[s.couleur, { backgroundColor: c.hex ?? H.surfaceDouce }]} />)}
+                {item.couleurs.length > 5 ? <Text style={s.aide}>+{item.couleurs.length - 5}</Text> : null}
+              </View>
+              {item.couleurs.length ? <Text style={s.aide} numberOfLines={1}>{item.couleurs.map((c) => c.nom).join(' · ')}</Text> : null}
             </View>
-          </Pressable>
-        )}
-        ListEmptyComponent={
-          <View style={s.vide}>
-            <Text style={s.videTitre}>Aucun modèle</Text>
-            <Text style={s.videTexte}>Les modèles et leurs variantes synchronisés depuis le Web apparaîtront ici.</Text>
-          </View>
-        }
-      />
-
-      <Pressable
-        style={s.fab}
-        onPress={() => router.push('/habillement/modele/nouveau')}
-        accessibilityLabel="Nouveau modèle"
-      >
-        <Icone nom="plus" taille={28} couleur={'#FFFFFF'} />
-      </Pressable>
+          </Pressable>}
+          ListEmptyComponent={!message ? <View style={s.vide}>
+            <Text style={s.nom}>{modeles.length ? 'Aucun résultat' : 'Aucun modèle'}</Text>
+            <Text style={s.aide}>{modeles.length ? 'Modifiez les filtres ou votre recherche.' : 'Créez un modèle ou synchronisez votre catalogue.'}</Text>
+          </View> : null} />}
+      {peutGerer ? <Pressable accessibilityRole="button" accessibilityLabel="Nouveau modèle" style={s.fab}
+        onPress={() => setCreation(true)}><Icone nom="plus" taille={27} couleur="#FFFFFF" /></Pressable> : null}
+      <DialogueModeleHabillement visible={creation} surFermer={() => setCreation(false)} surEnregistre={() => {
+        setCreation(false); void charger();
+      }} />
     </View>
   );
 }
-
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: H.fond },
-  entete: {
-    flexDirection: 'row', alignItems: 'center', gap: espaces.m,
-    paddingHorizontal: espaces.m, paddingVertical: espaces.m, backgroundColor: H.surface,
-  },
-  enteteTextes: { flex: 1 },
-  titre: { fontSize: 21, fontWeight: '900', color: H.texte },
-  sousTitre: { marginTop: 2, fontSize: 12, color: H.texteFaible },
-  boutonIcone: {
-    width: 42, height: 42, borderRadius: rayons.m, borderWidth: 1,
-    borderColor: H.bordure, alignItems: 'center', justifyContent: 'center',
-  },
-  recherche: {
-    margin: espaces.m, marginBottom: espaces.s, minHeight: 48, paddingHorizontal: espaces.m,
-    flexDirection: 'row', alignItems: 'center', gap: espaces.s, borderRadius: rayons.m,
-    borderWidth: 1, borderColor: H.bordure, backgroundColor: H.surface,
-  },
-  saisie: { flex: 1, color: H.texte, fontSize: 14 },
-  raccourcis: { gap: espaces.s, paddingHorizontal: espaces.m, paddingBottom: espaces.m },
-  puce: { paddingVertical: 9, paddingHorizontal: 13, borderRadius: 20, backgroundColor: H.primaireClair },
-  puceTexte: { color: H.primaire, fontSize: 12, fontWeight: '800' },
-  liste: { paddingHorizontal: espaces.m, paddingBottom: 110, gap: espaces.m },
-  ligne: { gap: espaces.m },
-  carte: {
-    flex: 1, minWidth: 0, borderRadius: rayons.l, overflow: 'hidden',
-    backgroundColor: H.surface, borderWidth: 1, borderColor: H.bordure,
-  },
-  image: { width: '100%', aspectRatio: 1 },
-  imageVide: { alignItems: 'center', justifyContent: 'center', backgroundColor: H.primaireClair },
-  initiale: { fontSize: 42, fontWeight: '900', color: H.primaire },
-  corps: { padding: 11 },
-  nom: { color: H.texte, fontSize: 14, lineHeight: 18, fontWeight: '900' },
-  collection: { marginTop: 3, color: H.texteFaible, fontSize: 11 },
-  prix: { marginTop: 7, color: H.primaire, fontSize: 15, fontWeight: '900' },
-  meta: { flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginTop: 7 },
-  metaTexte: { fontSize: 10, color: H.texteFaible, fontWeight: '700' },
-  options: { marginTop: 5, fontSize: 10, color: H.texte },
-  vide: { padding: 40, alignItems: 'center' },
-  videTitre: { fontSize: 17, fontWeight: '900', color: H.texte },
-  videTexte: { marginTop: 8, textAlign: 'center', color: H.texteFaible, lineHeight: 19 },
-  fab: {
-    position: 'absolute', right: 20, bottom: 24, width: 58, height: 58, borderRadius: 29,
-    backgroundColor: H.primaire, alignItems: 'center', justifyContent: 'center',
-  },
+  page: { flex: 1, backgroundColor: H.fond }, entete: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, backgroundColor: H.surface },
+  titres: { flex: 1 }, titre: { fontSize: 23, fontWeight: '800', color: H.texte }, aide: { fontSize: 12, lineHeight: 18, color: H.texteFaible },
+  icone: { minHeight: 48, minWidth: 48, justifyContent: 'center', alignItems: 'center' },
+  recherche: { margin: 16, marginBottom: 8, paddingHorizontal: 12, minHeight: 50, borderWidth: 1, borderColor: H.bordure,
+    borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: H.surface }, saisie: { flex: 1, fontSize: 15, color: H.texte },
+  barre: { flexGrow: 0, flexShrink: 0, maxHeight: 60 }, raccourcis: { gap: 8, paddingHorizontal: 16, paddingVertical: 5, alignItems: 'center' },
+  puce: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 12, backgroundColor: H.primaireClair },
+  puceTexte: { color: H.primaireFonce, fontSize: 13, fontWeight: '700' }, puceActive: { backgroundColor: H.primaire }, texteActif: { color: '#FFFFFF' },
+  liste: { padding: 16, gap: 12, paddingBottom: 105 }, ligne: { gap: 12 }, carte: { backgroundColor: H.surface, borderWidth: 1, borderColor: H.bordure, borderRadius: 16, overflow: 'hidden' },
+  image: { width: '100%', aspectRatio: 1 }, imageVide: { backgroundColor: H.surfaceDouce, justifyContent: 'center', alignItems: 'center' },
+  corps: { padding: 12, gap: 5 }, nom: { fontSize: 15, fontWeight: '800', color: H.texte, lineHeight: 21 }, prix: { color: H.primaireFonce, fontSize: 17, fontWeight: '800' },
+  options: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }, taille: { color: H.texte, fontSize: 12, fontWeight: '700', backgroundColor: H.fondSecondaire, borderRadius: 5, padding: 5 },
+  couleur: { width: 22, height: 22, borderRadius: 11, borderWidth: 1, borderColor: H.bordure },
+  vide: { padding: 24, alignItems: 'center', gap: 10 }, fab: { position: 'absolute', right: 20, bottom: 24, width: 58, height: 58, borderRadius: 29, backgroundColor: H.primaire, alignItems: 'center', justifyContent: 'center' },
+  erreur: { margin: 16, padding: 12, gap: 4, backgroundColor: H.dangerFond, borderRadius: 12 }, erreurTexte: { color: H.danger, fontSize: 13, lineHeight: 20 }, reessayer: { minHeight: 44, justifyContent: 'center' },
 });

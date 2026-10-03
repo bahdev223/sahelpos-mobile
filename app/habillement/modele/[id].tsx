@@ -1,199 +1,109 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-
-import { obtenirProduit } from '../../../src/db/repositories/produit';
-import {
-  dimensionsProduit, libelleVariante, listerVariantesProduit, type VarianteMobile,
-} from '../../../src/db/repositories/variante';
-import type { Produit } from '../../../src/domain/types';
-import { BandeauEtat, couleurs, espaces, rayons } from '../../../src/ui/components';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSession } from '../../_layout';
+import { chargerModelePourEdition, type ModelePourEdition } from '../../../src/services/modeles-habillement';
+import { libelleVariante, listerVariantesProduit, type VarianteMobile } from '../../../src/db/repositories/variante';
+import { couleurValide, prixVarianteOuModele } from '../../../src/domain/matrice-habillement';
+import { BandeauEtat, formaterMontant, formaterQuantite } from '../../../src/ui/components';
 import { Icone } from '../../../src/ui/icones';
-import { uriImage, formaterFrancs } from '../../produit/nouveau';
+import { uriImage } from '../../produit/nouveau';
+import { DialogueModeleHabillement } from '../../../src/profile-ui/habillement/DialogueModele';
 import { HABILLEMENT_MOBILE_THEME as H } from '../../../src/profile-ui/habillement/theme';
 
 export default function FicheModeleHabillement() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const [produit, setProduit] = useState<Produit | null>(null);
+  const { id, modifier } = useLocalSearchParams<{ id: string; modifier?: string }>();
+  const identifiant = Number(id);
+  const { boutique, utilisateur, revisionSynchronisation } = useSession();
+  const [produit, setProduit] = useState<ModelePourEdition | null>(null);
   const [variantes, setVariantes] = useState<VarianteMobile[]>([]);
-  const [dimensions, setDimensions] = useState<Awaited<ReturnType<typeof dimensionsProduit>>>([]);
-
+  const [phase, setPhase] = useState<'chargement' | 'pret' | 'erreur'>('chargement');
+  const [message, setMessage] = useState(''); const [edition, setEdition] = useState(false);
+  const lecture = useRef(0);
+  const peutGerer = ['admin', 'gerant'].includes(utilisateur?.role ?? '');
+  const charger = useCallback(async () => {
+    const courant = ++lecture.current;
+    try {
+      const p = await chargerModelePourEdition(identifiant);
+      const v = await listerVariantesProduit(p.id);
+      if (courant !== lecture.current) return;
+      setProduit(p); setVariantes(v); setMessage(''); setPhase('pret');
+    } catch (e) {
+      if (courant !== lecture.current) return;
+      setMessage(e instanceof Error ? e.message : 'Lecture du modèle impossible.'); setPhase('erreur');
+    }
+  }, [identifiant]);
+  useFocusEffect(useCallback(() => { void charger(); return () => { lecture.current++; }; }, [charger, revisionSynchronisation]));
   useEffect(() => {
-    const produitId = Number(id);
-    if (!Number.isFinite(produitId)) return;
-    void Promise.all([
-      obtenirProduit(produitId),
-      listerVariantesProduit(produitId),
-      dimensionsProduit(produitId),
-    ]).then(([p, v, d]) => {
-      setProduit(p);
-      setVariantes(v);
-      setDimensions(d);
-    });
-  }, [id]);
-
-  const stock = useMemo(
-    () => variantes.reduce((total, variante) => total + variante.stockActuel, 0),
-    [variantes],
-  );
-
-  if (!produit) {
-    return (
-      <View style={s.page}>
-        <BandeauEtat />
-        <View style={s.centre}><Text style={s.texteFaible}>Chargement du modèle...</Text></View>
-      </View>
-    );
-  }
-
+    if (modifier === '1' && phase === 'pret' && peutGerer) {
+      setEdition(true); router.setParams({ modifier: '0' });
+    }
+  }, [modifier, phase, peutGerer, router]);
+  const dimensions = useMemo(() => {
+    const resultat = new Map<string, { nom: string; ordre: number; valeurs: Map<string, { nom: string; hex: string | null; ordre: number }> }>();
+    for (const variante of variantes) for (const valeur of variante.valeurs) {
+      const d = resultat.get(valeur.dimensionCode) ?? { nom: valeur.dimensionNom, ordre: valeur.dimensionOrdre, valeurs: new Map() };
+      d.valeurs.set(valeur.code, { nom: valeur.nom, hex: couleurValide(valeur.codeHex), ordre: valeur.ordre });
+      resultat.set(valeur.dimensionCode, d);
+    }
+    return [...resultat.entries()].sort((a, b) => a[1].ordre - b[1].ordre);
+  }, [variantes]);
+  const stock = variantes.reduce((total, v) => total + v.stockActuel, 0);
+  const retour = () => router.canGoBack() ? router.back() : router.replace('/(tabs)/catalogue');
   return (
     <View style={s.page}>
       <BandeauEtat />
       <View style={s.entete}>
-        <Pressable onPress={() => router.back()} hitSlop={10}>
-          <Icone nom="retour" taille={24} couleur={H.texte} />
-        </Pressable>
-        <View style={s.enteteTextes}>
-          <Text style={s.titre} numberOfLines={1}>{produit.nom}</Text>
-          <Text style={s.sousTitre}>Fiche modèle · {variantes.length} variantes</Text>
-        </View>
-        <Pressable onPress={() => router.push({ pathname: '/produit/modifier/[id]', params: { id: String(produit.id) } })}>
-          <Icone nom="crayon" taille={21} couleur={H.primaire} />
-        </Pressable>
+        <Pressable onPress={retour} accessibilityRole="button" accessibilityLabel="Revenir au catalogue" style={s.icone}>
+          <Icone nom="retour" taille={24} couleur={H.texte} /></Pressable>
+        <View style={s.titres}><Text style={s.titre} numberOfLines={2}>{produit?.id === identifiant ? produit.nom : 'Fiche modèle'}</Text>
+          <Text style={s.aide}>Habillement</Text></View>
+        {peutGerer && phase === 'pret' ? <Pressable onPress={() => setEdition(true)} style={s.icone}
+          accessibilityRole="button" accessibilityLabel="Modifier le modèle"><Icone nom="crayon" taille={22} couleur={H.primaire} /></Pressable> : null}
       </View>
-
-      <ScrollView contentContainerStyle={s.contenu}>
-        {uriImage(produit.cheminImage) ? (
-          <Image source={{ uri: uriImage(produit.cheminImage)! }} style={s.hero} resizeMode="cover" />
-        ) : (
-          <View style={[s.hero, s.heroVide]}>
-            <Text style={s.initiale}>{produit.nom.slice(0, 1).toUpperCase()}</Text>
-          </View>
-        )}
-
-        <View style={s.carteResume}>
-          <View style={s.kpi}>
-            <Text style={s.kpiLabel}>Prix modèle</Text>
-            <Text style={s.kpiValeur}>{formaterFrancs(produit.prixUnitaire)}</Text>
-          </View>
-          <View style={s.kpi}>
-            <Text style={s.kpiLabel}>Stock variantes</Text>
-            <Text style={s.kpiValeur}>{stock}</Text>
-          </View>
-          <View style={s.kpi}>
-            <Text style={s.kpiLabel}>Collection</Text>
-            <Text style={s.kpiValeur} numberOfLines={1}>{produit.categorie || '—'}</Text>
-          </View>
-        </View>
-
-        {dimensions.map((dimension) => (
-          <View key={dimension.code} style={s.section}>
-            <Text style={s.sectionTitre}>{dimension.nom}</Text>
-            <View style={s.choix}>
-              {dimension.valeurs.map((valeur) => (
-                <View key={valeur.code} style={s.valeur}>
-                  {valeur.codeHex ? (
-                    <View style={[s.couleur, { backgroundColor: valeur.codeHex }]} />
-                  ) : null}
-                  <Text style={s.valeurTexte}>{valeur.nom}</Text>
-                </View>
-              ))}
+      {phase === 'chargement' ? <View style={s.centre}><ActivityIndicator color={H.primaire} /><Text style={s.aide}>Lecture du modèle…</Text></View> :
+        phase === 'erreur' ? <View style={s.centre}><Text accessibilityRole="alert" style={s.erreur}>{message}</Text>
+          <Pressable style={s.action} onPress={() => void charger()}><Text style={s.actionTexte}>Réessayer</Text></Pressable>
+          <Pressable style={s.action} onPress={retour}><Text style={s.actionTexte}>Revenir au catalogue</Text></Pressable></View> :
+          produit ? <ScrollView contentContainerStyle={s.contenu}>
+            {uriImage(produit.cheminImage) ? <Image source={{ uri: uriImage(produit.cheminImage)! }} style={s.image} resizeMode="cover" /> :
+              <View style={[s.image, s.imageVide]}><Icone nom="image" taille={56} couleur={H.texteEteint} /></View>}
+            <View style={s.resume}>
+              <View style={s.kpi}><Text style={s.aide}>Prix du modèle</Text><Text style={s.valeur}>{formaterMontant(produit.prixUnitaire, boutique.devise)}</Text></View>
+              <View style={s.kpi}><Text style={s.aide}>Stock des variantes</Text><Text style={s.valeur}>{formaterQuantite(stock)} pièce(s)</Text></View>
+              <View style={s.kpi}><Text style={s.aide}>Catégorie</Text><Text style={s.valeur}>{produit.categorie || 'Sans catégorie'}</Text></View>
             </View>
-          </View>
-        ))}
-
-        <View style={s.section}>
-          <View style={s.sectionEntete}>
-            <Text style={s.sectionTitre}>Variantes</Text>
-            <Pressable
-              onPress={() =>
-                router.push({ pathname: '/habillement/variantes/[id]', params: { id: String(produit.id) } })
-              }
-              style={s.gererVariantes}
-            >
-              <Text style={s.gererVariantesTexte}>Gérer</Text>
-              <Icone nom="chevron" taille={14} couleur={H.primaire} />
-            </Pressable>
-          </View>
-          {variantes.map((variante) => (
-            <View key={variante.idLocal} style={s.variante}>
-              <View style={s.varianteTextes}>
-                <Text style={s.varianteNom}>{libelleVariante(variante)}</Text>
-                <Text style={s.varianteSku}>{variante.sku}</Text>
-              </View>
-              <View style={s.varianteDroite}>
-                <Text style={s.variantePrix}>
-                  {formaterFrancs(variante.prixOverride ?? produit.prixUnitaire)}
-                </Text>
-                <Text style={[
-                  s.varianteStock,
-                  { color: variante.stockActuel > 0 ? couleurs.succesFonce : couleurs.danger },
-                ]}>
-                  {variante.stockActuel > 0 ? `Stock ${variante.stockActuel}` : 'Rupture'}
-                </Text>
-              </View>
+            {dimensions.map(([code, d]) => <View key={code} style={s.carte}><Text style={s.sousTitre}>{d.nom}</Text>
+              <View style={s.options}>{[...d.valeurs.entries()].sort((a, b) => a[1].ordre - b[1].ordre).map(([cle, v]) =>
+                <View key={cle} style={s.option}>{v.hex ? <View style={[s.pastille, { backgroundColor: v.hex }]} /> : null}<Text style={s.optionTexte}>{v.nom}</Text></View>)}
+              </View></View>)}
+            <View style={s.carte}>
+              <View style={s.enteteSection}><Text style={s.sousTitre}>Variantes ({variantes.length})</Text>
+                <Pressable style={s.action} accessibilityLabel="Gérer les variantes" onPress={() => router.push({ pathname: '/habillement/variantes/[id]', params: { id: String(produit.id) } })}>
+                  <Text style={s.actionTexte}>{peutGerer ? 'Gérer' : 'Voir tout'}</Text></Pressable></View>
+              {variantes.map((v) => <View key={v.idLocal} style={s.variante}>
+                <View style={s.titres}><Text style={s.varianteNom}>{libelleVariante(v)}</Text><Text style={s.aide}>{v.sku}</Text></View>
+                <View style={s.droite}><Text style={s.prix}>{formaterMontant(prixVarianteOuModele(v.prixOverride, produit.prixUnitaire), boutique.devise)}</Text>
+                  <Text style={[s.aide, { color: v.stockActuel > 0 ? H.succes : H.danger }]}>{v.stockActuel > 0 ? `${formaterQuantite(v.stockActuel)} pièce(s)` : 'Rupture'}</Text></View>
+              </View>)}
+              {!variantes.length ? <Text style={s.aide}>Aucune variante active reçue. Ouvrez la gestion des variantes pour en ajouter ou en réactiver.</Text> : null}
             </View>
-          ))}
-        </View>
-      </ScrollView>
+          </ScrollView> : null}
+      <DialogueModeleHabillement visible={edition} modeleId={identifiant} surFermer={() => setEdition(false)}
+        surEnregistre={() => { setEdition(false); void charger(); }} />
     </View>
   );
 }
-
 const s = StyleSheet.create({
-  page: { flex: 1, backgroundColor: H.fond },
-  entete: {
-    flexDirection: 'row', alignItems: 'center', gap: espaces.m,
-    padding: espaces.m, backgroundColor: H.surface,
-  },
-  enteteTextes: { flex: 1 },
-  titre: { fontSize: 18, fontWeight: '900', color: H.texte },
-  sousTitre: { marginTop: 2, fontSize: 11, color: H.texteFaible },
-  contenu: { padding: espaces.m, paddingBottom: espaces.xxl },
-  hero: { width: '100%', aspectRatio: 1.35, borderRadius: rayons.l, backgroundColor: H.surface },
-  heroVide: { alignItems: 'center', justifyContent: 'center', backgroundColor: H.primaireClair },
-  initiale: { fontSize: 64, fontWeight: '900', color: H.primaire },
-  carteResume: {
-    flexDirection: 'row', gap: espaces.s, marginTop: espaces.m,
-  },
-  kpi: {
-    flex: 1, minWidth: 0, padding: espaces.m, borderRadius: rayons.m,
-    borderWidth: 1, borderColor: H.bordure, backgroundColor: H.surface,
-  },
-  kpiLabel: { fontSize: 10, color: H.texteFaible, fontWeight: '700' },
-  kpiValeur: { marginTop: 5, fontSize: 14, color: H.texte, fontWeight: '900' },
-  section: {
-    marginTop: espaces.l, padding: espaces.m, borderRadius: rayons.l,
-    borderWidth: 1, borderColor: H.bordure, backgroundColor: H.surface,
-  },
-  sectionEntete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitre: { fontSize: 15, fontWeight: '900', color: H.texte },
-  sectionCompteur: { color: H.primaire, fontWeight: '900' },
-  gererVariantes: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingVertical: 6, paddingHorizontal: 8, borderRadius: 10,
-    backgroundColor: H.primaireClair,
-  },
-  gererVariantesTexte: { fontSize: 11, fontWeight: '900', color: H.primaire },
-  choix: { flexDirection: 'row', flexWrap: 'wrap', gap: espaces.s, marginTop: espaces.m },
-  valeur: {
-    flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 11,
-    paddingVertical: 8, borderRadius: 18, borderWidth: 1, borderColor: H.bordure,
-    backgroundColor: H.fond,
-  },
-  couleur: { width: 16, height: 16, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, borderColor: H.bordure },
-  valeurTexte: { color: H.texte, fontSize: 12, fontWeight: '700' },
-  variante: {
-    flexDirection: 'row', alignItems: 'center', gap: espaces.m, paddingVertical: espaces.m,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: H.bordure,
-  },
-  varianteTextes: { flex: 1 },
-  varianteNom: { fontSize: 13, fontWeight: '800', color: H.texte },
-  varianteSku: { marginTop: 3, fontSize: 10, color: H.texteFaible },
-  varianteDroite: { alignItems: 'flex-end' },
-  variantePrix: { fontSize: 13, fontWeight: '900', color: H.primaire },
-  varianteStock: { marginTop: 3, fontSize: 10, fontWeight: '800' },
-  centre: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  texteFaible: { color: H.texteFaible },
+  page: { flex: 1, backgroundColor: H.fond }, entete: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10, backgroundColor: H.surface },
+  icone: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }, titres: { flex: 1, minWidth: 0 }, titre: { fontSize: 20, fontWeight: '800', color: H.texte },
+  aide: { fontSize: 12, lineHeight: 19, color: H.texteFaible }, centre: { flex: 1, padding: 24, gap: 14, alignItems: 'center', justifyContent: 'center' }, erreur: { color: H.danger, fontSize: 15, lineHeight: 23 },
+  contenu: { padding: 16, paddingBottom: 40, gap: 16 }, image: { width: '100%', aspectRatio: 1.35, borderRadius: 16 }, imageVide: { backgroundColor: H.surfaceDouce, alignItems: 'center', justifyContent: 'center' },
+  resume: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, kpi: { flexGrow: 1, minWidth: 135, padding: 14, backgroundColor: H.surface, borderRadius: 14, borderWidth: 1, borderColor: H.bordure },
+  valeur: { color: H.texte, fontWeight: '800', fontSize: 16, marginTop: 5 }, carte: { padding: 16, gap: 12, borderWidth: 1, borderColor: H.bordure, borderRadius: 16, backgroundColor: H.surface },
+  sousTitre: { color: H.texte, fontWeight: '800', fontSize: 16 }, options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, option: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, borderRadius: 10, backgroundColor: H.fond },
+  optionTexte: { color: H.texte, fontSize: 14 }, pastille: { width: 20, height: 20, borderRadius: 10, borderWidth: 1, borderColor: H.bordure }, enteteSection: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  action: { minHeight: 48, minWidth: 64, paddingHorizontal: 14, borderRadius: 12, justifyContent: 'center', alignItems: 'center', backgroundColor: H.primaireClair }, actionTexte: { color: H.primaireFonce, fontSize: 14, fontWeight: '800' },
+  variante: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderTopWidth: 1, borderTopColor: H.bordureClaire }, varianteNom: { color: H.texte, fontSize: 14, fontWeight: '700' }, droite: { alignItems: 'flex-end' }, prix: { fontSize: 14, fontWeight: '800', color: H.primaireFonce },
 });
