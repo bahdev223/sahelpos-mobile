@@ -354,6 +354,14 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
               chemin: '/habillement/referentiel',
               icone: 'etiquette',
             });
+            if (infos.capabilitiesCommerce.includes('VARIANT_EXCHANGE')) {
+              entrees.splice(2, 0, {
+                titre: 'Échanges',
+                description: 'Changer taille ou couleur vendue',
+                chemin: '/habillement/echanges',
+                icone: 'mouvements',
+              });
+            }
           }
           return { ...groupe, entrees };
         }).map((groupe) => (
