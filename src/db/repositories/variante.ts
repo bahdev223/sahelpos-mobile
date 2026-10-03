@@ -183,11 +183,19 @@ export async function optionsMatriceProduit(): Promise<
     code_hex: string | null;
     valeur_ordre: number;
   }>(
-    `SELECT DISTINCT valeur_serveur_id, dimension_id, dimension_code, dimension_nom,
-                     dimension_ordre, valeur_code, valeur_nom, code_hex, valeur_ordre
-       FROM variante_valeur
-      WHERE valeur_serveur_id IS NOT NULL
-      ORDER BY dimension_ordre, valeur_ordre, valeur_nom`,
+    `SELECT v.id_serveur AS valeur_serveur_id,
+            d.id_serveur AS dimension_id,
+            d.code AS dimension_code,
+            d.nom AS dimension_nom,
+            d.ordre AS dimension_ordre,
+            v.code AS valeur_code,
+            v.nom AS valeur_nom,
+            v.code_hex,
+            v.ordre AS valeur_ordre
+       FROM valeur_dimension_ref v
+       JOIN dimension_variante_ref d
+         ON d.id_serveur = v.dimension_id_serveur
+      ORDER BY d.ordre, v.ordre, v.nom`,
   );
 
   const table = new Map<string, {
@@ -200,19 +208,17 @@ export async function optionsMatriceProduit(): Promise<
       ordre: ligne.dimension_ordre,
       valeurs: [],
     };
-    if (!dimension.valeurs.some((v) => v.valeurServeurId === ligne.valeur_serveur_id)) {
-      dimension.valeurs.push({
-        valeurServeurId: ligne.valeur_serveur_id,
-        dimensionId: ligne.dimension_id,
-        dimensionCode: ligne.dimension_code,
-        dimensionNom: ligne.dimension_nom,
-        dimensionOrdre: ligne.dimension_ordre,
-        code: ligne.valeur_code,
-        nom: ligne.valeur_nom,
-        codeHex: ligne.code_hex,
-        ordre: ligne.valeur_ordre,
-      });
-    }
+    dimension.valeurs.push({
+      valeurServeurId: ligne.valeur_serveur_id,
+      dimensionId: ligne.dimension_id,
+      dimensionCode: ligne.dimension_code,
+      dimensionNom: ligne.dimension_nom,
+      dimensionOrdre: ligne.dimension_ordre,
+      code: ligne.valeur_code,
+      nom: ligne.valeur_nom,
+      codeHex: ligne.code_hex,
+      ordre: ligne.valeur_ordre,
+    });
     table.set(ligne.dimension_code, dimension);
   }
   return [...table.values()].sort((a, b) => a.ordre - b.ordre);
