@@ -182,7 +182,7 @@ export function CatalogueHabillement() {
 
       <Pressable
         style={s.fab}
-        onPress={() => router.push('/produit/nouveau')}
+        onPress={() => router.push('/habillement/modele/nouveau')}
         accessibilityLabel="Nouveau modèle"
       >
         <Icone nom="plus" taille={28} couleur={couleurs.texteInverse} />
