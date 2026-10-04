@@ -31,6 +31,7 @@ export interface SousUnite {
   /** Combien d'unites de base vaut une sous-unite (1 carton = 24 unites). */
   facteur: number;
   prix: number;
+  prixGros?: number;
 }
 
 export interface Produit {
@@ -39,7 +40,10 @@ export interface Produit {
   nom: string;
   categorie: string | null;
   codeBarre: string | null;
+  marque?: string;
+  referenceFabricant?: string;
   prixUnitaire: number;
+  prixGros?: number;
   prixAchat: number;
   uniteBase: string;
   quantiteBase: number;

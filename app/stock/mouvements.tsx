@@ -55,6 +55,8 @@ interface LigneMouvement {
   id: number;
   produit_id: number;
   produit_nom: string | null;
+  variante_nom: string | null;
+  variante_sku: string | null;
   unite_base: string | null;
   nature: string;
   source_operation: string;
@@ -123,9 +125,17 @@ function construireConditions(filtres: Filtres): {
   }
   const terme = filtres.texte.trim();
   if (terme !== '') {
-    conditions.push('(p.nom LIKE ? OR m.motif LIKE ? OR m.reference LIKE ?)');
+    conditions.push(`(
+      p.nom LIKE ? OR m.motif LIKE ? OR m.reference LIKE ?
+      OR EXISTS (
+        SELECT 1
+          FROM variante_valeur vv
+         WHERE vv.variante_id = m.variante_id
+           AND vv.valeur_nom LIKE ?
+      )
+    )`);
     const motif = `%${terme}%`;
-    parametres.push(motif, motif, motif);
+    parametres.push(motif, motif, motif, motif);
   }
 
   return {
@@ -154,9 +164,17 @@ async function chargerMouvements(filtres: Filtres, decalage: number): Promise<Li
     `SELECT m.id, m.produit_id, m.nature, m.source_operation, m.quantite, m.unite,
             m.quantite_base, m.stock_avant, m.stock_apres, m.prix_unitaire,
             m.reference, m.motif, m.utilisateur, m.date_mouvement,
-            p.nom AS produit_nom, p.unite_base
+            p.nom AS produit_nom, p.unite_base,
+            vp.sku AS variante_sku,
+            (
+              SELECT GROUP_CONCAT(vv.valeur_nom, ' / ')
+                FROM variante_valeur vv
+               WHERE vv.variante_id = m.variante_id
+               ORDER BY vv.dimension_ordre, vv.valeur_ordre
+            ) AS variante_nom
        FROM mouvement_stock m
        LEFT JOIN produit p ON p.id = m.produit_id
+       LEFT JOIN variante_produit vp ON vp.id = m.variante_id
        ${clause}
       ORDER BY m.date_mouvement DESC, m.id DESC
       LIMIT ? OFFSET ?`,
@@ -804,9 +822,17 @@ function CarteMouvement({ mouvement }: { mouvement: LigneMouvement }) {
       <View style={[sl.bande, { backgroundColor: couleur }]} />
       <View style={sl.carteCorps}>
         <View style={sl.carteHaut}>
-          <Text style={sl.produit} numberOfLines={2}>
-            {mouvement.produit_nom ?? 'Produit supprime'}
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={sl.produit} numberOfLines={1}>
+              {mouvement.produit_nom ?? 'Produit supprime'}
+            </Text>
+            {mouvement.variante_nom ? (
+              <Text style={sl.variante} numberOfLines={1}>
+                {mouvement.variante_nom}
+                {mouvement.variante_sku ? ` · ${mouvement.variante_sku}` : ''}
+              </Text>
+            ) : null}
+          </View>
           <Text style={[sl.effet, { color: effet.couleur }]} numberOfLines={1}>
             {effet.texte}
           </Text>
@@ -952,6 +978,7 @@ const sl = StyleSheet.create({
   },
   bande: { width: 4 },
   carteCorps: { flex: 1, padding: 10, gap: 5 },
+  variante: { marginTop: 2, fontSize: 11, fontWeight: '700', color: couleurs.primaire },
   carteHaut: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   produit: { flex: 1, fontSize: 15, fontWeight: '600', color: C.texte },
   effet: { fontSize: 15, fontWeight: '700' },

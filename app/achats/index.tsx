@@ -54,7 +54,8 @@ function dateCourte(iso: string): string {
 
 export default function EcranAchats() {
   const router = useRouter();
-  const { boutique, synchroniserMaintenant } = useSession();
+  const { boutique, synchroniserMaintenant, profilCommerce } = useSession();
+  const habillement = profilCommerce?.secteur === 'HABILLEMENT';
   const [achats, setAchats] = useState<AchatResume[]>([]);
   const [filtre, setFiltre] = useState<StatutAchat | 'TOUS'>('TOUS');
   const [recherche, setRecherche] = useState('');
@@ -95,7 +96,7 @@ export default function EcranAchats() {
 
   return (
     <SafeAreaView style={styles.page} edges={['bottom']}>
-      <Stack.Screen options={{ headerShown: true, title: 'Achats' }} />
+      <Stack.Screen options={{ headerShown: true, title: habillement ? 'Approvisionnements' : 'Achats' }} />
 
       {erreur ? (
         <Erreur message={erreur} onReessayer={charger} />
@@ -130,8 +131,10 @@ export default function EcranAchats() {
           ListEmptyComponent={
             <ListeVide
               titre="Aucun achat"
-              message="Enregistrez vos achats fournisseur pour faire entrer la marchandise en stock et suivre ce que vous devez."
-              actionTitre="Enregistrer un achat"
+              message={habillement
+                ? "Enregistrez vos approvisionnements par modèle, taille et couleur."
+                : "Enregistrez vos achats fournisseur pour faire entrer la marchandise en stock et suivre ce que vous devez."}
+              actionTitre={habillement ? "Nouvel approvisionnement" : "Enregistrer un achat"}
               onAction={() => router.push('/achats/nouveau')}
             />
           }
@@ -168,7 +171,7 @@ export default function EcranAchats() {
 
       <View style={styles.pied}>
         <Bouton
-          titre="Enregistrer un achat"
+          titre={habillement ? "Nouvel approvisionnement" : "Enregistrer un achat"}
           onPress={() => router.push('/achats/nouveau')}
           grand
         />

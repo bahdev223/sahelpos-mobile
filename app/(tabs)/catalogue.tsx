@@ -33,6 +33,7 @@ import { BandeauEtat, BARRE_HORIZONTALE, couleurs } from '../../src/ui/component
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
 import { useSession } from '../_layout';
+import { CatalogueHabillement } from '../../src/profile-ui/habillement/CatalogueHabillement';
 
 // --------------------------------------------------------------------------
 // Acces aux donnees
@@ -42,8 +43,11 @@ interface LigneCatalogue {
   id: number;
   nom: string;
   categorie: string | null;
+  marque: string;
+  reference_fabricant: string;
   code_barre: string | null;
   prix_unitaire: number;
+  prix_gros: number;
   prix_achat: number;
   unite_base: string;
   quantite_base: number;
@@ -57,7 +61,8 @@ interface LigneCatalogue {
 async function chargerCatalogue(): Promise<LigneCatalogue[]> {
   const db = await obtenirBase();
   return db.getAllAsync<LigneCatalogue>(
-    `SELECT p.id, p.nom, p.categorie, p.code_barre, p.prix_unitaire, p.prix_achat,
+    `SELECT p.id, p.nom, p.categorie, p.marque, p.reference_fabricant,
+            p.code_barre, p.prix_unitaire, p.prix_gros, p.prix_achat,
             p.unite_base, p.quantite_base, p.stock_min, p.gestion_stock,
             p.chemin_image, p.actif,
             (SELECT GROUP_CONCAT(su.nom, ' / ')
@@ -111,8 +116,17 @@ type Etat =
   | { phase: 'pret'; produits: LigneCatalogue[] };
 
 export default function Catalogue() {
+  const { profilCommerce } = useSession();
+  if (profilCommerce?.secteur === 'HABILLEMENT') {
+    return <CatalogueHabillement />;
+  }
+  return <CatalogueStandard />;
+}
+
+function CatalogueStandard() {
   const router = useRouter();
-  const { revisionSynchronisation, synchroniserMaintenant } = useSession();
+  const { revisionSynchronisation, synchroniserMaintenant, profilCommerce } = useSession();
+  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [recherche, setRecherche] = useState('');
   const [categorie, setCategorie] = useState<string | null>(null);
@@ -183,6 +197,8 @@ export default function Catalogue() {
       return (
         normaliser(p.nom).includes(terme) ||
         normaliser(p.categorie ?? '').includes(terme) ||
+        normaliser(p.marque ?? '').includes(terme) ||
+        normaliser(p.reference_fabricant ?? '').includes(terme) ||
         normaliser(p.code_barre ?? '').includes(terme)
       );
     });
@@ -270,7 +286,7 @@ export default function Catalogue() {
             style={s.saisie}
             value={recherche}
             onChangeText={setRecherche}
-            placeholder="Nom, categorie ou code-barres"
+            placeholder={quincaillerie ? "Nom, marque, référence ou code-barres" : "Nom, categorie ou code-barres"}
             placeholderTextColor={C.texteFaible}
             autoCapitalize="none"
             autoCorrect={false}
@@ -383,7 +399,9 @@ export default function Catalogue() {
             <CarteProduit
               produit={item}
               onPress={() =>
-                router.push({ pathname: '/produit/[id]', params: { id: String(item.id) } })
+                router.push(quincaillerie
+                  ? { pathname: '/quincaillerie/reference/[id]', params: { id: String(item.id) } }
+                  : { pathname: '/produit/[id]', params: { id: String(item.id) } })
               }
             />
           )}
@@ -434,7 +452,9 @@ function CarteProduit(p: { produit: LigneCatalogue; onPress: () => void }) {
 
         <Text style={sl.meta} numberOfLines={1}>
           {categorie === '' ? SANS_CATEGORIE : categorie}
-          {' - '}
+          {p.produit.marque ? ` · ${p.produit.marque}` : ''}
+          {p.produit.reference_fabricant ? ` · ${p.produit.reference_fabricant}` : ''}
+          {' · '}
           {p.produit.unite_base}
           {p.produit.sous_unites ? ` / ${p.produit.sous_unites}` : ''}
         </Text>

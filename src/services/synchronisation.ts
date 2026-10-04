@@ -24,7 +24,7 @@ const CLE_CURSOR = 'sync.cursor';
 const CLE_BOUTIQUE = 'sync.boutique';
 const CLE_BOOTSTRAP = 'sync.bootstrap_effectue';
 const CLE_PROTOCOLE = 'sync.protocole';
-const VERSION_PROTOCOLE = '2';
+const VERSION_PROTOCOLE = '6';
 const CLE_DERNIERE_TENTATIVE = 'sync.derniere_tentative';
 const CLE_DERNIER_SUCCES = 'sync.dernier_succes';
 const CLE_DERNIERE_ERREUR = 'sync.derniere_erreur';
@@ -35,13 +35,16 @@ const CLE_DERNIER_NOMBRE_PULL = 'sync.dernier_nombre_pull';
 const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
 const TAILLE_IMAGE_SYNC_MAX = 4 * 1024 * 1024;
 
-type TypeObjet = 'produit' | 'client' | 'fournisseur' | 'vente' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
+type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'echange' | 'commande_client' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
 
 const TYPE_ECRITURE_PAR_OBJET: Record<TypeObjet, TypeEcritureCommerce> = {
   produit: 'produits',
+  variante: 'produits',
   client: 'clients',
   fournisseur: 'fournisseurs',
   vente: 'ventes',
+  echange: 'ventes',
+  commande_client: 'ventes',
   mouvement: 'mouvements',
   achat: 'achats',
   boutique: 'boutique',
@@ -59,7 +62,10 @@ interface ProduitSync {
   nom: string;
   categorie: string | null;
   code_barre: string | null;
+  marque?: string | null;
+  reference_fabricant?: string | null;
   prix_unitaire: number | string;
+  prix_gros?: number | string;
   prix_achat: number | string;
   unite_base: string;
   quantite_base: number | string;
@@ -75,7 +81,36 @@ interface ProduitSync {
   date_creation?: string | null;
   date_modification?: string | null;
   supprime_le?: string | null;
-  sous_unites?: Array<{ nom: string; facteur: number | string; prix: number | string }>;
+  sous_unites?: Array<{ nom: string; facteur: number | string; prix: number | string; prix_gros?: number | string }>;
+}
+
+interface ValeurVarianteSync {
+  id: number;
+  dimension: {
+    id: number;
+    code: string;
+    nom: string;
+    ordre: number;
+  };
+  code: string;
+  nom: string;
+  code_hex?: string | null;
+  ordre: number;
+}
+
+interface VarianteSync {
+  id_local: string;
+  produit_id_local: string;
+  sku: string;
+  code_barre?: string | null;
+  prix_override?: number | string | null;
+  prix_achat?: number | string | null;
+  stock_actuel: number | string;
+  actif: boolean | number;
+  date_creation?: string | null;
+  date_modification?: string | null;
+  supprime_le?: string | null;
+  valeurs: ValeurVarianteSync[];
 }
 
 interface ClientSync {
@@ -100,11 +135,14 @@ interface FournisseurSync extends ClientSync {
 }
 
 interface LigneVenteSync {
+  ligne_serveur_id?: number | null;
   produit_id_local: string;
+  variante_id_local?: string | null;
   libelle: string;
   unite: string;
   facteur: number | string;
   quantite: number | string;
+  quantite_recue?: number | string;
   quantite_base: number | string;
   prix_unitaire: number | string;
   cout_unitaire: number | string;
@@ -129,9 +167,20 @@ interface VenteSync {
   lignes: LigneVenteSync[];
 }
 
+interface EchangeSync {
+  id_local: string;
+  vente_id_local: string;
+  ligne_serveur_id: number;
+  nouvelle_variante_id_local: string;
+  quantite: number | string;
+  note?: string | null;
+  date_echange?: string | null;
+}
+
 interface MouvementSync {
   id_local: string;
   produit_id_local: string;
+  variante_id_local?: string | null;
   nature: string;
   source: string;
   quantite: number | string;
@@ -149,7 +198,9 @@ interface MouvementSync {
 }
 
 interface LigneAchatSync {
+  serveur_id?: number | null;
   produit_id_local: string;
+  variante_id_local?: string | null;
   libelle: string;
   unite: string;
   facteur: number | string;
@@ -184,6 +235,37 @@ interface AchatSync {
   paiements: PaiementAchatSync[];
 }
 
+interface LigneCommandeClientSync {
+  serveur_id?: number | null;
+  produit_id_local: string;
+  variante_id_local?: string | null;
+  libelle: string;
+  quantite_commandee: number | string;
+  quantite_reservee: number | string;
+  quantite_preparee: number | string;
+  prix_unitaire: number | string;
+  total: number | string;
+}
+
+interface CommandeClientSync {
+  id_local: string;
+  serveur_id?: number | null;
+  numero: string;
+  client_id_local?: string | null;
+  statut: string;
+  total: number | string;
+  montant_paye: number | string;
+  note?: string | null;
+  date_creation: string;
+  date_confirmation?: string | null;
+  date_prete?: string | null;
+  date_fin?: string | null;
+  conversion_demandee?: boolean | number;
+  conversion_mode_paiement?: string | null;
+  conversion_montant_paye?: number | string | null;
+  lignes: LigneCommandeClientSync[];
+}
+
 interface BoutiqueSync {
   nom?: string;
   adresse?: string | null;
@@ -205,18 +287,35 @@ interface UtilisateurSync {
   date_modification?: string | null;
 }
 
+interface DimensionVarianteRefSync {
+  id: number;
+  code: string;
+  nom: string;
+  ordre: number;
+  valeurs: Array<{
+    id: number;
+    code: string;
+    nom: string;
+    code_hex?: string | null;
+    ordre: number;
+  }>;
+}
+
 interface PullSync {
   cursor: string;
   has_more?: boolean;
   produits: ProduitSync[];
+  variantes?: VarianteSync[];
   clients: ClientSync[];
   fournisseurs: FournisseurSync[];
   ventes: VenteSync[];
   mouvements?: MouvementSync[];
   achats?: AchatSync[];
+  commandes_clients?: CommandeClientSync[];
   utilisateurs?: UtilisateurSync[];
   boutique?: BoutiqueSync;
   annonces?: AnnonceSync[];
+  dimensions_variantes?: DimensionVarianteRefSync[];
 }
 
 interface AnnonceSync {
@@ -499,14 +598,52 @@ async function construirePayload(pending: LigneOutbox[]) {
     pending.filter((l) => l.type_objet === typeObjet).map((l) => l.id_local);
   return {
     produits: await lireProduits(ids('produit')),
+    variantes: await lireVariantes(ids('variante')),
     clients: await lireClients(ids('client')),
     fournisseurs: await lireFournisseurs(ids('fournisseur')),
     ventes: await lireVentes(ids('vente')),
+    echanges: await lireEchanges(ids('echange')),
     mouvements: await lireMouvements(ids('mouvement')),
     achats: await lireAchats(ids('achat')),
+    commandes_clients: await lireCommandesClients(ids('commande_client')),
     utilisateurs: await lireUtilisateurs(ids('utilisateur')),
     boutique: ids('boutique').length > 0 ? await lireBoutique() : undefined,
   };
+}
+
+async function lireCommandesClients(ids: string[]): Promise<CommandeClientSync[]> {
+  if (ids.length === 0) return [];
+  const commandes = await lireTout<CommandeClientSync & { id: number }>(
+    `SELECT c.id, c.id_local, c.serveur_id, c.numero,
+            cl.id_local AS client_id_local, c.statut, c.total, c.montant_paye,
+            c.note, c.date_creation, c.date_confirmation, c.date_prete, c.date_fin,
+            c.conversion_demandee, c.conversion_mode_paiement,
+            c.conversion_montant_paye
+       FROM commande_client c
+       LEFT JOIN client cl ON cl.id = c.client_id
+      WHERE c.id_local IN (${placeholders(ids)})`,
+    ...ids,
+  );
+  for (const commande of commandes) {
+    commande.lignes = await lireTout<LigneCommandeClientSync>(
+      `SELECT l.serveur_id,
+              p.id_local AS produit_id_local,
+              vp.id_local AS variante_id_local,
+              l.libelle,
+              l.quantite_commandee,
+              l.quantite_reservee,
+              l.quantite_preparee,
+              l.prix_unitaire,
+              l.total
+         FROM ligne_commande_client l
+         JOIN produit p ON p.id = l.produit_id
+         LEFT JOIN variante_produit vp ON vp.id = l.variante_id
+        WHERE l.commande_id = ?
+        ORDER BY l.id`,
+      commande.id,
+    );
+  }
+  return commandes;
 }
 
 async function lireUtilisateurs(ids: string[]): Promise<UtilisateurSync[]> {
@@ -521,7 +658,8 @@ async function lireUtilisateurs(ids: string[]): Promise<UtilisateurSync[]> {
 async function lireProduits(ids: string[]): Promise<ProduitSync[]> {
   if (ids.length === 0) return [];
   const produits = await lireTout<ProduitSync>(
-    `SELECT id_local, nom, categorie, code_barre, prix_unitaire, prix_achat,
+    `SELECT id_local, nom, categorie, code_barre, marque, reference_fabricant,
+            prix_unitaire, prix_gros, prix_achat,
             unite_base, quantite_base, stock_min, gestion_stock, actif,
             chemin_image, date_creation, date_modification
        FROM produit WHERE id_local IN (${placeholders(ids)})`,
@@ -535,7 +673,7 @@ async function lireProduits(ids: string[]): Promise<ProduitSync[]> {
     );
     produit.sous_unites = local
       ? await lireTout(
-          'SELECT nom, facteur, prix FROM sous_unite WHERE produit_id = ?',
+          'SELECT nom, facteur, prix, prix_gros FROM sous_unite WHERE produit_id = ?',
           local.id,
         )
       : [];
@@ -577,6 +715,53 @@ async function imageProduitPourSync(chemin: string | null | undefined): Promise<
   return imageLocalePourSync(chemin, 'image', 'produit');
 }
 
+async function lireVariantes(ids: string[]): Promise<VarianteSync[]> {
+  if (ids.length === 0) return [];
+  const variantes = await lireTout<VarianteSync & { id: number }>(
+    `SELECT vp.id, vp.id_local, p.id_local AS produit_id_local, vp.sku,
+            vp.code_barre, vp.prix_override, vp.prix_achat, vp.stock_actuel,
+            vp.actif, vp.date_creation, vp.date_modification
+       FROM variante_produit vp
+       JOIN produit p ON p.id = vp.produit_id
+      WHERE vp.id_local IN (${placeholders(ids)})`,
+    ...ids,
+  );
+  for (const variante of variantes) {
+    variante.valeurs = await lireTout<{
+      id: number;
+      dimension: { id: number; code: string; nom: string; ordre: number };
+      code: string;
+      nom: string;
+      code_hex?: string | null;
+      ordre: number;
+    }>(
+      `SELECT valeur_serveur_id AS id,
+              dimension_id AS dimension_id,
+              dimension_code AS dimension_code,
+              dimension_nom AS dimension_nom,
+              dimension_ordre AS dimension_ordre,
+              valeur_code AS code, valeur_nom AS nom, code_hex,
+              valeur_ordre AS ordre
+         FROM variante_valeur
+        WHERE variante_id = ?`,
+      variante.id,
+    ).then((lignes) => lignes.map((ligne: any) => ({
+      id: ligne.id,
+      dimension: {
+        id: ligne.dimension_id,
+        code: ligne.dimension_code,
+        nom: ligne.dimension_nom,
+        ordre: ligne.dimension_ordre,
+      },
+      code: ligne.code,
+      nom: ligne.nom,
+      code_hex: ligne.code_hex,
+      ordre: ligne.ordre,
+    })));
+  }
+  return variantes;
+}
+
 async function lireClients(ids: string[]): Promise<ClientSync[]> {
   if (ids.length === 0) return [];
   const clients = await lireTout<ClientSync & { chemin_photo?: string | null }>(
@@ -615,11 +800,13 @@ async function lireVentes(ids: string[]): Promise<VenteSync[]> {
   );
   for (const vente of ventes) {
     vente.lignes = await lireTout<LigneVenteSync>(
-      `SELECT p.id_local AS produit_id_local, l.libelle, l.unite, l.facteur,
-              l.quantite, l.quantite_base, l.prix_unitaire, l.cout_unitaire,
-              l.total, l.benefice_total
+      `SELECT l.ligne_serveur_id,
+              p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
+              l.libelle, l.unite, l.facteur, l.quantite, l.quantite_base,
+              l.prix_unitaire, l.cout_unitaire, l.total, l.benefice_total
          FROM ligne_vente l
          JOIN produit p ON p.id = l.produit_id
+         LEFT JOIN variante_produit vp ON vp.id = l.variante_id
         WHERE l.vente_id = ?`,
       vente.id,
     );
@@ -627,15 +814,35 @@ async function lireVentes(ids: string[]): Promise<VenteSync[]> {
   return ventes;
 }
 
+async function lireEchanges(ids: string[]): Promise<EchangeSync[]> {
+  if (ids.length === 0) return [];
+  return lireTout<EchangeSync>(
+    `SELECT e.id_local,
+            v.id_local AS vente_id_local,
+            e.ligne_serveur_id,
+            nv.id_local AS nouvelle_variante_id_local,
+            e.quantite,
+            e.note,
+            e.date_echange
+       FROM echange_variante e
+       JOIN vente v ON v.id = e.vente_id
+       JOIN variante_produit nv ON nv.id = e.nouvelle_variante_id
+      WHERE e.id_local IN (${placeholders(ids)})`,
+    ...ids,
+  );
+}
+
 async function lireMouvements(ids: string[]): Promise<MouvementSync[]> {
   if (ids.length === 0) return [];
   return lireTout(
-    `SELECT m.id_local, p.id_local AS produit_id_local, m.nature,
+    `SELECT m.id_local, p.id_local AS produit_id_local,
+            vp.id_local AS variante_id_local, m.nature,
             m.source_operation AS source, m.quantite, m.unite, m.quantite_base,
             m.stock_avant, m.stock_apres, m.prix_unitaire, m.reference, m.motif,
             m.utilisateur, m.date_mouvement, m.date_mouvement AS date_modification
        FROM mouvement_stock m
        JOIN produit p ON p.id = m.produit_id
+       LEFT JOIN variante_produit vp ON vp.id = m.variante_id
       WHERE m.id_local IN (${placeholders(ids)})`,
     ...ids,
   );
@@ -654,10 +861,12 @@ async function lireAchats(ids: string[]): Promise<AchatSync[]> {
   );
   for (const achat of achats) {
     achat.lignes = await lireTout<LigneAchatSync>(
-      `SELECT p.id_local AS produit_id_local, l.libelle, l.unite, l.facteur,
-              l.quantite, l.quantite_base, l.prix_unitaire, l.total
+      `SELECT l.serveur_id, p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
+              l.libelle, l.unite, l.facteur, l.quantite, l.quantite_recue, l.quantite_base,
+              l.prix_unitaire, l.total
          FROM ligne_achat l
          JOIN produit p ON p.id = l.produit_id
+         LEFT JOIN variante_produit vp ON vp.id = l.variante_id
         WHERE l.achat_id = ? ORDER BY l.id`,
       achat.id,
     );
@@ -697,6 +906,10 @@ async function appliquerPull(pull: PullSync): Promise<number> {
       await appliquerProduit(produit);
       recus++;
     }
+    for (const variante of pull.variantes ?? []) {
+      await appliquerVariante(variante);
+      recus++;
+    }
     for (const client of pull.clients ?? []) {
       await appliquerClient(client);
       recus++;
@@ -721,9 +934,17 @@ async function appliquerPull(pull: PullSync): Promise<number> {
       await appliquerAchat(achat);
       recus++;
     }
+    for (const commande of pull.commandes_clients ?? []) {
+      await appliquerCommandeClient(commande);
+      recus++;
+    }
     if (pull.boutique) {
       await appliquerBoutique(pull.boutique);
       recus++;
+    }
+    if (pull.dimensions_variantes) {
+      await appliquerReferentielVariantes(pull.dimensions_variantes);
+      recus += pull.dimensions_variantes.length;
     }
     for (const annonce of pull.annonces ?? []) {
       await deposer({
@@ -741,6 +962,36 @@ async function appliquerPull(pull: PullSync): Promise<number> {
     await ecrireParam(CLE_CURSOR, pull.cursor);
   });
   return recus;
+}
+
+async function appliquerReferentielVariantes(
+  dimensions: DimensionVarianteRefSync[],
+): Promise<void> {
+  await executer('DELETE FROM valeur_dimension_ref');
+  await executer('DELETE FROM dimension_variante_ref');
+  for (const dimension of dimensions) {
+    await executer(
+      `INSERT INTO dimension_variante_ref (id_serveur, code, nom, ordre)
+       VALUES (?, ?, ?, ?)`,
+      dimension.id,
+      dimension.code,
+      dimension.nom,
+      dimension.ordre,
+    );
+    for (const valeur of dimension.valeurs ?? []) {
+      await executer(
+        `INSERT INTO valeur_dimension_ref
+         (id_serveur, dimension_id_serveur, code, nom, code_hex, ordre)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        valeur.id,
+        dimension.id,
+        valeur.code,
+        valeur.nom,
+        valeur.code_hex ?? null,
+        valeur.ordre,
+      );
+    }
+  }
 }
 
 async function appliquerUtilisateur(u: UtilisateurSync): Promise<void> {
@@ -773,16 +1024,18 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
       ? dejaPresent?.chemin_image ?? null
       : imageRecue;
   await executer(
-    `INSERT INTO produit (id_local, nom, categorie, code_barre, prix_unitaire,
-                          prix_achat, unite_base, quantite_base, stock_min,
-                          gestion_stock, chemin_image, actif, date_creation,
-                          date_modification)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO produit (id_local, nom, categorie, code_barre, marque, reference_fabricant,
+                          prix_unitaire, prix_gros, prix_achat, unite_base, quantite_base, stock_min,
+                          gestion_stock, chemin_image, actif, date_creation, date_modification)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id_local) DO UPDATE SET
        nom = excluded.nom,
        categorie = excluded.categorie,
        code_barre = excluded.code_barre,
+       marque = excluded.marque,
+       reference_fabricant = excluded.reference_fabricant,
        prix_unitaire = excluded.prix_unitaire,
+       prix_gros = excluded.prix_gros,
        prix_achat = excluded.prix_achat,
        unite_base = excluded.unite_base,
        quantite_base = excluded.quantite_base,
@@ -795,7 +1048,10 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
     p.nom,
     p.categorie ?? null,
     p.code_barre ?? null,
+    p.marque ?? '',
+    p.reference_fabricant ?? '',
     nombre(p.prix_unitaire),
+    nombre(p.prix_gros),
     nombre(p.prix_achat),
     p.unite_base || 'Unite',
     nombre(p.quantite_base),
@@ -814,11 +1070,76 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
   await executer('DELETE FROM sous_unite WHERE produit_id = ?', local.id);
   for (const su of p.sous_unites ?? []) {
     await executer(
-      'INSERT INTO sous_unite (produit_id, nom, facteur, prix) VALUES (?, ?, ?, ?)',
+      'INSERT INTO sous_unite (produit_id, nom, facteur, prix, prix_gros) VALUES (?, ?, ?, ?, ?)',
       local.id,
       su.nom,
       nombre(su.facteur, 1),
       nombre(su.prix),
+      nombre(su.prix_gros),
+    );
+  }
+}
+
+async function appliquerVariante(v: VarianteSync): Promise<void> {
+  const produit = await lirePremier<{ id: number }>(
+    'SELECT id FROM produit WHERE id_local = ?',
+    v.produit_id_local,
+  );
+  // Le serveur ordonne produits avant variantes lors d'un bootstrap. Si une
+  // variante arrive seule avant son modele (ancien curseur), on la rejouera
+  // au prochain bootstrap complet au lieu de creer une ligne orpheline.
+  if (!produit) return;
+
+  await executer(
+    `INSERT INTO variante_produit
+       (id_local, produit_id, sku, code_barre, prix_override, prix_achat,
+        stock_actuel, actif, date_creation, date_modification)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id_local) DO UPDATE SET
+       produit_id = excluded.produit_id,
+       sku = excluded.sku,
+       code_barre = excluded.code_barre,
+       prix_override = excluded.prix_override,
+       prix_achat = excluded.prix_achat,
+       stock_actuel = excluded.stock_actuel,
+       actif = excluded.actif,
+       date_modification = excluded.date_modification`,
+    v.id_local,
+    produit.id,
+    v.sku,
+    v.code_barre ?? null,
+    v.prix_override == null ? null : nombre(v.prix_override),
+    v.prix_achat == null ? null : nombre(v.prix_achat),
+    nombre(v.stock_actuel),
+    v.supprime_le ? 0 : v.actif ? 1 : 0,
+    v.date_creation ?? maintenant(),
+    v.date_modification ?? maintenant(),
+  );
+
+  const variante = await lirePremier<{ id: number }>(
+    'SELECT id FROM variante_produit WHERE id_local = ?',
+    v.id_local,
+  );
+  if (!variante) return;
+
+  await executer('DELETE FROM variante_valeur WHERE variante_id = ?', variante.id);
+  for (const valeur of v.valeurs ?? []) {
+    await executer(
+      `INSERT INTO variante_valeur
+       (variante_id, valeur_serveur_id, dimension_id, dimension_code,
+        dimension_nom, dimension_ordre, valeur_code, valeur_nom, code_hex,
+        valeur_ordre)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      variante.id,
+      valeur.id,
+      valeur.dimension.id,
+      valeur.dimension.code,
+      valeur.dimension.nom,
+      valeur.dimension.ordre,
+      valeur.code,
+      valeur.nom,
+      valeur.code_hex ?? null,
+      valeur.ordre,
     );
   }
 }
@@ -948,13 +1269,21 @@ async function appliquerVente(v: VenteSync): Promise<void> {
     await executer('DELETE FROM ligne_vente WHERE vente_id = ?', venteId);
   }
   for (const l of v.lignes ?? []) {
+    const variante = l.variante_id_local
+      ? await lirePremier<{ id: number }>(
+          'SELECT id FROM variante_produit WHERE id_local = ?',
+          l.variante_id_local,
+        )
+      : null;
     await executer(
-      `INSERT INTO ligne_vente (vente_id, produit_id, libelle, unite, facteur,
+      `INSERT INTO ligne_vente (vente_id, produit_id, variante_id, ligne_serveur_id, libelle, unite, facteur,
                                 quantite, quantite_base, prix_unitaire,
                                 cout_unitaire, total, benefice_total)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       venteId,
       produits.get(l.produit_id_local),
+      variante?.id ?? null,
+      l.ligne_serveur_id ?? null,
       l.libelle,
       l.unite,
       nombre(l.facteur, 1),
@@ -983,26 +1312,40 @@ async function appliquerMouvement(m: MouvementSync): Promise<void> {
       `Le mouvement ${m.id_local} depend du produit absent ${m.produit_id_local}.`,
     );
   }
+  const variante = m.variante_id_local
+    ? await lirePremier<{ id: number }>(
+        'SELECT id FROM variante_produit WHERE id_local = ?',
+        m.variante_id_local,
+      )
+    : null;
+  if (m.variante_id_local && !variante) {
+    throw new SynchronisationImpossible(
+      `Le mouvement ${m.id_local} depend de la variante absente ${m.variante_id_local}.`,
+    );
+  }
+
   // La reference est celle de toute la vente ou de tout l'achat. Chaque ligne
   // possede son propre produit et sa propre transition de stock.
   if (m.reference) {
     const memeEvenement = await lirePremier<{ id: number }>(
       `SELECT id FROM mouvement_stock
         WHERE source_operation = ? AND reference = ? AND produit_id = ?
+          AND variante_id IS ?
           AND stock_avant IS ? AND stock_apres IS ? LIMIT 1`,
-      m.source, m.reference, produit.id,
+      m.source, m.reference, produit.id, variante?.id ?? null,
       nombreOptionnel(m.stock_avant), nombreOptionnel(m.stock_apres),
     );
     if (memeEvenement) return;
   }
   await executer(
-    `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation,
+    `INSERT INTO mouvement_stock (id_local, produit_id, variante_id, nature, source_operation,
                                   quantite, unite, quantite_base, stock_avant,
                                   stock_apres, prix_unitaire, reference, motif,
                                   utilisateur, date_mouvement)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     m.id_local,
     produit.id,
+    variante?.id ?? null,
     m.nature === 'CORRECTION' ? 'AJUSTEMENT' : m.nature,
     m.source,
     nombre(m.quantite),
@@ -1015,6 +1358,146 @@ async function appliquerMouvement(m: MouvementSync): Promise<void> {
     m.motif ?? null,
     m.utilisateur ?? null,
     m.date_mouvement,
+  );
+
+  const stockApres = nombreOptionnel(m.stock_apres);
+  if (stockApres !== null) {
+    if (variante) {
+      await executer(
+        'UPDATE variante_produit SET stock_actuel = ?, date_modification = ? WHERE id = ?',
+        stockApres,
+        m.date_modification ?? m.date_mouvement,
+        variante.id,
+      );
+      // Le stock du modèle est un cache de la somme de ses variantes. Le
+      // recalcul élimine les dérives après plusieurs opérations Web hors ligne.
+      await executer(
+        `UPDATE produit
+            SET quantite_base = (
+              SELECT COALESCE(SUM(stock_actuel), 0)
+                FROM variante_produit
+               WHERE produit_id = ? AND actif = 1
+            ),
+            date_modification = ?
+          WHERE id = ?`,
+        produit.id,
+        m.date_modification ?? m.date_mouvement,
+        produit.id,
+      );
+    } else {
+      await executer(
+        'UPDATE produit SET quantite_base = ?, date_modification = ? WHERE id = ?',
+        stockApres,
+        m.date_modification ?? m.date_mouvement,
+        produit.id,
+      );
+    }
+  }
+}
+
+async function appliquerCommandeClient(c: CommandeClientSync): Promise<void> {
+  const client = c.client_id_local
+    ? await lirePremier<{ id: number }>(
+        'SELECT id FROM client WHERE id_local = ?',
+        c.client_id_local,
+      )
+    : null;
+
+  const existante = await lirePremier<{ id: number }>(
+    'SELECT id FROM commande_client WHERE id_local = ? OR (serveur_id IS NOT NULL AND serveur_id = ?)',
+    c.id_local,
+    c.serveur_id ?? -1,
+  );
+
+  const commandeId = existante?.id ?? (await executer(
+    `INSERT INTO commande_client
+     (id_local, serveur_id, numero, client_id, statut, total, montant_paye,
+      note, date_creation, date_confirmation, date_prete, date_fin, sync_statut)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SYNCED')`,
+    c.id_local,
+    c.serveur_id ?? null,
+    c.numero,
+    client?.id ?? null,
+    c.statut,
+    nombre(c.total),
+    nombre(c.montant_paye),
+    c.note ?? null,
+    c.date_creation,
+    c.date_confirmation ?? null,
+    c.date_prete ?? null,
+    c.date_fin ?? null,
+  )).lastInsertRowId;
+
+  if (existante) {
+    await executer(
+      `UPDATE commande_client
+          SET id_local = ?, serveur_id = ?, numero = ?, client_id = ?, statut = ?,
+              total = ?, montant_paye = ?, note = ?, date_creation = ?,
+              date_confirmation = ?, date_prete = ?, date_fin = ?,
+              conversion_demandee = 0,
+              conversion_mode_paiement = NULL,
+              conversion_montant_paye = NULL,
+              sync_statut = 'SYNCED'
+        WHERE id = ?`,
+      c.id_local,
+      c.serveur_id ?? null,
+      c.numero,
+      client?.id ?? null,
+      c.statut,
+      nombre(c.total),
+      nombre(c.montant_paye),
+      c.note ?? null,
+      c.date_creation,
+      c.date_confirmation ?? null,
+      c.date_prete ?? null,
+      c.date_fin ?? null,
+      commandeId,
+    );
+    await executer('DELETE FROM ligne_commande_client WHERE commande_id = ?', commandeId);
+  }
+
+  for (const ligne of c.lignes ?? []) {
+    const produit = await lirePremier<{ id: number }>(
+      'SELECT id FROM produit WHERE id_local = ?',
+      ligne.produit_id_local,
+    );
+    if (!produit) {
+      throw new SynchronisationImpossible(
+        `La commande ${c.numero} dépend d'un modèle absent.`,
+      );
+    }
+    const variante = ligne.variante_id_local
+      ? await lirePremier<{ id: number }>(
+          'SELECT id FROM variante_produit WHERE id_local = ? AND produit_id = ?',
+          ligne.variante_id_local,
+          produit.id,
+        )
+      : null;
+    await executer(
+      `INSERT INTO ligne_commande_client
+       (commande_id, serveur_id, produit_id, variante_id, libelle,
+        quantite_commandee, quantite_reservee, quantite_preparee,
+        prix_unitaire, total)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      commandeId,
+      ligne.serveur_id ?? null,
+      produit.id,
+      variante?.id ?? null,
+      ligne.libelle,
+      nombre(ligne.quantite_commandee),
+      nombre(ligne.quantite_reservee),
+      nombre(ligne.quantite_preparee),
+      nombre(ligne.prix_unitaire),
+      nombre(ligne.total),
+    );
+  }
+
+  // Le serveur vient de confirmer cet état : l'outbox locale ne doit plus
+  // rejouer l'opération déjà appliquée.
+  await executer(
+    'DELETE FROM sync_outbox WHERE type_objet = ? AND id_local = ?',
+    'commande_client',
+    c.id_local,
   );
 }
 
@@ -1059,13 +1542,24 @@ async function appliquerAchat(a: AchatSync): Promise<void> {
     if (!produit) {
       throw new SynchronisationImpossible(`Produit manquant pour l'achat ${a.numero}.`);
     }
+    const variante = ligne.variante_id_local
+      ? await lirePremier<{ id: number }>(
+          'SELECT id FROM variante_produit WHERE id_local = ? AND produit_id = ?',
+          ligne.variante_id_local,
+          produit.id,
+        )
+      : null;
+    if (ligne.variante_id_local && !variante) {
+      throw new SynchronisationImpossible(`Variante manquante pour l'achat ${a.numero}.`);
+    }
     await executer(
-      `INSERT INTO ligne_achat (achat_id, produit_id, libelle, unite, facteur, quantite,
-                                quantite_base, prix_unitaire, total)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      achatId, produit.id, ligne.libelle, ligne.unite, nombre(ligne.facteur, 1),
-      nombre(ligne.quantite), nombre(ligne.quantite_base), nombre(ligne.prix_unitaire),
-      nombre(ligne.total),
+      `INSERT INTO ligne_achat
+       (achat_id, serveur_id, produit_id, variante_id, libelle, unite, facteur, quantite,
+        quantite_recue, quantite_base, prix_unitaire, total)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      achatId, ligne.serveur_id ?? null, produit.id, variante?.id ?? null, ligne.libelle, ligne.unite,
+      nombre(ligne.facteur, 1), nombre(ligne.quantite), nombre(ligne.quantite_recue),
+      nombre(ligne.quantite_base), nombre(ligne.prix_unitaire), nombre(ligne.total),
     );
   }
   for (const paiement of a.paiements ?? []) {

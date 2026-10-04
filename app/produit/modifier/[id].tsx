@@ -26,6 +26,8 @@ import {
 import { BandeauEtat } from '../../../src/ui/components';
 import { Icone } from '../../../src/ui/icones';
 import { couleurs } from '../../../src/ui/theme';
+import { marquerChangement } from '../../../src/services/synchronisation';
+import { useSession } from '../../_layout';
 
 // --------------------------------------------------------------------------
 // Acces aux donnees
@@ -33,10 +35,14 @@ import { couleurs } from '../../../src/ui/theme';
 
 interface LigneProduit {
   id: number;
+  id_local: string;
   nom: string;
   categorie: string | null;
+  marque: string;
+  reference_fabricant: string;
   code_barre: string | null;
   prix_unitaire: number;
+  prix_gros: number;
   prix_achat: number;
   unite_base: string;
   quantite_base: number;
@@ -50,6 +56,7 @@ interface LigneSousUnite {
   nom: string;
   facteur: number;
   prix: number;
+  prix_gros: number;
 }
 
 interface FicheProduit {
@@ -63,7 +70,8 @@ async function chargerFiche(identifiant: number): Promise<FicheProduit | null> {
   const db = await obtenirBase();
 
   const produit = await db.getFirstAsync<LigneProduit>(
-    `SELECT id, nom, categorie, code_barre, prix_unitaire, prix_achat, unite_base,
+    `SELECT id, id_local, nom, categorie, marque, reference_fabricant, code_barre,
+            prix_unitaire, prix_gros, prix_achat, unite_base,
             quantite_base, stock_min, gestion_stock, chemin_image, actif
        FROM produit WHERE id = ?`,
     identifiant,
@@ -71,7 +79,7 @@ async function chargerFiche(identifiant: number): Promise<FicheProduit | null> {
   if (!produit) return null;
 
   const sousUnites = await db.getAllAsync<LigneSousUnite>(
-    'SELECT nom, facteur, prix FROM sous_unite WHERE produit_id = ? ORDER BY facteur',
+    'SELECT nom, facteur, prix, prix_gros FROM sous_unite WHERE produit_id = ? ORDER BY facteur',
     identifiant,
   );
 
@@ -105,18 +113,27 @@ async function chargerFiche(identifiant: number): Promise<FicheProduit | null> {
 async function mettreAJourProduit(identifiant: number, valide: ProduitValide): Promise<void> {
   const db = await obtenirBase();
   const maintenant = new Date().toISOString();
+  const existant = await db.getFirstAsync<{ id_local: string }>(
+    'SELECT id_local FROM produit WHERE id = ?',
+    identifiant,
+  );
+  if (!existant) throw new Error('Produit introuvable.');
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE produit
-          SET nom = ?, categorie = ?, code_barre = ?, prix_unitaire = ?, prix_achat = ?,
+          SET nom = ?, categorie = ?, marque = ?, reference_fabricant = ?, code_barre = ?,
+              prix_unitaire = ?, prix_gros = ?, prix_achat = ?,
               unite_base = ?, stock_min = ?, gestion_stock = ?, chemin_image = ?,
               actif = ?, date_modification = ?
         WHERE id = ?`,
       valide.nom,
       valide.categorie,
+      valide.marque,
+      valide.referenceFabricant,
       valide.codeBarre,
       valide.prixUnitaire,
+      valide.prixGros,
       valide.prixAchat,
       valide.uniteBase,
       valide.stockMin,
@@ -130,23 +147,31 @@ async function mettreAJourProduit(identifiant: number, valide: ProduitValide): P
     await db.runAsync('DELETE FROM sous_unite WHERE produit_id = ?', identifiant);
     for (const su of valide.sousUnites) {
       await db.runAsync(
-        'INSERT INTO sous_unite (produit_id, nom, facteur, prix) VALUES (?, ?, ?, ?)',
+        'INSERT INTO sous_unite (produit_id, nom, facteur, prix, prix_gros) VALUES (?, ?, ?, ?, ?)',
         identifiant,
         su.nom,
         su.facteur,
         su.prix,
+        su.prixGros,
       );
     }
   });
+  await marquerChangement('produit', existant.id_local);
 }
 
 export async function desactiverProduit(identifiant: number): Promise<void> {
   const db = await obtenirBase();
+  const existant = await db.getFirstAsync<{ id_local: string }>(
+    'SELECT id_local FROM produit WHERE id = ?',
+    identifiant,
+  );
+  if (!existant) throw new Error('Produit introuvable.');
   await db.runAsync(
     'UPDATE produit SET actif = 0, date_modification = ? WHERE id = ?',
     new Date().toISOString(),
     identifiant,
   );
+  await marquerChangement('produit', existant.id_local);
 }
 
 /** Suppression definitive : emporte les sous-unites et tout l'historique de stock. */
@@ -164,9 +189,12 @@ function versSaisie(fiche: FicheProduit): SaisieProduit {
   return {
     nom: p.nom,
     categorie: p.categorie ?? '',
+    marque: p.marque ?? '',
+    referenceFabricant: p.reference_fabricant ?? '',
     codeBarre: p.code_barre ?? '',
     prixAchat: String(Math.round(p.prix_achat)),
     prixUnitaire: String(Math.round(p.prix_unitaire)),
+    prixGros: p.prix_gros > 0 ? String(Math.round(p.prix_gros)) : '',
     uniteBase: p.unite_base,
     stockMin: formaterQuantite(p.stock_min),
     stockInitial: '',
@@ -178,6 +206,7 @@ function versSaisie(fiche: FicheProduit): SaisieProduit {
       nom: su.nom,
       facteur: formaterQuantite(su.facteur),
       prix: String(Math.round(su.prix)),
+      prixGros: su.prix_gros > 0 ? String(Math.round(su.prix_gros)) : '',
     })),
   };
 }
@@ -194,6 +223,8 @@ type Etat =
 
 export default function FicheProduitEcran() {
   const router = useRouter();
+  const { profilCommerce } = useSession();
+  const habillement = profilCommerce?.secteur === 'HABILLEMENT';
   const parametres = useLocalSearchParams<{ id?: string }>();
   const identifiant = Number(parametres.id);
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
@@ -300,7 +331,9 @@ export default function FicheProduitEcran() {
           <Text style={s.retourTexte}>Retour</Text>
         </Pressable>
         <Text style={s.titre} numberOfLines={1}>
-          {etat.phase === 'pret' ? etat.fiche.produit.nom : 'Fiche produit'}
+          {etat.phase === 'pret'
+            ? etat.fiche.produit.nom
+            : habillement ? 'Modifier le modèle' : 'Fiche produit'}
         </Text>
       </View>
 
@@ -334,7 +367,7 @@ export default function FicheProduitEcran() {
           key={`${etat.fiche.produit.id}-${etat.saisie.nom}-${etat.fiche.produit.quantite_base}`}
           saisieInitiale={etat.saisie}
           creation={false}
-          libelleValider="Enregistrer"
+          libelleValider={habillement ? 'Enregistrer le modèle' : 'Enregistrer'}
           onValider={enregistrer}
           onAnnuler={() => router.back()}
           complement={
@@ -389,7 +422,9 @@ export default function FicheProduitEcran() {
                 <Pressable
                   style={sl.boutonSupprimer}
                   onPress={() => demanderSuppression(etat.fiche)}>
-                  <Text style={sl.boutonSupprimerTexte}>Supprimer ce produit</Text>
+                  <Text style={sl.boutonSupprimerTexte}>
+                    {habillement ? 'Supprimer ce modèle' : 'Supprimer ce produit'}
+                  </Text>
                 </Pressable>
               </View>
             </>

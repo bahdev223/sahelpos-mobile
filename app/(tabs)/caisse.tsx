@@ -38,7 +38,15 @@ import type { BarcodeScanningResult } from 'expo-camera';
 import { useFocusEffect } from 'expo-router';
 
 import { obtenirBase } from '../../src/db/database';
+import { obtenirProduit } from '../../src/db/repositories/produit';
+import {
+  libelleVariante,
+  listerVariantesProduit,
+  trouverVarianteParCodeBarre,
+  type VarianteMobile,
+} from '../../src/db/repositories/variante';
 import { seuilAlerteStock } from '../../src/domain/stock';
+import { prixConditionnement, prixGrosConditionnement } from '../../src/domain/quincaillerie';
 import type {
   Client,
   LigneVente,
@@ -77,6 +85,7 @@ import {
 import { useSession } from '../_layout';
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
+import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
 
 // --- Acces aux donnees ------------------------------------------------------
 
@@ -85,8 +94,11 @@ interface LigneProduitSql {
   id_local: string;
   nom: string;
   categorie: string | null;
+  marque: string;
+  reference_fabricant: string;
   code_barre: string | null;
   prix_unitaire: number;
+  prix_gros: number;
   prix_achat: number;
   unite_base: string;
   quantite_base: number;
@@ -96,8 +108,9 @@ interface LigneProduitSql {
   actif: number;
 }
 
-const COLONNES_PRODUIT = `id, id_local, nom, categorie, code_barre, prix_unitaire,
-  prix_achat, unite_base, quantite_base, stock_min, gestion_stock, chemin_image, actif`;
+const COLONNES_PRODUIT = `id, id_local, nom, categorie, marque, reference_fabricant,
+  code_barre, prix_unitaire, prix_gros, prix_achat, unite_base, quantite_base,
+  stock_min, gestion_stock, chemin_image, actif`;
 
 function versProduit(ligne: LigneProduitSql): Produit {
   return {
@@ -105,8 +118,11 @@ function versProduit(ligne: LigneProduitSql): Produit {
     idLocal: ligne.id_local,
     nom: ligne.nom,
     categorie: ligne.categorie,
+    marque: ligne.marque,
+    referenceFabricant: ligne.reference_fabricant,
     codeBarre: ligne.code_barre,
     prixUnitaire: ligne.prix_unitaire,
+    prixGros: ligne.prix_gros,
     prixAchat: ligne.prix_achat,
     uniteBase: ligne.unite_base,
     quantiteBase: ligne.quantite_base,
@@ -129,8 +145,13 @@ async function rechercherProduits(terme: string): Promise<Produit[]> {
   const motif = `%${propre}%`;
   const lignes = await db.getAllAsync<LigneProduitSql>(
     `SELECT ${COLONNES_PRODUIT} FROM produit
-     WHERE actif = 1 AND (nom LIKE ? OR code_barre LIKE ? OR categorie LIKE ?)
+     WHERE actif = 1 AND (
+       nom LIKE ? OR code_barre LIKE ? OR categorie LIKE ?
+       OR marque LIKE ? OR reference_fabricant LIKE ?
+     )
      ORDER BY nom LIMIT 80`,
+    motif,
+    motif,
     motif,
     motif,
     motif,
@@ -155,8 +176,9 @@ async function chargerSousUnites(produitId: number): Promise<SousUnite[]> {
     nom: string;
     facteur: number;
     prix: number;
+    prix_gros: number;
   }>(
-    'SELECT id, produit_id, nom, facteur, prix FROM sous_unite WHERE produit_id = ? ORDER BY facteur',
+    'SELECT id, produit_id, nom, facteur, prix, prix_gros FROM sous_unite WHERE produit_id = ? ORDER BY facteur',
     produitId,
   );
   // Un facteur nul ou negatif rendrait toute conversion absurde (division par
@@ -169,6 +191,7 @@ async function chargerSousUnites(produitId: number): Promise<SousUnite[]> {
       nom: l.nom,
       facteur: l.facteur,
       prix: l.prix,
+      prixGros: l.prix_gros,
     }));
 }
 
@@ -200,6 +223,7 @@ interface OptionUnite {
   nom: string;
   facteur: number;
   prix: number;
+  prixGros: number;
 }
 
 function optionsUnites(produit: Produit, sousUnites: SousUnite[]): OptionUnite[] {
@@ -207,11 +231,13 @@ function optionsUnites(produit: Produit, sousUnites: SousUnite[]): OptionUnite[]
     nom: produit.uniteBase,
     facteur: 1,
     prix: Math.round(produit.prixUnitaire),
+    prixGros: Math.round(produit.prixGros ?? 0),
   };
   const autres = sousUnites.map<OptionUnite>((su) => ({
     nom: su.nom,
     facteur: su.facteur,
-    prix: su.prix > 0 ? Math.round(su.prix) : Math.round(produit.prixUnitaire * su.facteur),
+    prix: prixConditionnement(produit.prixUnitaire, su.prix, su.facteur),
+    prixGros: prixGrosConditionnement(produit.prixGros ?? 0, su.prixGros, su.facteur),
   }));
   return [base, ...autres];
 }
@@ -232,6 +258,8 @@ function quantiteBaseAuPanier(panier: ArticlePanier[], produitId: number): numbe
 interface ChoixProduit {
   produit: Produit;
   unites: OptionUnite[];
+  variantes: VarianteMobile[];
+  varianteInitialeId?: number | null;
 }
 
 interface VenteTerminee {
@@ -252,7 +280,13 @@ interface VenteTerminee {
 type EtatListe = 'chargement' | 'pret' | 'erreur';
 
 export default function EcranCaisse() {
-  const { boutique, utilisateur, revisionSynchronisation } = useSession();
+  const { boutique, utilisateur, revisionSynchronisation, profilCommerce } = useSession();
+  const habillement = profilCommerce?.secteur === 'HABILLEMENT';
+  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
+  const grosAutorise = quincaillerie
+    && !!profilCommerce?.capabilities_effectives.includes('WHOLESALE')
+    && ['GROS', 'MIXTE'].includes(profilCommerce?.mode_vente ?? 'DETAIL');
+  const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
 
   const [recherche, setRecherche] = useState('');
   const [categorie, setCategorie] = useState<string | null>(null);
@@ -334,23 +368,46 @@ export default function EcranCaisse() {
     }, [charger, revisionSynchronisation]),
   );
 
-  const ouvrirChoix = useCallback(async (produit: Produit) => {
+  const ouvrirChoix = useCallback(async (
+    produit: Produit,
+    varianteInitiale?: VarianteMobile | null,
+  ) => {
     let sousUnites: SousUnite[] = [];
+    let variantes: VarianteMobile[] = [];
     try {
       sousUnites = await chargerSousUnites(produit.id);
     } catch {
-      // Sans ses sous-unites le produit reste vendable a l'unite de base. Une
-      // caisse amputee vaut mieux qu'un article sur lequel toucher ne fait rien.
+      // Sans ses sous-unites le produit reste vendable a l'unite de base.
       sousUnites = [];
     }
-    setChoix({ produit, unites: optionsUnites(produit, sousUnites) });
-  }, []);
+    if (variantesActives) {
+      try {
+        variantes = await listerVariantesProduit(produit.id);
+      } catch {
+        variantes = [];
+      }
+    }
+    setChoix({
+      produit,
+      unites: optionsUnites(produit, sousUnites),
+      variantes,
+      varianteInitialeId: varianteInitiale?.id ?? null,
+    });
+  }, [variantesActives]);
 
   const ajouterAuPanier = useCallback(
-    (produit: Produit, unite: OptionUnite, quantite: number) => {
+    (
+      produit: Produit,
+      unite: OptionUnite,
+      quantite: number,
+      variante?: VarianteMobile | null,
+    ) => {
       setPanier((actuel) => {
         const index = actuel.findIndex(
-          (article) => article.produit.id === produit.id && article.unite === unite.nom,
+          (article) =>
+            article.produit.id === produit.id &&
+            article.unite === unite.nom &&
+            (article.variante?.id ?? null) === (variante?.id ?? null),
         );
         if (index >= 0) {
           const copie = [...actuel];
@@ -364,6 +421,7 @@ export default function EcranCaisse() {
           ...actuel,
           {
             produit,
+            variante: variante ?? null,
             unite: unite.nom,
             facteur: unite.facteur,
             quantite,
@@ -421,13 +479,23 @@ export default function EcranCaisse() {
 
   const surCodeScanne = useCallback(
     async (code: string): Promise<string | null> => {
+      if (variantesActives) {
+        const variante = await trouverVarianteParCodeBarre(code);
+        if (variante) {
+          const produit = await obtenirProduit(variante.produitId);
+          if (!produit) return `Le modèle de la variante ${code} est introuvable.`;
+          setScanOuvert(false);
+          await ouvrirChoix(produit, variante);
+          return null;
+        }
+      }
       const produit = await produitParCode(code);
       if (!produit) return `Aucun produit ne porte le code ${code}.`;
       setScanOuvert(false);
       await ouvrirChoix(produit);
       return null;
     },
-    [ouvrirChoix],
+    [ouvrirChoix, variantesActives],
   );
 
   const surVenteEnregistree = useCallback(
@@ -504,6 +572,7 @@ export default function EcranCaisse() {
           <CarteProduit
             produit={item}
             devise={boutique.devise}
+            habillement={habillement}
             onPress={() => void ouvrirChoix(item)}
           />
         )}
@@ -512,10 +581,28 @@ export default function EcranCaisse() {
   };
 
   return (
-    <SafeAreaView style={styles.ecran} edges={['top']}>
-      <View style={styles.enteteCaisse}>
-        <BoutonMenu />
-        <Text style={styles.enteteCaisseTitre}>Caisse</Text>
+    <SafeAreaView
+      style={[styles.ecran, habillement && { backgroundColor: H.fond }]}
+      edges={['top']}
+    >
+      <View style={[
+        styles.enteteCaisse,
+        habillement && { backgroundColor: H.primaire, paddingBottom: espaces.s },
+      ]}>
+        <BoutonMenu couleur={habillement ? '#FFFFFF' : couleurs.texte} />
+        <View style={{ flex: 1 }}>
+          <Text style={[
+            styles.enteteCaisseTitre,
+            habillement && { color: '#FFFFFF', fontWeight: '900' },
+          ]}>
+            {habillement ? 'Caisse Mode' : 'Caisse'}
+          </Text>
+          {habillement ? (
+            <Text style={{ color: H.primaireClair, fontSize: 10, marginTop: 1 }}>
+              Modèles · tailles · couleurs
+            </Text>
+          ) : null}
+        </View>
       </View>
       <View style={styles.barreRecherche}>
         <Champ
@@ -529,7 +616,11 @@ export default function EcranCaisse() {
           accessibilityRole="button"
           accessibilityLabel="Scanner un code-barres"
           onPress={() => setScanOuvert(true)}
-          style={({ pressed }) => [styles.boutonScan, pressed && styles.presse]}
+          style={({ pressed }) => [
+            styles.boutonScan,
+            habillement && { backgroundColor: H.primaire },
+            pressed && styles.presse,
+          ]}
         >
           <Icone nom="codeBarres" taille={18} couleur={couleurs.texteInverse} />
           <Text style={styles.boutonScanTexte}>Scanner</Text>
@@ -542,6 +633,7 @@ export default function EcranCaisse() {
         nbArticles={nbArticles}
         total={totalPanier}
         devise={boutique.devise}
+        habillement={habillement}
         onVoirPanier={() => setPanierOuvert(true)}
         onEncaisser={() => setPaiementOuvert(true)}
       />
@@ -549,8 +641,10 @@ export default function EcranCaisse() {
       {choix ? (
         <ModaleUnite
           choix={choix}
+          panier={panier}
           devise={boutique.devise}
-          dejaAuPanier={quantiteBaseAuPanier(panier, choix.produit.id)}
+          quincaillerie={quincaillerie}
+          grosAutorise={grosAutorise}
           onAnnuler={() => setChoix(null)}
           onAjouter={ajouterAuPanier}
         />
@@ -665,10 +759,12 @@ function FiltresCategorie({
 function CarteProduit({
   produit,
   devise,
+  habillement,
   onPress,
 }: {
   produit: Produit;
   devise: string;
+  habillement: boolean;
   onPress: () => void;
 }) {
   const rupture = produit.gestionStock && produit.quantiteBase <= 0;
@@ -681,7 +777,11 @@ function CarteProduit({
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={({ pressed }) => [styles.carte, pressed && styles.presse]}
+      style={({ pressed }) => [
+        styles.carte,
+        habillement && { backgroundColor: H.surface, borderColor: H.bordure },
+        pressed && styles.presse,
+      ]}
     >
       <View style={styles.cartePhoto}>
         <Vignette chemin={produit.cheminImage} nom={produit.nom} taille={72} />
@@ -698,7 +798,10 @@ function CarteProduit({
       <Text style={styles.carteNom} numberOfLines={2}>
         {produit.nom}
       </Text>
-      <Text style={styles.cartePrix} numberOfLines={1}>
+      <Text
+        style={[styles.cartePrix, habillement && { color: H.primaire }]}
+        numberOfLines={1}
+      >
         {formaterMontant(produit.prixUnitaire, devise)}
       </Text>
     </Pressable>
@@ -711,18 +814,23 @@ function BarrePanier({
   nbArticles,
   total,
   devise,
+  habillement,
   onVoirPanier,
   onEncaisser,
 }: {
   nbArticles: number;
   total: number;
   devise: string;
+  habillement: boolean;
   onVoirPanier: () => void;
   onEncaisser: () => void;
 }) {
   const vide = nbArticles === 0;
   return (
-    <View style={styles.barrePanier}>
+    <View style={[
+      styles.barrePanier,
+      habillement && { backgroundColor: H.surface, borderTopColor: H.bordure },
+    ]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Voir le panier"
@@ -771,45 +879,79 @@ function EnteteModale({ titre, onFermer }: { titre: string; onFermer: () => void
 
 function ModaleUnite({
   choix,
+  panier,
   devise,
-  dejaAuPanier,
+  quincaillerie,
+  grosAutorise,
   onAnnuler,
   onAjouter,
 }: {
   choix: ChoixProduit;
+  panier: ArticlePanier[];
   devise: string;
-  dejaAuPanier: number;
+  quincaillerie: boolean;
+  grosAutorise: boolean;
   onAnnuler: () => void;
-  onAjouter: (produit: Produit, unite: OptionUnite, quantite: number) => void;
+  onAjouter: (
+    produit: Produit,
+    unite: OptionUnite,
+    quantite: number,
+    variante?: VarianteMobile | null,
+  ) => void;
 }) {
+  const indexInitial = choix.varianteInitialeId
+    ? choix.variantes.findIndex((v) => v.id === choix.varianteInitialeId)
+    : -1;
+  const [indexVariante, setIndexVariante] = useState(indexInitial);
   const [indexUnite, setIndexUnite] = useState(0);
   const [quantiteTexte, setQuantiteTexte] = useState('1');
-  const [prixTexte, setPrixTexte] = useState(String(choix.unites[0]?.prix ?? ''));
+  const [tarif, setTarif] = useState<'detail' | 'gros'>('detail');
 
+  const variante = indexVariante >= 0 ? choix.variantes[indexVariante] : null;
   const unite = choix.unites[indexUnite] ?? choix.unites[0];
+  const prixDetail = variante?.prixOverride ?? unite?.prix ?? 0;
+  const prixGros = unite?.prixGros ?? 0;
+  const prixDefaut = tarif === 'gros' && prixGros > 0 ? prixGros : prixDetail;
+  const [prixTexte, setPrixTexte] = useState(String(prixDefaut));
+
   const quantite = lireNombre(quantiteTexte);
   const prixUnitaire = lireNombre(prixTexte);
   const produit = choix.produit;
+  const exigeVariante = choix.variantes.length > 0;
 
-  const disponible = stockDansUnite(produit, unite.facteur);
+  const dejaAuPanier = panier
+    .filter((article) =>
+      article.produit.id === produit.id &&
+      (article.variante?.id ?? null) === (variante?.id ?? null))
+    .reduce((somme, article) => somme + article.quantite * article.facteur, 0);
+
+  const disponibleBase = variante ? variante.stockActuel : produit.quantiteBase;
+  const disponible = unite.facteur > 0 ? disponibleBase / unite.facteur : disponibleBase;
   const resteApresPanier = disponible - dejaAuPanier / unite.facteur;
 
   const ligne =
     quantite > 0
       ? calculerLigne({
           produit,
+          variante,
           unite: unite.nom,
           facteur: unite.facteur,
           quantite,
-          prixUnitaire: prixUnitaire,
+          prixUnitaire,
         })
       : null;
 
   let refus: string | null = null;
-  if (quantite <= 0) {
+  if (exigeVariante && !variante) {
+    refus = quincaillerie
+      ? 'Choisissez les caractéristiques techniques avant d ajouter au panier.'
+      : 'Choisissez la taille et la couleur avant d ajouter au panier.';
+  } else if (quantite <= 0) {
     refus = 'Indiquez une quantite superieure a zero.';
   } else if (prixUnitaire <= 0) {
-    refus = "Ce produit n'a pas de prix de vente pour cette unite.";
+    refus = quincaillerie
+      ? "Cette référence n'a pas de prix de vente pour cette variante."
+      : "Ce modele n'a pas de prix de vente pour cette variante.";
   } else if (produit.gestionStock && quantite > resteApresPanier) {
     refus = `Stock insuffisant : ${formaterQuantite(
       Math.max(0, Math.round(resteApresPanier * 1000) / 1000),
@@ -826,6 +968,95 @@ function ModaleUnite({
             contentContainerStyle={styles.contenuFeuille}
             keyboardShouldPersistTaps="handled"
           >
+            {grosAutorise ? (
+              <View style={styles.tarifs}>
+                <Pressable
+                  style={[styles.tarifChoix, tarif === 'detail' && styles.tarifChoixActif]}
+                  onPress={() => {
+                    setTarif('detail');
+                    setPrixTexte(String(prixDetail));
+                  }}
+                >
+                  <Text style={[styles.tarifTexte, tarif === 'detail' && styles.tarifTexteActif]}>
+                    Détail · {formaterMontant(prixDetail, devise)}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={prixGros <= 0}
+                  style={[
+                    styles.tarifChoix,
+                    tarif === 'gros' && styles.tarifChoixActif,
+                    prixGros <= 0 && styles.tarifChoixInactif,
+                  ]}
+                  onPress={() => {
+                    if (prixGros <= 0) return;
+                    setTarif('gros');
+                    setPrixTexte(String(prixGros));
+                  }}
+                >
+                  <Text style={[styles.tarifTexte, tarif === 'gros' && styles.tarifTexteActif]}>
+                    {prixGros > 0 ? `Gros · ${formaterMontant(prixGros, devise)}` : 'Gros non défini'}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {choix.variantes.length > 0 ? (
+              <View>
+                <Text style={styles.sousLabel}>
+                  {quincaillerie ? 'Caractéristiques / variante' : 'Taille / couleur'}
+                </Text>
+                <View style={styles.grilleVariantes}>
+                  {choix.variantes.map((option, index) => {
+                    const actif = index === indexVariante;
+                    const couleur = option.valeurs.find((v) => v.codeHex)?.codeHex ?? null;
+                    return (
+                      <Pressable
+                        key={option.idLocal}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: actif }}
+                        onPress={() => {
+                          setIndexVariante(index);
+                          const u = choix.unites[indexUnite] ?? choix.unites[0];
+                          const detail = option.prixOverride ?? u?.prix ?? produit.prixUnitaire;
+                          const gros = u?.prixGros ?? 0;
+                          setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));
+                        }}
+                        style={[
+                          styles.varianteChoix,
+                          choix.variantes.length > 0 && {
+                            borderColor: H.bordure,
+                            backgroundColor: H.surface,
+                          },
+                          actif && [
+                            styles.varianteChoixActive,
+                            { backgroundColor: H.primaire, borderColor: H.primaire },
+                          ],
+                          option.stockActuel <= 0 && styles.varianteChoixRupture,
+                        ]}
+                      >
+                        <View style={styles.varianteChoixHaut}>
+                          {couleur ? (
+                            <View style={[styles.pastilleCouleur, { backgroundColor: couleur }]} />
+                          ) : null}
+                          <Text
+                            style={[styles.varianteChoixNom, actif && styles.puceNomActive]}
+                            numberOfLines={2}
+                          >
+                            {libelleVariante(option)}
+                          </Text>
+                        </View>
+                        <Text style={[styles.varianteChoixStock, actif && styles.puceDetailActive]}>
+                          {option.stockActuel > 0
+                            ? `Stock ${formaterQuantite(option.stockActuel)}`
+                            : 'Rupture'}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
+
             {choix.unites.length > 1 ? (
               <View>
                 <Text style={styles.sousLabel}>Unite de vente</Text>
@@ -839,7 +1070,11 @@ function ModaleUnite({
                         accessibilityState={{ selected: actif }}
                         onPress={() => {
                           setIndexUnite(index);
-                          setPrixTexte(String(option.prix));
+                          const detail = variante?.prixOverride ??
+                            (option.prix > 0 ? option.prix : produit.prixUnitaire * option.facteur);
+                          const gros = option.prixGros ?? 0;
+                          if (tarif === 'gros' && gros <= 0) setTarif('detail');
+                          setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));
                         }}
                         style={[styles.puce, actif && styles.puceActive]}
                       >
@@ -900,6 +1135,9 @@ function ModaleUnite({
             />
 
             <Carte style={styles.resume}>
+              {variante ? (
+                <LigneResume libelle="Variante" valeur={libelleVariante(variante)} />
+              ) : null}
               <LigneResume
                 libelle="Prix unitaire"
                 valeur={formaterMontant(prixUnitaire, devise)}
@@ -925,7 +1163,14 @@ function ModaleUnite({
           <View style={styles.piedFeuille}>
             <Bouton
               titre="Ajouter au panier"
-              onPress={() => onAjouter(produit, { ...unite, prix: prixUnitaire }, quantite)}
+              onPress={() =>
+                onAjouter(
+                  produit,
+                  { ...unite, prix: prixUnitaire },
+                  quantite,
+                  variante,
+                )
+              }
               desactive={refus !== null}
               grand
             />
@@ -1001,7 +1246,7 @@ function ModalePanier({
                 <View style={styles.lignePanier}>
                   <View style={styles.lignePanierHaut}>
                     <Text style={styles.lignePanierNom} numberOfLines={2}>
-                      {item.produit.nom}
+                      {calculerLigne(item).libelle}
                     </Text>
                     <Montant valeur={ligne.total} devise={devise} taille="moyen" />
                   </View>
@@ -1765,6 +2010,45 @@ const styles = StyleSheet.create({
   puceNomActive: { color: couleurs.texteInverse },
   puceDetail: { fontSize: 12, color: couleurs.texteFaible, marginTop: 2 },
   puceDetailActive: { color: couleurs.primaireDouce },
+
+  grilleVariantes: { flexDirection: 'row', flexWrap: 'wrap', gap: espaces.s },
+  varianteChoix: {
+    minWidth: '30%',
+    maxWidth: '48%',
+    minHeight: 64,
+    justifyContent: 'center',
+    paddingHorizontal: espaces.m,
+    paddingVertical: espaces.s,
+    borderRadius: rayons.m,
+    borderWidth: 1,
+    borderColor: couleurs.bordure,
+    backgroundColor: couleurs.surface,
+  },
+  varianteChoixActive: {
+    backgroundColor: couleurs.primaire,
+    borderColor: couleurs.primaire,
+  },
+  varianteChoixRupture: { opacity: 0.55 },
+  tarifs: { flexDirection: 'row', gap: espaces.s, marginBottom: espaces.m },
+  tarifChoix: {
+    flex: 1, minHeight: 48, borderRadius: rayons.m, borderWidth: 1,
+    borderColor: couleurs.bordure, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: espaces.s, backgroundColor: couleurs.surface,
+  },
+  tarifChoixActif: { backgroundColor: couleurs.primaire, borderColor: couleurs.primaire },
+  tarifChoixInactif: { opacity: 0.4 },
+  tarifTexte: { color: couleurs.texte, fontWeight: '700', fontSize: 12, textAlign: 'center' },
+  tarifTexteActif: { color: couleurs.texteInverse },
+  varianteChoixHaut: { flexDirection: 'row', alignItems: 'center', gap: espaces.s },
+  varianteChoixNom: { flexShrink: 1, fontSize: 13, fontWeight: '800', color: couleurs.texte },
+  varianteChoixStock: { marginTop: 4, fontSize: 11, color: couleurs.texteFaible },
+  pastilleCouleur: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: couleurs.bordure,
+  },
 
   compteur: { flexDirection: 'row', alignItems: 'flex-start', gap: espaces.m },
   champQuantite: { flex: 1, marginBottom: 0 },

@@ -29,6 +29,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { couleurs } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import type { NomIcone } from '../../src/ui/icones';
+import { useSession } from '../_layout';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
+import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
+import { ongletsAutorises } from '../../src/domain/permissions-mobile';
 
 /**
  * Les pictogrammes de la barre sont un peu plus grands que dans le corps du
@@ -43,17 +47,27 @@ function icone(nom: NomIcone) {
 
 export default function DispositionOnglets() {
   const marges = useSafeAreaInsets();
+  const { profilCommerce, utilisateur } = useSession();
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
+  const l = profilUI.libelles;
+  const habillement = profilUI.code === 'HABILLEMENT';
+  const active = habillement ? H.primaire : couleurs.primaire;
+  const inactive = habillement ? H.texteFaible : couleurs.texteFaible;
+  const fond = habillement ? H.fond : couleurs.fond;
+  const surface = habillement ? H.surface : couleurs.surface;
+  const bordure = habillement ? H.bordure : couleurs.bordure;
+  const onglets = ongletsAutorises(utilisateur?.role ?? 'vendeur');
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: couleurs.primaire,
-        tabBarInactiveTintColor: couleurs.texteFaible,
-        sceneStyle: { backgroundColor: couleurs.fond },
+        tabBarActiveTintColor: active,
+        tabBarInactiveTintColor: inactive,
+        sceneStyle: { backgroundColor: fond },
         tabBarStyle: {
-          backgroundColor: couleurs.surface,
-          borderTopColor: couleurs.bordure,
+          backgroundColor: surface,
+          borderTopColor: bordure,
           // Hauteur imposee pour garder des cibles confortables : la valeur par
           // defaut de React Navigation descend sous les 48 points utiles des
           // que le systeme reserve une barre de gestes.
@@ -64,14 +78,14 @@ export default function DispositionOnglets() {
         tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
       }}
     >
-      <Tabs.Screen name="accueil" options={{ title: 'Accueil', tabBarIcon: icone('accueil') }} />
-      <Tabs.Screen name="caisse" options={{ title: 'Caisse', tabBarIcon: icone('caisse') }} />
+      <Tabs.Screen name="accueil" options={{ title: l.accueil, tabBarIcon: icone('accueil') }} />
+      <Tabs.Screen name="caisse" options={{ title: l.caisse, tabBarIcon: icone('caisse') }} />
       <Tabs.Screen
         name="catalogue"
-        options={{ title: 'Catalogue', tabBarIcon: icone('catalogue') }}
+        options={{ title: l.catalogue, tabBarIcon: icone('catalogue'), href: onglets.catalogue ? undefined : null }}
       />
-      <Tabs.Screen name="achats" options={{ title: 'Achats', tabBarIcon: icone('achats') }} />
-      <Tabs.Screen name="stock" options={{ title: 'Stock', tabBarIcon: icone('stock') }} />
+      <Tabs.Screen name="achats" options={{ title: l.achats, tabBarIcon: icone('achats'), href: onglets.achats ? undefined : null }} />
+      <Tabs.Screen name="stock" options={{ title: l.stock, tabBarIcon: icone('stock'), href: onglets.stock ? undefined : null }} />
       <Tabs.Screen name="ventes" options={{ href: null }} />
     </Tabs>
   );

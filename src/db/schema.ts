@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 16;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -362,5 +362,158 @@ export const MIGRATIONS: string[][] = [
   // --- version 9 : photo/profil client ------------------------------------
   [
     `ALTER TABLE client ADD COLUMN chemin_photo TEXT`,
+  ],
+
+  // --- version 10 : variantes Habillement ---------------------------------
+  [
+    `CREATE TABLE IF NOT EXISTS variante_produit (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local          TEXT    NOT NULL UNIQUE,
+      produit_id        INTEGER NOT NULL REFERENCES produit(id) ON DELETE CASCADE,
+      sku               TEXT    NOT NULL,
+      code_barre        TEXT,
+      prix_override     REAL,
+      prix_achat        REAL,
+      stock_actuel      REAL    NOT NULL DEFAULT 0,
+      actif             INTEGER NOT NULL DEFAULT 1,
+      date_creation     TEXT,
+      date_modification TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_produit ON variante_produit(produit_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_sku ON variante_produit(sku)`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_code_barre ON variante_produit(code_barre)`,
+
+    `CREATE TABLE IF NOT EXISTS variante_valeur (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      variante_id        INTEGER NOT NULL REFERENCES variante_produit(id) ON DELETE CASCADE,
+      valeur_serveur_id  INTEGER,
+      dimension_id       INTEGER,
+      dimension_code     TEXT    NOT NULL,
+      dimension_nom      TEXT    NOT NULL,
+      dimension_ordre    INTEGER NOT NULL DEFAULT 0,
+      valeur_code        TEXT    NOT NULL,
+      valeur_nom         TEXT    NOT NULL,
+      code_hex           TEXT,
+      valeur_ordre       INTEGER NOT NULL DEFAULT 0
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_valeur_variante ON variante_valeur(variante_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_valeur_dimension ON variante_valeur(dimension_code, valeur_code)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_valeur_unique
+       ON variante_valeur(variante_id, dimension_code)`,
+
+    `ALTER TABLE ligne_vente ADD COLUMN variante_id INTEGER REFERENCES variante_produit(id)`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_vente_variante ON ligne_vente(variante_id)`,
+    `ALTER TABLE mouvement_stock ADD COLUMN variante_id INTEGER REFERENCES variante_produit(id)`,
+    `CREATE INDEX IF NOT EXISTS idx_mouvement_variante ON mouvement_stock(variante_id)`,
+    `ALTER TABLE ligne_achat ADD COLUMN variante_id INTEGER REFERENCES variante_produit(id)`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_achat_variante ON ligne_achat(variante_id)`,
+  ],
+
+  // --- version 11 : referentiel tailles/couleurs independant ---------------
+  [
+    `CREATE TABLE IF NOT EXISTS dimension_variante_ref (
+      id_serveur INTEGER PRIMARY KEY,
+      code       TEXT NOT NULL UNIQUE,
+      nom        TEXT NOT NULL,
+      ordre      INTEGER NOT NULL DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS valeur_dimension_ref (
+      id_serveur          INTEGER PRIMARY KEY,
+      dimension_id_serveur INTEGER NOT NULL,
+      code                TEXT NOT NULL,
+      nom                 TEXT NOT NULL,
+      code_hex            TEXT,
+      ordre               INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY(dimension_id_serveur) REFERENCES dimension_variante_ref(id_serveur) ON DELETE CASCADE
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_valeur_dimension_ref_dim
+       ON valeur_dimension_ref(dimension_id_serveur, ordre, nom)`,
+  ],
+
+  // --- version 12 : echanges de variantes synchronisables ------------------
+  [
+    `ALTER TABLE ligne_vente ADD COLUMN ligne_serveur_id INTEGER`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_vente_serveur ON ligne_vente(ligne_serveur_id)`,
+
+    `CREATE TABLE IF NOT EXISTS echange_variante (
+      id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local                   TEXT NOT NULL UNIQUE,
+      vente_id                   INTEGER NOT NULL REFERENCES vente(id) ON DELETE CASCADE,
+      ligne_vente_id             INTEGER REFERENCES ligne_vente(id) ON DELETE SET NULL,
+      ligne_serveur_id           INTEGER NOT NULL,
+      ancienne_variante_id       INTEGER REFERENCES variante_produit(id),
+      nouvelle_variante_id       INTEGER NOT NULL REFERENCES variante_produit(id),
+      quantite                   REAL NOT NULL DEFAULT 1,
+      prix_ancien                REAL NOT NULL DEFAULT 0,
+      prix_nouveau               REAL NOT NULL DEFAULT 0,
+      difference_prix            REAL NOT NULL DEFAULT 0,
+      note                       TEXT,
+      date_echange               TEXT NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_echange_variante_vente ON echange_variante(vente_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_echange_variante_ligne ON echange_variante(ligne_vente_id)`,
+  ],
+
+  // --- version 13 : commandes clients Habillement --------------------------
+  [
+    `CREATE TABLE IF NOT EXISTS commande_client (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local            TEXT NOT NULL UNIQUE,
+      serveur_id          INTEGER,
+      numero              TEXT NOT NULL,
+      client_id           INTEGER REFERENCES client(id),
+      statut              TEXT NOT NULL DEFAULT 'BROUILLON',
+      total               REAL NOT NULL DEFAULT 0,
+      montant_paye        REAL NOT NULL DEFAULT 0,
+      note                TEXT,
+      date_creation       TEXT NOT NULL,
+      date_confirmation   TEXT,
+      date_prete          TEXT,
+      date_fin            TEXT,
+      sync_statut         TEXT NOT NULL DEFAULT 'LOCAL'
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_commande_client_serveur ON commande_client(serveur_id) WHERE serveur_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_commande_client_statut ON commande_client(statut, date_creation)`,
+
+    `CREATE TABLE IF NOT EXISTS ligne_commande_client (
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      commande_id          INTEGER NOT NULL REFERENCES commande_client(id) ON DELETE CASCADE,
+      serveur_id           INTEGER,
+      produit_id           INTEGER NOT NULL REFERENCES produit(id),
+      variante_id          INTEGER REFERENCES variante_produit(id),
+      libelle              TEXT NOT NULL,
+      quantite_commandee   REAL NOT NULL,
+      quantite_reservee    REAL NOT NULL DEFAULT 0,
+      quantite_preparee    REAL NOT NULL DEFAULT 0,
+      prix_unitaire        REAL NOT NULL,
+      total                REAL NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_commande_client_commande ON ligne_commande_client(commande_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_commande_client_variante ON ligne_commande_client(variante_id)`,
+  ],
+
+  // --- version 14 : demande de conversion commande -> vente ----------------
+  [
+    `ALTER TABLE commande_client ADD COLUMN conversion_demandee INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE commande_client ADD COLUMN conversion_mode_paiement TEXT`,
+    `ALTER TABLE commande_client ADD COLUMN conversion_montant_paye REAL`,
+  ],
+
+  // --- version 15 : receptions partielles fournisseur ----------------------
+  [
+    `ALTER TABLE ligne_achat ADD COLUMN quantite_recue REAL NOT NULL DEFAULT 0`,
+    `ALTER TABLE ligne_achat ADD COLUMN serveur_id INTEGER`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_ligne_achat_serveur
+       ON ligne_achat(serveur_id) WHERE serveur_id IS NOT NULL`,
+  ],
+
+  // --- version 16 : fiche commerciale Quincaillerie ------------------------
+  [
+    `ALTER TABLE produit ADD COLUMN marque TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE produit ADD COLUMN reference_fabricant TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE produit ADD COLUMN prix_gros REAL NOT NULL DEFAULT 0`,
+    `ALTER TABLE sous_unite ADD COLUMN prix_gros REAL NOT NULL DEFAULT 0`,
+    `CREATE INDEX IF NOT EXISTS idx_produit_marque ON produit(marque)`,
+    `CREATE INDEX IF NOT EXISTS idx_produit_reference_fabricant ON produit(reference_fabricant)`,
   ],
 ];

@@ -32,6 +32,17 @@ export const LONGUEUR_PIN_MAX = 9;
 /** Compatibilite pour les ecrans qui utilisaient encore cette constante. */
 export const LONGUEUR_PIN = LONGUEUR_PIN_MIN;
 
+const ecouteursCompteLocal = new Set<() => void>();
+
+export function ecouterChangementCompteLocal(ecouteur: () => void): () => void {
+  ecouteursCompteLocal.add(ecouteur);
+  return () => ecouteursCompteLocal.delete(ecouteur);
+}
+
+function notifierChangementCompteLocal(): void {
+  for (const ecouteur of ecouteursCompteLocal) ecouteur();
+}
+
 export class PinInvalide extends Error {
   constructor(message: string) {
     super(message);
@@ -91,6 +102,41 @@ function versUtilisateur(l: LigneUtilisateur): Utilisateur {
   };
 }
 
+export async function obtenirUtilisateurParIdLocal(idLocal: string): Promise<Utilisateur | null> {
+  if (!idLocal) return null;
+  const ligne = await lirePremier<LigneUtilisateur>(
+    `SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a
+       FROM utilisateur WHERE id_local = ?`,
+    idLocal,
+  );
+  return ligne ? versUtilisateur(ligne) : null;
+}
+
+export async function obtenirUtilisateurParId(id: number): Promise<Utilisateur | null> {
+  if (!Number.isInteger(id) || id <= 0) return null;
+  const ligne = await lirePremier<LigneUtilisateur>(
+    `SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a
+       FROM utilisateur WHERE id = ?`,
+    id,
+  );
+  return ligne ? versUtilisateur(ligne) : null;
+}
+
+export interface CompteConnexion extends Utilisateur {
+  aCodeLocal: boolean;
+}
+
+export async function listerComptesConnexion(): Promise<CompteConnexion[]> {
+  const lignes = await lireTout<LigneUtilisateur & { code_pin: string }>(
+    `SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a, code_pin
+       FROM utilisateur WHERE actif = 1 ORDER BY nom COLLATE NOCASE, login COLLATE NOCASE`,
+  );
+  return lignes.map((ligne) => ({
+    ...versUtilisateur(ligne),
+    aCodeLocal: Boolean(ligne.code_pin && ligne.code_pin.trim()),
+  }));
+}
+
 export async function listerUtilisateurs(actifsSeulement = false): Promise<Utilisateur[]> {
   const ou = actifsSeulement ? ' WHERE actif = 1' : '';
   const lignes = await lireTout<LigneUtilisateur>(
@@ -148,6 +194,7 @@ export async function creerUtilisateur(saisie: SaisieUtilisateur): Promise<numbe
   if (saisie.role === 'vendeur' && cree?.id_local) {
     await marquerChangement('utilisateur', cree.id_local);
   }
+  notifierChangementCompteLocal();
   return id;
 }
 
@@ -218,6 +265,7 @@ export async function modifierUtilisateur(
     const role = await lirePremier<{ role: string }>('SELECT role FROM utilisateur WHERE id = ?', id);
     if (role?.role === 'vendeur') await marquerChangement('utilisateur', modifie.id_local);
   }
+  notifierChangementCompteLocal();
 }
 
 /**

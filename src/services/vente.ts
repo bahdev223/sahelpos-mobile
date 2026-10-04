@@ -12,6 +12,8 @@ import type * as SQLite from 'expo-sqlite';
 import { obtenirBase } from '../db/database';
 import { genererIdLocal } from '../db/repositories/base';
 import type { LigneVente, ModePaiement, Produit } from '../domain/types';
+import type { VarianteMobile } from '../db/repositories/variante';
+import { libelleVariante } from '../db/repositories/variante';
 import { exigerEcriture } from './abonnement';
 import { verifierAccesCaisse } from './auth';
 import { verifierStock } from './notifications';
@@ -25,6 +27,8 @@ export interface ArticlePanier {
   facteur: number;
   quantite: number;
   prixUnitaire: number;
+  /** Declinaison exacte vendue pour les profils a variantes (taille/couleur). */
+  variante?: VarianteMobile | null;
 }
 
 export interface DemandeVente {
@@ -58,12 +62,16 @@ export function calculerLigne(article: ArticlePanier): LigneVente {
   const quantiteBase = article.quantite * article.facteur;
   const total = arrondir(article.quantite * article.prixUnitaire);
   // Le cout est celui de l'unite de base, ramene a l'unite vendue.
-  const coutUnitaire = arrondir(article.produit.prixAchat * article.facteur);
+  const coutBase = article.variante?.prixAchat ?? article.produit.prixAchat;
+  const coutUnitaire = arrondir(coutBase * article.facteur);
   const beneficeTotal = total - arrondir(coutUnitaire * article.quantite);
+  const libelle = article.variante
+    ? `${article.produit.nom} - ${libelleVariante(article.variante)}`
+    : article.produit.nom;
 
   return {
     produitId: article.produit.id,
-    libelle: article.produit.nom,
+    libelle,
     unite: article.unite,
     facteur: article.facteur,
     quantite: article.quantite,
@@ -119,11 +127,22 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
     // Le stock est relu DANS la transaction : le lire avant laisserait une
     // fenetre ou deux ventes simultanees passeraient le meme article.
     const demandesParProduit = new Map<number, number>();
-    for (const ligne of lignes) {
-      demandesParProduit.set(
-        ligne.produitId,
-        (demandesParProduit.get(ligne.produitId) ?? 0) + ligne.quantiteBase,
-      );
+    const demandesParVariante = new Map<number, { quantite: number; nom: string }>();
+    for (let i = 0; i < lignes.length; i++) {
+      const ligne = lignes[i];
+      const article = demande.articles[i];
+      if (article.variante) {
+        const courant = demandesParVariante.get(article.variante.id);
+        demandesParVariante.set(article.variante.id, {
+          quantite: (courant?.quantite ?? 0) + ligne.quantiteBase,
+          nom: ligne.libelle,
+        });
+      } else {
+        demandesParProduit.set(
+          ligne.produitId,
+          (demandesParProduit.get(ligne.produitId) ?? 0) + ligne.quantiteBase,
+        );
+      }
     }
     for (const [produitId, quantiteDemandee] of demandesParProduit) {
       const p = await db.getFirstAsync<{ nom: string; quantite_base: number; gestion_stock: number }>(
@@ -133,6 +152,16 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
       if (!p) throw new Error(`Produit ${produitId} introuvable.`);
       if (p.gestion_stock && p.quantite_base < quantiteDemandee) {
         throw new StockInsuffisant(p.nom, quantiteDemandee, p.quantite_base);
+      }
+    }
+    for (const [varianteId, demandeVariante] of demandesParVariante) {
+      const v = await db.getFirstAsync<{ stock_actuel: number; actif: number }>(
+        'SELECT stock_actuel, actif FROM variante_produit WHERE id = ?',
+        varianteId,
+      );
+      if (!v || v.actif !== 1) throw new Error(`Variante introuvable : ${demandeVariante.nom}.`);
+      if (v.stock_actuel < demandeVariante.quantite) {
+        throw new StockInsuffisant(demandeVariante.nom, demandeVariante.quantite, v.stock_actuel);
       }
     }
 
@@ -165,13 +194,15 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
     );
     const venteId = vente.lastInsertRowId;
 
-    for (const l of lignes) {
+    for (let i = 0; i < lignes.length; i++) {
+      const l = lignes[i];
+      const article = demande.articles[i];
       await db.runAsync(
-        `INSERT INTO ligne_vente (vente_id, produit_id, libelle, unite, facteur,
+        `INSERT INTO ligne_vente (vente_id, produit_id, variante_id, libelle, unite, facteur,
                                   quantite, quantite_base, prix_unitaire,
                                   cout_unitaire, total, benefice_total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        venteId, l.produitId, l.libelle, l.unite, l.facteur,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        venteId, l.produitId, article.variante?.id ?? null, l.libelle, l.unite, l.facteur,
         l.quantite, l.quantiteBase, l.prixUnitaire,
         l.coutUnitaire, l.total, l.beneficeTotal,
       );
@@ -187,13 +218,21 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
         'UPDATE produit SET quantite_base = ?, date_modification = ? WHERE id = ?',
         apres, maintenant, l.produitId,
       );
+      if (article.variante) {
+        await db.runAsync(
+          'UPDATE variante_produit SET stock_actuel = stock_actuel - ?, date_modification = ? WHERE id = ?',
+          l.quantiteBase, maintenant, article.variante.id,
+        );
+      }
       await db.runAsync(
-        `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
+        `INSERT INTO mouvement_stock (id_local, produit_id, variante_id, nature, source_operation, quantite,
                                       unite, quantite_base, stock_avant, stock_apres,
                                       prix_unitaire, reference, motif, utilisateur, date_mouvement)
-         VALUES (lower(hex(randomblob(16))), ?, 'SORTIE', 'VENTE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        l.produitId, l.quantite, l.unite, l.quantiteBase,
-        avant.quantite_base, apres, l.prixUnitaire, numero, `Vente ${numero}`, nomVendeur, maintenant,
+         VALUES (lower(hex(randomblob(16))), ?, ?, 'SORTIE', 'VENTE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        l.produitId, article.variante?.id ?? null, l.quantite, l.unite, l.quantiteBase,
+        article.variante ? article.variante.stockActuel : avant.quantite_base,
+        article.variante ? article.variante.stockActuel - l.quantiteBase : apres,
+        l.prixUnitaire, numero, `Vente ${numero}`, nomVendeur, maintenant,
       );
     }
 

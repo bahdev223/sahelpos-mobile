@@ -20,8 +20,11 @@ interface LigneProduit {
   id_local: string;
   nom: string;
   categorie: string | null;
+  marque: string;
+  reference_fabricant: string;
   code_barre: string | null;
   prix_unitaire: number;
+  prix_gros: number;
   prix_achat: number;
   unite_base: string;
   quantite_base: number;
@@ -32,7 +35,7 @@ interface LigneProduit {
 }
 
 const COLONNES =
-  'id, id_local, nom, categorie, code_barre, prix_unitaire, prix_achat, ' +
+  'id, id_local, nom, categorie, marque, reference_fabricant, code_barre, prix_unitaire, prix_gros, prix_achat, ' +
   'unite_base, quantite_base, stock_min, gestion_stock, chemin_image, actif';
 
 function versProduit(l: LigneProduit): Produit {
@@ -41,8 +44,11 @@ function versProduit(l: LigneProduit): Produit {
     idLocal: l.id_local,
     nom: l.nom,
     categorie: l.categorie,
+    marque: l.marque,
+    referenceFabricant: l.reference_fabricant,
     codeBarre: l.code_barre,
     prixUnitaire: l.prix_unitaire,
+    prixGros: l.prix_gros,
     prixAchat: l.prix_achat,
     uniteBase: l.unite_base,
     quantiteBase: l.quantite_base,
@@ -68,9 +74,9 @@ export async function listerProduits(filtre: FiltreProduit = {}): Promise<Produi
   if (filtre.recherche?.trim()) {
     // Le commercant tape un fragment de nom, ou scanne un code : on cherche
     // dans les deux sans lui demander de choisir.
-    conditions.push('(nom LIKE ? OR code_barre LIKE ?)');
+    conditions.push('(nom LIKE ? OR code_barre LIKE ? OR marque LIKE ? OR reference_fabricant LIKE ?)');
     const motif = `%${filtre.recherche.trim()}%`;
-    params.push(motif, motif);
+    params.push(motif, motif, motif, motif);
   }
   if (filtre.categorie) {
     conditions.push('categorie = ?');
@@ -117,8 +123,9 @@ export async function listerSousUnites(produitId: number): Promise<SousUnite[]> 
     nom: string;
     facteur: number;
     prix: number;
+    prix_gros: number;
   }>(
-    'SELECT id, produit_id, nom, facteur, prix FROM sous_unite ' +
+    'SELECT id, produit_id, nom, facteur, prix, prix_gros FROM sous_unite ' +
       'WHERE produit_id = ? ORDER BY facteur',
     produitId,
   );
@@ -128,6 +135,7 @@ export async function listerSousUnites(produitId: number): Promise<SousUnite[]> 
     nom: l.nom,
     facteur: l.facteur,
     prix: l.prix,
+    prixGros: l.prix_gros,
   }));
 }
 
@@ -135,7 +143,10 @@ export interface SaisieProduit {
   nom: string;
   categorie?: string | null;
   codeBarre?: string | null;
+  marque?: string;
+  referenceFabricant?: string;
   prixUnitaire: number;
+  prixGros?: number;
   prixAchat: number;
   uniteBase: string;
   quantiteBase?: number;
@@ -143,7 +154,7 @@ export interface SaisieProduit {
   gestionStock?: boolean;
   cheminImage?: string | null;
   actif?: boolean;
-  sousUnites?: Array<{ nom: string; facteur: number; prix: number }>;
+  sousUnites?: Array<{ nom: string; facteur: number; prix: number; prixGros?: number }>;
 }
 
 export async function creerProduit(saisie: SaisieProduit): Promise<number> {
@@ -152,16 +163,19 @@ export async function creerProduit(saisie: SaisieProduit): Promise<number> {
     const idLocal = genererIdLocal();
     const horodatage = maintenant();
     const r = await executer(
-      `INSERT INTO produit (id_local, nom, categorie, code_barre, prix_unitaire,
-                            prix_achat, unite_base, quantite_base, stock_min,
-                            gestion_stock, chemin_image, actif, date_creation,
-                            date_modification)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO produit
+       (id_local, nom, categorie, marque, reference_fabricant, code_barre,
+        prix_unitaire, prix_gros, prix_achat, unite_base, quantite_base, stock_min,
+        gestion_stock, chemin_image, actif, date_creation, date_modification)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       idLocal,
       saisie.nom.trim(),
       saisie.categorie ?? null,
+      saisie.marque?.trim() ?? '',
+      saisie.referenceFabricant?.trim() ?? '',
       saisie.codeBarre?.trim() || null,
       Math.round(saisie.prixUnitaire),
+      Math.round(saisie.prixGros ?? 0),
       Math.round(saisie.prixAchat),
       saisie.uniteBase || 'Unite',
       saisie.quantiteBase ?? 0,
@@ -175,11 +189,12 @@ export async function creerProduit(saisie: SaisieProduit): Promise<number> {
     const id = r.lastInsertRowId;
     for (const su of saisie.sousUnites ?? []) {
       await executer(
-        'INSERT INTO sous_unite (produit_id, nom, facteur, prix) VALUES (?, ?, ?, ?)',
+        'INSERT INTO sous_unite (produit_id, nom, facteur, prix, prix_gros) VALUES (?, ?, ?, ?, ?)',
         id,
         su.nom,
         su.facteur,
         Math.round(su.prix),
+        Math.round(su.prixGros ?? 0),
       );
     }
     await marquerChangement('produit', idLocal);
@@ -195,15 +210,19 @@ export async function modifierProduit(id: number, saisie: SaisieProduit): Promis
       id,
     );
     await executer(
-      `UPDATE produit SET nom = ?, categorie = ?, code_barre = ?, prix_unitaire = ?,
+      `UPDATE produit SET nom = ?, categorie = ?, marque = ?, reference_fabricant = ?,
+                          code_barre = ?, prix_unitaire = ?, prix_gros = ?,
                           prix_achat = ?, unite_base = ?, stock_min = ?,
                           gestion_stock = ?, chemin_image = ?, actif = ?,
                           date_modification = ?
        WHERE id = ?`,
       saisie.nom.trim(),
       saisie.categorie ?? null,
+      saisie.marque?.trim() ?? '',
+      saisie.referenceFabricant?.trim() ?? '',
       saisie.codeBarre?.trim() || null,
       Math.round(saisie.prixUnitaire),
+      Math.round(saisie.prixGros ?? 0),
       Math.round(saisie.prixAchat),
       saisie.uniteBase || 'Unite',
       saisie.stockMin ?? 0,
@@ -221,11 +240,12 @@ export async function modifierProduit(id: number, saisie: SaisieProduit): Promis
       await executer('DELETE FROM sous_unite WHERE produit_id = ?', id);
       for (const su of saisie.sousUnites) {
         await executer(
-          'INSERT INTO sous_unite (produit_id, nom, facteur, prix) VALUES (?, ?, ?, ?)',
+          'INSERT INTO sous_unite (produit_id, nom, facteur, prix, prix_gros) VALUES (?, ?, ?, ?, ?)',
           id,
           su.nom,
           su.facteur,
           Math.round(su.prix),
+          Math.round(su.prixGros ?? 0),
         );
       }
     }

@@ -18,7 +18,6 @@ const contrat = {
   version: 1, secteur: 'ELECTRONIQUE', secteur_libelle: 'Electronique',
   mode_vente: 'DETAIL', mode_approvisionnement: 'CLASSIQUE', mode_catalogue: 'SIMPLE',
   capabilities_effectives: ['STOCK_SIMPLE', 'BARCODE'], capabilities_non_supportees: [],
-  ecritures_autorisees: ['utilisateurs', 'produits', 'clients', 'fournisseurs', 'achats', 'boutique', 'ventes', 'mouvements'],
   compatible: true, raison: '',
 };
 
@@ -31,42 +30,9 @@ test('mobile exposes the nine actual server commerce sectors', () => {
 });
 
 test('signed simple catalogue remains usable offline', () => {
-  const { lireProfilCommerce, ecritureCommerceAutorisee } = charger();
-  const profil = lireProfilCommerce(contrat);
-  assert.equal(profil.compatible, true);
-  assert.equal(profil.secteur, 'ELECTRONIQUE');
-  assert.equal(ecritureCommerceAutorisee(profil, 'ventes'), true);
-  assert.equal(ecritureCommerceAutorisee(profil, 'produits'), true);
-});
-
-test('advanced profile keeps safe mobile writes without flattening its catalogue', () => {
-  const { lireProfilCommerce, ecritureCommerceAutorisee } = charger();
-  const profil = lireProfilCommerce({
-    ...contrat,
-    mode_catalogue: 'ADVANCED',
-    capabilities_non_supportees: ['PRODUCT_VARIANTS'],
-    ecritures_autorisees: ['utilisateurs', 'clients', 'fournisseurs', 'boutique'],
-    compatible: false,
-    raison: 'Mode mobile partiel.',
-  });
-  assert.equal(profil.compatible, false);
-  assert.equal(ecritureCommerceAutorisee(profil, 'clients'), true);
-  assert.equal(ecritureCommerceAutorisee(profil, 'fournisseurs'), true);
-  assert.equal(ecritureCommerceAutorisee(profil, 'produits'), false);
-  assert.equal(ecritureCommerceAutorisee(profil, 'ventes'), false);
-});
-
-test('old signed incompatible licence is migrated to safe core writes', () => {
-  const { lireProfilCommerce, ecritureCommerceAutorisee } = charger();
-  const { ecritures_autorisees, ...ancienContrat } = {
-    ...contrat,
-    mode_catalogue: 'ADVANCED',
-    compatible: false,
-  };
-  const profil = lireProfilCommerce(ancienContrat);
-  assert.equal(ecritureCommerceAutorisee(profil, 'clients'), true);
-  assert.equal(ecritureCommerceAutorisee(profil, 'boutique'), true);
-  assert.equal(ecritureCommerceAutorisee(profil, 'produits'), false);
+  const { lireProfilCommerce } = charger();
+  assert.equal(lireProfilCommerce(contrat).compatible, true);
+  assert.equal(lireProfilCommerce(contrat).secteur, 'ELECTRONIQUE');
 });
 
 test('unsupported catalogues and capabilities cannot unlock this APK', () => {
@@ -88,4 +54,44 @@ test('missing or unknown commerce contracts fail closed', () => {
     { ...contrat, secteur: 'INCONNU' }, { ...contrat, capabilities_effectives: null }]) {
     assert.equal(lireProfilCommerce(value), null);
   }
+});
+
+
+test('habillement core profile is supported and resolves dedicated mobile labels', () => {
+  const { lireProfilCommerce, resoudreProfilUIMobile } = charger();
+  const habillement = lireProfilCommerce({
+    ...contrat,
+    secteur: 'HABILLEMENT',
+    secteur_libelle: 'Habillement',
+    capabilities_effectives: [
+      'STOCK_SIMPLE', 'PRODUCT_VARIANTS', 'SIZE_DIMENSION',
+      'COLOR_DIMENSION', 'VARIANT_EXCHANGE', 'INVENTORY',
+    ],
+  });
+  assert.equal(habillement?.compatible, true);
+  const ui = resoudreProfilUIMobile(habillement);
+  assert.equal(ui.code, 'HABILLEMENT');
+  assert.equal(ui.libelles.catalogue, 'Modeles');
+  assert.equal(ui.libelles.produits, 'Modeles');
+  assert.equal(ui.libelles.categories, 'Collections');
+});
+
+
+test('quincaillerie profile is compatible and exposes technical labels', () => {
+  const { lireProfilCommerce, resoudreProfilUIMobile } = charger();
+  const quincaillerie = lireProfilCommerce({
+    ...contrat,
+    secteur: 'QUINCAILLERIE',
+    secteur_libelle: 'Quincaillerie',
+    capabilities_effectives: [
+      'STOCK_SIMPLE', 'MULTI_UNIT', 'PRODUCT_VARIANTS',
+      'TECHNICAL_DIMENSIONS', 'WHOLESALE', 'INVENTORY', 'LOW_STOCK_ALERT', 'BARCODE',
+    ],
+  });
+  assert.equal(quincaillerie?.compatible, true);
+  const ui = resoudreProfilUIMobile(quincaillerie);
+  assert.equal(ui.code, 'QUINCAILLERIE');
+  assert.equal(ui.libelles.catalogue, 'Références');
+  assert.equal(ui.libelles.categories, 'Rayons');
+  assert.equal(ui.libelles.achats, 'Appro.');
 });

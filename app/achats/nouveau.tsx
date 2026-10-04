@@ -9,6 +9,11 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ListeVide, Vignette, couleurs, formaterMontant, formaterQuantite } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { listerProduits, listerSousUnites } from '../../src/db/repositories/produit';
+import {
+  libelleVariante,
+  listerVariantesProduit,
+  type VarianteMobile,
+} from '../../src/db/repositories/variante';
 import { listerFournisseurs, type Fournisseur } from '../../src/db/repositories/fournisseur';
 import { useSession } from '../_layout';
 import { calculerLigneAchat, enregistrerAchat, type ArticleAchat, type ModePaiementAchat } from '../../src/services/achat';
@@ -23,8 +28,13 @@ const dateAujourdhui = () => new Intl.DateTimeFormat('fr-FR', {
 
 export default function EcranNouvelAchat() {
   const router = useRouter();
-  const { commande } = useLocalSearchParams<{ commande?: string }>();
-  const { boutique } = useSession();
+  const { commande, matrice } = useLocalSearchParams<{ commande?: string; matrice?: string }>();
+  const { boutique, profilCommerce } = useSession();
+  const habillement = profilCommerce?.secteur === 'HABILLEMENT';
+  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
+  const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
+  const matriceAutorisee =
+    habillement && (profilCommerce?.capabilities_effectives.includes('PURCHASE_MATRIX') ?? false);
   const [etape, setEtape] = useState<Etape>(1);
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [fournisseurId, setFournisseurId] = useState<number | null>(null);
@@ -42,10 +52,34 @@ export default function EcranNouvelAchat() {
   const [produitChoisi, setProduitChoisi] = useState<Produit | null>(null);
   const [unites, setUnites] = useState<Unite[]>([]);
   const [uniteChoisie, setUniteChoisie] = useState<Unite | null>(null);
+  const [variantes, setVariantes] = useState<VarianteMobile[]>([]);
+  const [varianteChoisie, setVarianteChoisie] = useState<VarianteMobile | null>(null);
   const [quantite, setQuantite] = useState('1');
   const [prix, setPrix] = useState('');
 
   useEffect(() => { listerFournisseurs().then(setFournisseurs).catch(() => setFournisseurs([])); }, []);
+  useEffect(() => {
+    if (!matrice || articles.length) return;
+    try {
+      const lignes = JSON.parse(matrice) as ArticleAchat[];
+      if (!Array.isArray(lignes) || !lignes.length) return;
+      const valides = lignes.filter((ligne) =>
+        Number.isFinite(Number(ligne.produitId)) &&
+        Number.isFinite(Number(ligne.quantite)) &&
+        Number(ligne.quantite) > 0 &&
+        Number.isFinite(Number(ligne.prixUnitaire)) &&
+        Number(ligne.prixUnitaire) > 0
+      );
+      if (!valides.length) return;
+      setArticles(valides);
+      // La matrice représente déjà l'étape "Articles". On arrive directement
+      // sur les informations fournisseur, puis le flux normal continue.
+      setEtape(1);
+    } catch {
+      // Un paramètre mal formé ne doit jamais casser la saisie manuelle.
+    }
+  }, [articles.length, matrice]);
+
   useEffect(() => {
     if (!commande) return;
     try {
@@ -78,12 +112,17 @@ export default function EcranNouvelAchat() {
         nom: item.nom, facteur: item.facteur, prixIndicatif: Math.round(produit.prixAchat * item.facteur),
       })),
     ];
+    const declinaisons = variantesActives
+      ? await listerVariantesProduit(produit.id)
+      : [];
     setProduitChoisi(produit);
+    setVariantes(declinaisons);
+    setVarianteChoisie(null);
     setUnites(liste);
     setUniteChoisie(liste[0]);
     setQuantite('1');
     setPrix(String(liste[0].prixIndicatif || ''));
-  }, []);
+  }, [variantesActives]);
 
   const ajouterArticle = useCallback(() => {
     const q = Number(quantite.replace(',', '.'));
@@ -92,12 +131,27 @@ export default function EcranNouvelAchat() {
       Alert.alert('Article incomplet', 'Choisissez un produit, une unité, une quantité et un prix valides.');
       return;
     }
+    if (variantes.length > 0 && !varianteChoisie) {
+      Alert.alert('Variante requise', 'Choisissez la taille et la couleur à approvisionner.');
+      return;
+    }
     setArticles((liste) => [...liste, {
-      produitId: produitChoisi.id, libelle: produitChoisi.nom, unite: uniteChoisie.nom,
-      facteur: uniteChoisie.facteur, quantite: q, prixUnitaire: p,
+      produitId: produitChoisi.id,
+      varianteId: varianteChoisie?.id ?? null,
+      libelle: varianteChoisie
+        ? `${produitChoisi.nom} - ${libelleVariante(varianteChoisie)}`
+        : produitChoisi.nom,
+      unite: uniteChoisie.nom,
+      facteur: uniteChoisie.facteur,
+      quantite: q,
+      prixUnitaire: p,
     }]);
-    setProduitChoisi(null); setRecherche(''); setChoixOuvert(false);
-  }, [prix, produitChoisi, quantite, uniteChoisie]);
+    setProduitChoisi(null);
+    setVarianteChoisie(null);
+    setVariantes([]);
+    setRecherche('');
+    setChoixOuvert(false);
+  }, [prix, produitChoisi, quantite, uniteChoisie, varianteChoisie, variantes.length]);
 
   const suivant = useCallback(async () => {
     if (etape === 1) {
@@ -127,8 +181,12 @@ export default function EcranNouvelAchat() {
         modePaiement, recevoirMaintenant,
       });
       Alert.alert(
-        recevoirMaintenant ? 'Achat reçu' : 'Achat enregistré',
-        recevoirMaintenant ? `${achat.numero} : la marchandise est entrée en stock.` : `${achat.numero} : achat en attente de réception.`,
+        recevoirMaintenant
+          ? ((habillement || quincaillerie) ? 'Approvisionnement reçu' : 'Achat reçu')
+          : ((habillement || quincaillerie) ? 'Approvisionnement enregistré' : 'Achat enregistré'),
+        recevoirMaintenant
+          ? `${achat.numero} : la marchandise est entrée en stock.`
+          : `${achat.numero} : ${(habillement || quincaillerie) ? 'approvisionnement' : 'achat'} en attente de réception.`,
         [{ text: 'Voir', onPress: () => router.replace(`/achats/${achat.achatId}`) }],
       );
     } catch (erreur) {
@@ -141,7 +199,7 @@ export default function EcranNouvelAchat() {
     <Stack.Screen options={{ headerShown: false }} />
     <View style={styles.header}>
       <Pressable onPress={retour} style={styles.retour} hitSlop={10}><Icone nom="retour" taille={27} couleur="#061541" /></Pressable>
-      <Text style={styles.titre}>Nouvel achat</Text>
+      <Text style={styles.titre}>{(habillement || quincaillerie) ? 'Nouvel approvisionnement' : 'Nouvel achat'}</Text>
       <View style={styles.brouillon}><Icone nom="document" taille={17} couleur={couleurs.primaire} /><Text style={styles.brouillonTexte}>Brouillon</Text></View>
     </View>
     <ScrollView contentContainerStyle={styles.contenu} showsVerticalScrollIndicator={false}>
@@ -156,7 +214,13 @@ export default function EcranNouvelAchat() {
         onNouveau={() => router.push('/fournisseurs')} onReference={setReference} onNote={setNote}
       />}
       {etape === 2 && <EtapeArticles
-        articles={articles} devise={boutique.devise} total={total} onAjouter={() => setChoixOuvert(true)}
+        articles={articles}
+        devise={boutique.devise}
+        total={total}
+        habillement={habillement}
+        matriceAutorisee={matriceAutorisee}
+        onAjouter={() => setChoixOuvert(true)}
+        onMatrice={() => router.push('/habillement/approvisionnement-matrice')}
         onRetirer={(index) => setArticles((liste) => liste.filter((_, i) => i !== index))}
       />}
       {etape === 3 && <EtapeReglement
@@ -177,10 +241,16 @@ export default function EcranNouvelAchat() {
     </View>
     <AjoutArticle
       visible={choixOuvert} recherche={recherche} produits={produits} produit={produitChoisi}
+      variante={varianteChoisie} variantes={variantes}
       unite={uniteChoisie} unites={unites} quantite={quantite} prix={prix} devise={boutique.devise}
-      onFermer={() => { setChoixOuvert(false); setProduitChoisi(null); }}
-      onRecherche={(valeur) => { setRecherche(valeur); setProduitChoisi(null); }}
+      onFermer={() => { setChoixOuvert(false); setProduitChoisi(null); setVariantes([]); setVarianteChoisie(null); }}
+      onRecherche={(valeur) => { setRecherche(valeur); setProduitChoisi(null); setVariantes([]); setVarianteChoisie(null); }}
       onProduit={(produit) => void ouvrirProduit(produit)}
+      onVariante={(variante) => {
+        setVarianteChoisie(variante);
+        const cout = variante.prixAchat ?? produitChoisi?.prixAchat ?? 0;
+        setPrix(String(cout || ''));
+      }}
       onUnite={() => {
         if (!unites.length) return;
         const index = unites.findIndex((item) => item.nom === uniteChoisie?.nom);
@@ -220,11 +290,36 @@ function Champ({ label, valeur, onChange, placeholder }: { label: string; valeur
   return <View style={styles.groupe}><Text style={styles.label}>{label}</Text><View style={styles.saisie}><Icone nom="document" taille={23} couleur="#0c2857" /><TextInput value={valeur} onChangeText={onChange} placeholder={placeholder} placeholderTextColor="#7185aa" style={styles.input} /></View></View>;
 }
 
-function EtapeArticles({ articles, devise, total, onAjouter, onRetirer }: { articles: ArticleAchat[]; devise: string; total: number; onAjouter: () => void; onRetirer: (index: number) => void }) {
+function EtapeArticles({
+  articles, devise, total, habillement, matriceAutorisee, onAjouter, onMatrice, onRetirer,
+}: {
+  articles: ArticleAchat[];
+  devise: string;
+  total: number;
+  habillement: boolean;
+  matriceAutorisee: boolean;
+  onAjouter: () => void;
+  onMatrice: () => void;
+  onRetirer: (index: number) => void;
+}) {
   return <View style={styles.ecran}>
     <View style={styles.recherche}><Icone nom="recherche" taille={23} couleur="#09245b" /><Text style={styles.rechercheTexte}>Rechercher un produit...</Text><View style={styles.scan}><Icone nom="codeBarres" taille={21} couleur="#09245b" /></View></View>
     <View style={styles.filtres}><Filtre titre="Tous" actif /><Filtre titre="Alimentaire" /><Filtre titre="Boisson" /><Filtre titre="Hygiène" /><Filtre titre="Autre" /></View>
-    <View style={styles.titreSection}><Text style={styles.titreSectionTexte}>Articles ({articles.length})</Text><Pressable onPress={onAjouter} style={styles.ajouter}><Icone nom="plus" taille={20} couleur={couleurs.primaire} /><Text style={styles.ajouterTexte}>Ajouter</Text></Pressable></View>
+    <View style={styles.titreSection}>
+      <Text style={styles.titreSectionTexte}>Articles ({articles.length})</Text>
+      <View style={styles.actionsArticles}>
+        {habillement && matriceAutorisee ? (
+          <Pressable onPress={onMatrice} style={styles.matriceBouton}>
+            <Icone nom="catalogue" taille={18} couleur={couleurs.primaire} />
+            <Text style={styles.matriceBoutonTexte}>Matrice</Text>
+          </Pressable>
+        ) : null}
+        <Pressable onPress={onAjouter} style={styles.ajouter}>
+          <Icone nom="plus" taille={20} couleur={couleurs.primaire} />
+          <Text style={styles.ajouterTexte}>Ajouter</Text>
+        </Pressable>
+      </View>
+    </View>
     {articles.length === 0 ? <View style={styles.vide}><Icone nom="stock" taille={45} couleur="#a2afc1" /><Text style={styles.videTitre}>Aucun article ajouté</Text><Text style={styles.videTexte}>Appuyez sur « Ajouter » pour choisir vos produits.</Text></View> : articles.map((article, index) => <CarteArticle key={`${article.produitId}-${index}`} article={article} devise={devise} onRetirer={() => onRetirer(index)} />)}
     <View style={styles.resumeArticles}><View><Text style={styles.resumeLegende}>Total</Text><Text style={styles.resumeValeur}>{formaterMontant(total, devise)}</Text></View><View style={styles.compteur}><Text style={styles.resumeLegende}>Articles</Text><Text style={styles.resumeValeur}>{articles.length}</Text></View></View>
   </View>;
@@ -256,12 +351,186 @@ function EtapeReglement({ devise, total, reste, montantPaye, modePaiement, saisi
 
 function BlocTotal({ titre, valeur, vert = false }: { titre: string; valeur: string; vert?: boolean }) { return <View style={[styles.blocTotal, vert ? styles.totalVert : styles.totalRouge]}><View style={[styles.totalIcone, vert ? styles.totalIconeVerte : styles.totalIconeRouge]}><Icone nom={vert ? 'caisse' : 'argent'} taille={22} couleur={vert ? '#08944a' : '#e5263c'} /></View><Text style={styles.totalTitre}>{titre}</Text><Text style={[styles.totalMontant, !vert && styles.totalMontantRouge]}>{valeur}</Text></View>; }
 
-function AjoutArticle({ visible, recherche, produits, produit, unite, unites, quantite, prix, devise, onFermer, onRecherche, onProduit, onUnite, onQuantite, onPrix, onAjouter }: {
-  visible: boolean; recherche: string; produits: Produit[]; produit: Produit | null; unite: Unite | null; unites: Unite[]; quantite: string; prix: string; devise: string;
-  onFermer: () => void; onRecherche: (valeur: string) => void; onProduit: (produit: Produit) => void; onUnite: () => void; onQuantite: (valeur: string) => void; onPrix: (valeur: string) => void; onAjouter: () => void;
+function AjoutArticle({
+  visible,
+  recherche,
+  produits,
+  produit,
+  variante,
+  variantes,
+  unite,
+  unites,
+  quantite,
+  prix,
+  devise,
+  onFermer,
+  onRecherche,
+  onProduit,
+  onVariante,
+  onUnite,
+  onQuantite,
+  onPrix,
+  onAjouter,
+}: {
+  visible: boolean;
+  recherche: string;
+  produits: Produit[];
+  produit: Produit | null;
+  variante: VarianteMobile | null;
+  variantes: VarianteMobile[];
+  unite: Unite | null;
+  unites: Unite[];
+  quantite: string;
+  prix: string;
+  devise: string;
+  onFermer: () => void;
+  onRecherche: (valeur: string) => void;
+  onProduit: (produit: Produit) => void;
+  onVariante: (variante: VarianteMobile) => void;
+  onUnite: () => void;
+  onQuantite: (valeur: string) => void;
+  onPrix: (valeur: string) => void;
+  onAjouter: () => void;
 }) {
   const total = (Number(quantite.replace(',', '.')) || 0) * (Number(prix.replace(',', '.')) || 0);
-  return <Modal visible={visible} animationType="slide" onRequestClose={onFermer}><SafeAreaView style={styles.page} edges={['top', 'bottom']}><View style={styles.header}><Pressable onPress={onFermer} style={styles.retour}><Icone nom="retour" taille={27} couleur="#061541" /></Pressable><Text style={styles.titre}>Ajouter un article</Text><View style={styles.placeholderHeader} /></View><ScrollView contentContainerStyle={styles.modalContenu} showsVerticalScrollIndicator={false}><View style={styles.recherche}><Icone nom="recherche" taille={23} couleur="#09245b" /><TextInput value={recherche} onChangeText={onRecherche} autoFocus placeholder="Rechercher un produit..." placeholderTextColor="#7185aa" style={styles.inputRecherche} /></View>{produit ? <View style={styles.produitChoisi}><Vignette chemin={produit.cheminImage} nom={produit.nom} taille={70} /><View style={styles.produitChoisiInfo}><Text style={styles.articleNom}>{produit.nom}</Text><Text style={styles.articleMeta}>Stock actuel : {formaterQuantite(produit.quantiteBase)} {produit.uniteBase}</Text></View></View> : <FlatList data={produits} scrollEnabled={false} keyExtractor={(item) => String(item.id)} contentContainerStyle={styles.listeProduits} ListEmptyComponent={<ListeVide titre="Aucun produit" message="Créez d’abord vos produits dans le catalogue." />} renderItem={({ item }) => <Pressable onPress={() => onProduit(item)} style={styles.produitLigne}><Vignette chemin={item.cheminImage} nom={item.nom} taille={56} /><View style={styles.produitChoisiInfo}><Text style={styles.articleNom}>{item.nom}</Text><Text style={styles.articleMeta}>{item.categorie || item.uniteBase}</Text></View><Icone nom="chevron" taille={18} couleur="#09245b" /></Pressable>} />}{produit && <><Text style={styles.label}>Unité <Text style={styles.requis}>*</Text></Text><Pressable onPress={onUnite} style={styles.lecture}><Text style={styles.lectureTexte}>{unite?.nom || 'Unité'}</Text><Icone nom="chevron" taille={18} couleur="#0c2857" /></Pressable><View style={styles.deuxChamps}><View style={styles.demiChamp}><Text style={styles.label}>Quantité <Text style={styles.requis}>*</Text></Text><TextInput value={quantite} onChangeText={onQuantite} keyboardType="numeric" style={styles.inputSimple} /></View><View style={styles.demiChamp}><Text style={styles.label}>Prix unitaire ({devise}) <Text style={styles.requis}>*</Text></Text><TextInput value={prix} onChangeText={onPrix} keyboardType="numeric" style={styles.inputSimple} /></View></View><View style={styles.totalLigne}><Text style={styles.totalLigneTitre}>Total ligne</Text><Text style={styles.totalLigneValeur}>{formaterMontant(total, devise)}</Text></View><Pressable onPress={onAjouter} style={styles.ajouterArticle}><Icone nom="plus" taille={22} couleur="#fff" /><Text style={styles.ajouterArticleTexte}>Ajouter cet article</Text></Pressable></>}</ScrollView></SafeAreaView></Modal>;
+  return (
+    <Modal visible={visible} animationType="slide" onRequestClose={onFermer}>
+      <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
+        <View style={styles.header}>
+          <Pressable onPress={onFermer} style={styles.retour}>
+            <Icone nom="retour" taille={27} couleur="#061541" />
+          </Pressable>
+          <Text style={styles.titre}>Ajouter un article</Text>
+          <View style={styles.placeholderHeader} />
+        </View>
+        <ScrollView contentContainerStyle={styles.modalContenu} showsVerticalScrollIndicator={false}>
+          <View style={styles.recherche}>
+            <Icone nom="recherche" taille={23} couleur="#09245b" />
+            <TextInput
+              value={recherche}
+              onChangeText={onRecherche}
+              autoFocus
+              placeholder="Rechercher un modèle..."
+              placeholderTextColor="#7185aa"
+              style={styles.inputRecherche}
+            />
+          </View>
+
+          {produit ? (
+            <>
+              <View style={styles.produitChoisi}>
+                <Vignette chemin={produit.cheminImage} nom={produit.nom} taille={70} />
+                <View style={styles.produitChoisiInfo}>
+                  <Text style={styles.articleNom}>{produit.nom}</Text>
+                  <Text style={styles.articleMeta}>
+                    {variantes.length > 0
+                      ? `${variantes.length} variante(s) disponible(s)`
+                      : `Stock actuel : ${formaterQuantite(produit.quantiteBase)} ${produit.uniteBase}`}
+                  </Text>
+                </View>
+              </View>
+
+              {variantes.length > 0 ? (
+                <View>
+                  <Text style={styles.label}>
+                    Taille / couleur <Text style={styles.requis}>*</Text>
+                  </Text>
+                  <View style={styles.variantesAchat}>
+                    {variantes.map((option) => {
+                      const active = variante?.id === option.id;
+                      const couleur = option.valeurs.find((v) => v.codeHex)?.codeHex ?? null;
+                      return (
+                        <Pressable
+                          key={option.idLocal}
+                          onPress={() => onVariante(option)}
+                          style={[styles.varianteAchat, active && styles.varianteAchatActive]}
+                        >
+                          {couleur ? (
+                            <View style={[styles.varianteCouleur, { backgroundColor: couleur }]} />
+                          ) : null}
+                          <View style={styles.varianteAchatTextes}>
+                            <Text style={[styles.varianteAchatNom, active && styles.varianteAchatNomActive]}>
+                              {libelleVariante(option)}
+                            </Text>
+                            <Text style={[styles.varianteAchatStock, active && styles.varianteAchatStockActive]}>
+                              Stock {formaterQuantite(option.stockActuel)}
+                            </Text>
+                          </View>
+                          {active ? <Icone nom="coche" taille={16} couleur="#fff" /> : null}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
+
+              <Text style={styles.label}>Unité <Text style={styles.requis}>*</Text></Text>
+              <Pressable onPress={onUnite} style={styles.lecture}>
+                <Text style={styles.lectureTexte}>{unite?.nom || 'Unité'}</Text>
+                <Icone nom="chevron" taille={18} couleur="#0c2857" />
+              </Pressable>
+
+              <View style={styles.deuxChamps}>
+                <View style={styles.demiChamp}>
+                  <Text style={styles.label}>Quantité <Text style={styles.requis}>*</Text></Text>
+                  <TextInput
+                    value={quantite}
+                    onChangeText={onQuantite}
+                    keyboardType="numeric"
+                    style={styles.inputSimple}
+                  />
+                </View>
+                <View style={styles.demiChamp}>
+                  <Text style={styles.label}>
+                    Prix unitaire ({devise}) <Text style={styles.requis}>*</Text>
+                  </Text>
+                  <TextInput
+                    value={prix}
+                    onChangeText={onPrix}
+                    keyboardType="numeric"
+                    style={styles.inputSimple}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.totalLigne}>
+                <Text style={styles.totalLigneTitre}>Total ligne</Text>
+                <Text style={styles.totalLigneValeur}>{formaterMontant(total, devise)}</Text>
+              </View>
+
+              <Pressable onPress={onAjouter} style={styles.ajouterArticle}>
+                <Icone nom="plus" taille={22} couleur="#fff" />
+                <Text style={styles.ajouterArticleTexte}>Ajouter cet article</Text>
+              </Pressable>
+            </>
+          ) : (
+            <FlatList
+              data={produits}
+              scrollEnabled={false}
+              keyExtractor={(item) => String(item.id)}
+              contentContainerStyle={styles.listeProduits}
+              ListEmptyComponent={
+                <ListeVide
+                  titre="Aucun modèle"
+                  message="Créez d’abord vos modèles dans le catalogue."
+                />
+              }
+              renderItem={({ item }) => (
+                <Pressable onPress={() => onProduit(item)} style={styles.produitLigne}>
+                  <Vignette chemin={item.cheminImage} nom={item.nom} taille={56} />
+                  <View style={styles.produitChoisiInfo}>
+                    <Text style={styles.articleNom}>{item.nom}</Text>
+                    <Text style={styles.articleMeta}>{item.categorie || item.uniteBase}</Text>
+                  </View>
+                  <Icone nom="chevron" taille={18} couleur="#09245b" />
+                </Pressable>
+              )}
+            />
+          )}
+        </ScrollView>
+      </SafeAreaView>
+    </Modal>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -275,8 +544,29 @@ const styles = StyleSheet.create({
   groupe: { gap: 8 }, label: { color: '#10224a', fontSize: 16, fontWeight: '800' }, requis: { color: '#ed3048' }, fournisseurLigne: { flexDirection: 'row', gap: 11 }, selecteur: { flex: 1, minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: '#d2ddeb', borderRadius: 12, backgroundColor: '#fff' }, selecteurTexte: { flex: 1, color: '#10224a', fontSize: 16, fontWeight: '800' }, placeholder: { color: '#7185aa', fontWeight: '500' }, plus: { width: 60, alignItems: 'center', justifyContent: 'center', borderRadius: 13, backgroundColor: couleurs.primaire },
   saisie: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: '#d2ddeb', borderRadius: 12, backgroundColor: '#fff' }, input: { flex: 1, minHeight: 55, color: '#10224a', fontSize: 16 }, lecture: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: '#d2ddeb', borderRadius: 12, backgroundColor: '#fff' }, lectureTexte: { flex: 1, color: '#10224a', fontSize: 16 },
   recherche: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 10, paddingLeft: 14, borderWidth: 1, borderColor: '#d4dfed', borderRadius: 12, backgroundColor: '#fff' }, rechercheTexte: { flex: 1, color: '#7185aa', fontSize: 15 }, scan: { width: 49, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', borderLeftWidth: 1, borderLeftColor: '#dfe7f1' }, inputRecherche: { flex: 1, minHeight: 51, color: '#10224a', fontSize: 16 },
+  variantesAchat: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  varianteAchat: {
+    minWidth: '46%', flexGrow: 1, minHeight: 58, flexDirection: 'row',
+    alignItems: 'center', gap: 8, paddingHorizontal: 11, paddingVertical: 8,
+    borderWidth: 1, borderColor: '#d4dfed', borderRadius: 12, backgroundColor: '#fff',
+  },
+  varianteAchatActive: { backgroundColor: couleurs.primaire, borderColor: couleurs.primaire },
+  varianteCouleur: { width: 18, height: 18, borderRadius: 9, borderWidth: StyleSheet.hairlineWidth, borderColor: '#b8c6d8' },
+  varianteAchatTextes: { flex: 1, minWidth: 0 },
+  varianteAchatNom: { color: '#10224a', fontSize: 13, fontWeight: '900' },
+  varianteAchatNomActive: { color: '#fff' },
+  varianteAchatStock: { marginTop: 2, color: '#63779a', fontSize: 10, fontWeight: '700' },
+  varianteAchatStockActive: { color: '#dceaff' },
+
   filtres: { flexDirection: 'row', gap: 7, flexWrap: 'wrap' }, filtre: { minHeight: 39, justifyContent: 'center', paddingHorizontal: 13, borderRadius: 12, backgroundColor: '#edf2f8' }, filtreActif: { backgroundColor: couleurs.primaire }, filtreTexte: { color: '#587096', fontSize: 13, fontWeight: '800' }, filtreTexteActif: { color: '#fff' },
-  titreSection: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 }, titreSectionTexte: { flexShrink: 1, color: '#061541', fontSize: 20, fontWeight: '900' }, ajouter: { minHeight: 41, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, borderWidth: 1, borderColor: '#cfe0fe', borderRadius: 12, backgroundColor: '#f6faff' }, ajouterTexte: { color: couleurs.primaire, fontSize: 13, fontWeight: '900' },
+  titreSection: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  actionsArticles: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  matriceBouton: {
+    minHeight: 41, flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 11, borderWidth: 1, borderColor: '#e2d1c3',
+    borderRadius: 12, backgroundColor: '#f5ece5',
+  },
+  matriceBoutonTexte: { color: couleurs.primaire, fontSize: 13, fontWeight: '900' }, titreSectionTexte: { flexShrink: 1, color: '#061541', fontSize: 20, fontWeight: '900' }, ajouter: { minHeight: 41, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, borderWidth: 1, borderColor: '#cfe0fe', borderRadius: 12, backgroundColor: '#f6faff' }, ajouterTexte: { color: couleurs.primaire, fontSize: 13, fontWeight: '900' },
   vide: { minHeight: 180, alignItems: 'center', justifyContent: 'center', padding: 22, borderWidth: 1, borderColor: '#e1e8f2', borderRadius: 14, backgroundColor: '#fff' }, videTitre: { marginTop: 12, color: '#536a8f', fontSize: 16, fontWeight: '900' }, videTexte: { marginTop: 5, color: '#7185a5', fontSize: 14, textAlign: 'center' },
   carteArticle: { minHeight: 128, flexDirection: 'row', gap: 11, padding: 12, borderWidth: 1, borderColor: '#e0e8f2', borderRadius: 14, backgroundColor: '#fff' }, miniature: { width: 61, height: 75, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#eef5ff' }, articleCentre: { flex: 1 }, articleNom: { color: '#071a43', fontSize: 16, fontWeight: '900' }, articleMeta: { marginTop: 3, color: '#63779a', fontSize: 13 }, quantite: { height: 34, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', marginTop: 9, borderRadius: 8, backgroundColor: '#f0f6ff' }, quantiteBouton: { width: 33, alignItems: 'center' }, quantiteTexte: { minWidth: 29, textAlign: 'center', color: '#092158', fontSize: 15, fontWeight: '800' }, articleDroite: { alignItems: 'flex-end', justifyContent: 'space-between' }, corbeille: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#fff0f2' }, articleMontant: { color: '#061541', fontSize: 16, fontWeight: '900' },
   resumeArticles: { minHeight: 70, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 13, borderTopWidth: 1, borderTopColor: '#e4ebf4' }, compteur: { minWidth: 80, paddingLeft: 19, borderLeftWidth: 1, borderLeftColor: '#e4ebf4' }, resumeLegende: { color: '#607595', fontSize: 13 }, resumeValeur: { marginTop: 3, color: '#061541', fontSize: 20, fontWeight: '900' },

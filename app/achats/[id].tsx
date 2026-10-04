@@ -6,7 +6,7 @@
  * ajustement de stock qui laisse une trace.
  */
 import { useCallback, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -29,6 +29,7 @@ import {
   obtenirAchat,
   payerAchat,
   recevoirAchat,
+  recevoirAchatPartiel,
   type AchatResume,
   type LigneAchat,
   type PaiementAchat,
@@ -39,6 +40,7 @@ import { lireParametres } from '../../src/services/parametres';
 import { bonDeCommandeHtml, genererEtPartager } from '../../src/services/pdf';
 import { ActionsDocument } from '../../src/ui/ActionsDocument';
 import { preparerDocumentAchat } from '../../src/services/document-achat';
+import { useSession } from '../_layout';
 
 const LIBELLE_STATUT: Record<StatutAchat, string> = {
   BROUILLON: 'A recevoir',
@@ -63,6 +65,8 @@ export default function EcranDetailAchat() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const achatId = Number(id);
+  const { profilCommerce } = useSession();
+  const habillement = profilCommerce?.secteur === 'HABILLEMENT';
 
   const [achat, setAchat] = useState<AchatResume | null>(null);
   const [lignes, setLignes] = useState<LigneAchat[]>([]);
@@ -72,6 +76,8 @@ export default function EcranDetailAchat() {
   const [saisiePaiement, setSaisiePaiement] = useState('');
   const [enCours, setEnCours] = useState(false);
   const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [receptionOuverte, setReceptionOuverte] = useState(false);
+  const [receptions, setReceptions] = useState<Record<number, string>>({});
 
   const charger = useCallback(async () => {
     setErreur(null);
@@ -103,6 +109,42 @@ export default function EcranDetailAchat() {
   );
 
   const reste = achat ? Math.max(0, achat.total - achat.montantPaye) : 0;
+
+  const ouvrirReceptionPartielle = useCallback(() => {
+    const initial: Record<number, string> = {};
+    for (const ligne of lignes) {
+      const restant = Math.max(0, ligne.quantite - ligne.quantiteRecue);
+      initial[ligne.id] = restant > 0 ? '' : '0';
+    }
+    setReceptions(initial);
+    setReceptionOuverte(true);
+  }, [lignes]);
+
+  const validerReceptionPartielle = useCallback(async () => {
+    if (!achat) return;
+    const saisies = lignes.flatMap((ligne) => {
+      const texte = (receptions[ligne.id] ?? '').trim().replace(',', '.');
+      if (!texte) return [];
+      const quantite = Number(texte);
+      return Number.isFinite(quantite) && quantite > 0
+        ? [{ ligneId: ligne.id, quantite }]
+        : [];
+    });
+    if (!saisies.length) {
+      Alert.alert('Aucune quantité', 'Saisissez au moins une quantité réellement reçue.');
+      return;
+    }
+    setEnCours(true);
+    try {
+      await recevoirAchatPartiel(achat.id, saisies);
+      setReceptionOuverte(false);
+      await charger();
+    } catch (e) {
+      Alert.alert('Réception impossible', e instanceof Error ? e.message : 'Erreur.');
+    } finally {
+      setEnCours(false);
+    }
+  }, [achat, charger, lignes, receptions]);
 
   const recevoir = useCallback(() => {
     if (!achat) return;
@@ -251,6 +293,11 @@ export default function EcranDetailAchat() {
                     ? `  (${formaterQuantite(l.quantiteBase)} unites)`
                     : ''}
                 </Text>
+                {l.quantiteRecue > 0 || habillement ? (
+                  <Text style={styles.receptionDetail}>
+                    Reçu : {formaterQuantite(l.quantiteRecue)} / {formaterQuantite(l.quantite)} {l.unite}
+                  </Text>
+                ) : null}
               </View>
               <Text style={styles.articleTotal}>{formaterMontant(l.total)}</Text>
             </View>
@@ -313,9 +360,18 @@ export default function EcranDetailAchat() {
           <ActionsDocument preparer={() => preparerDocumentAchat(achat.id)} />
           {achat.statut === 'BROUILLON' ? (
             <>
+              {habillement ? (
+                <Bouton
+                  titre="Réceptionner par taille / couleur"
+                  sousTitre="Saisir uniquement les quantités réellement arrivées"
+                  onPress={ouvrirReceptionPartielle}
+                  desactive={enCours}
+                  grand
+                />
+              ) : null}
               <Bouton
-                titre="Recevoir la marchandise"
-                sousTitre="Entree en stock et mise a jour des prix d achat"
+                titre={habillement ? "Tout recevoir maintenant" : "Recevoir la marchandise"}
+                sousTitre="Entrée en stock et mise à jour des prix d'achat"
                 onPress={recevoir}
                 enCours={enCours}
                 grand
@@ -331,6 +387,53 @@ export default function EcranDetailAchat() {
           <Bouton titre="Retour" onPress={() => router.back()} variante="secondaire" />
         </View>
       </ScrollView>
+
+      <Modal visible={receptionOuverte} animationType="slide" onRequestClose={() => !enCours && setReceptionOuverte(false)}>
+        <SafeAreaView style={styles.page} edges={['top', 'bottom']}>
+          <View style={styles.modalEntete}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.modalTitre}>Réception par variantes</Text>
+              <Text style={styles.modalSousTitre}>Saisissez seulement ce qui est physiquement arrivé.</Text>
+            </View>
+            <Pressable disabled={enCours} onPress={() => setReceptionOuverte(false)} style={styles.modalFermer}>
+              <Text style={styles.modalFermerTexte}>Fermer</Text>
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.modalContenu} keyboardShouldPersistTaps="handled">
+            {lignes.map((ligne) => {
+              const restant = Math.max(0, ligne.quantite - ligne.quantiteRecue);
+              return (
+                <View key={ligne.id} style={styles.receptionLigne}>
+                  <View style={styles.articleGauche}>
+                    <Text style={styles.articleNom}>{ligne.libelle}</Text>
+                    <Text style={styles.articleDetail}>
+                      Déjà reçu {formaterQuantite(ligne.quantiteRecue)} · Reste {formaterQuantite(restant)} {ligne.unite}
+                    </Text>
+                  </View>
+                  <TextInput
+                    value={receptions[ligne.id] ?? ''}
+                    editable={!enCours && restant > 0}
+                    onChangeText={(texte) => setReceptions((actuel) => ({ ...actuel, [ligne.id]: texte }))}
+                    keyboardType="decimal-pad"
+                    placeholder={restant > 0 ? '0' : 'Reçu'}
+                    placeholderTextColor={couleurs.texteFaible}
+                    style={[styles.receptionInput, restant <= 0 && styles.receptionInputFerme]}
+                    accessibilityLabel={`Quantité reçue pour ${ligne.libelle}`}
+                  />
+                </View>
+              );
+            })}
+          </ScrollView>
+          <View style={styles.modalPied}>
+            <Bouton
+              titre="Valider cette réception"
+              onPress={() => void validerReceptionPartielle()}
+              enCours={enCours}
+              grand
+            />
+          </View>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -356,6 +459,7 @@ const styles = StyleSheet.create({
   articleGauche: { flex: 1, marginRight: espaces.m },
   articleNom: { fontSize: 15, color: couleurs.texte },
   articleDetail: { fontSize: 12, color: couleurs.texteFaible, marginTop: 2 },
+  receptionDetail: { fontSize: 12, color: couleurs.primaire, fontWeight: '700', marginTop: 4 },
   articleTotal: { fontSize: 15, fontWeight: '600', color: couleurs.texte },
 
   totalLigne: {
@@ -388,4 +492,30 @@ const styles = StyleSheet.create({
   paiementMontant: { fontSize: 13, fontWeight: '600', color: couleurs.texte },
 
   actions: { gap: espaces.s, marginTop: espaces.s },
+
+  modalEntete: {
+    flexDirection: 'row', alignItems: 'center', gap: espaces.m,
+    padding: espaces.l, backgroundColor: couleurs.surface,
+    borderBottomWidth: 1, borderBottomColor: couleurs.bordure,
+  },
+  modalTitre: { fontSize: 19, fontWeight: '800', color: couleurs.texte },
+  modalSousTitre: { marginTop: 3, fontSize: 12, color: couleurs.texteFaible },
+  modalFermer: { minHeight: 48, justifyContent: 'center', paddingHorizontal: espaces.m },
+  modalFermerTexte: { color: couleurs.primaire, fontWeight: '700' },
+  modalContenu: { padding: espaces.l, gap: espaces.s, paddingBottom: espaces.xxl },
+  receptionLigne: {
+    flexDirection: 'row', alignItems: 'center', gap: espaces.m,
+    padding: espaces.m, backgroundColor: couleurs.surface,
+    borderRadius: 12, borderWidth: 1, borderColor: couleurs.bordure,
+  },
+  receptionInput: {
+    width: 88, minHeight: 48, borderWidth: 1, borderColor: couleurs.primaire,
+    borderRadius: 10, paddingHorizontal: 10, textAlign: 'right',
+    color: couleurs.texte, fontSize: 17, fontWeight: '700', backgroundColor: couleurs.fond,
+  },
+  receptionInputFerme: { opacity: 0.45 },
+  modalPied: {
+    padding: espaces.l, backgroundColor: couleurs.surface,
+    borderTopWidth: 1, borderTopColor: couleurs.bordure,
+  },
 });

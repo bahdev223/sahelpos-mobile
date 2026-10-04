@@ -45,6 +45,7 @@ import { BoutonMenu } from '../../src/ui/tiroir';
 import { verifierStock } from '../../src/services/notifications';
 import { marquerChangement } from '../../src/services/synchronisation';
 import { useSession } from '../_layout';
+import { StockHabillement } from '../../src/profile-ui/habillement/StockHabillement';
 
 // --------------------------------------------------------------------------
 // Vocabulaire du domaine
@@ -563,6 +564,14 @@ const FILTRES: { cle: Filtre; libelle: string }[] = [
 ];
 
 export default function Stock() {
+  const { profilCommerce } = useSession();
+  if (profilCommerce?.secteur === 'HABILLEMENT') {
+    return <StockHabillement />;
+  }
+  return <StockStandard />;
+}
+
+function StockStandard() {
   const router = useRouter();
   const { boutique, revisionSynchronisation, synchroniserMaintenant } = useSession();
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });

@@ -16,7 +16,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Redirect, Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Network from 'expo-network';
@@ -34,6 +34,13 @@ import {
   type EtatSynchronisation,
 } from '../src/services/synchronisation';
 import type { Role, Utilisateur } from '../src/domain/types';
+import type { ProfilCommerceMobile } from '../src/domain/commerce';
+import {
+  ecouterChangementCompteLocal,
+  obtenirUtilisateurParIdLocal,
+} from '../src/services/auth';
+import { resoudreSessionSynchronisee } from '../src/domain/session';
+import { peutAccederCheminMobile } from '../src/domain/permissions-mobile';
 import type { LargeurPapier } from '../src/services/impression/escpos';
 import { Chargement, Erreur, couleurs } from '../src/ui/components';
 import { FournisseurTiroir } from '../src/ui/tiroir';
@@ -53,6 +60,7 @@ export const CLES_PARAMETRES = {
   piedDePage: 'recu_pied_de_page',
   largeurPapier: 'recu_largeur_papier',
   biometrieUtilisateur: 'biometrie_utilisateur_id',
+  dernierUtilisateur: 'dernier_utilisateur_id',
 } as const;
 
 export interface Boutique {
@@ -79,9 +87,12 @@ export const BOUTIQUE_PAR_DEFAUT: Boutique = {
 export interface ValeurSession {
   utilisateur: Utilisateur | null;
   boutique: Boutique;
+  profilCommerce: ProfilCommerceMobile | null;
   installe: boolean;
   ouvrirSession: (utilisateur: Utilisateur) => void;
   fermerSession: () => void;
+  /** Change de valeur a chaque changement d'identite ou de droits. */
+  revisionSession: number;
   /** A appeler apres avoir modifie les parametres ou les comptes. */
   recharger: () => Promise<void>;
   /** Change apres une synchronisation distante appliquee dans SQLite. */
@@ -155,11 +166,15 @@ function fabriquerBoutique(table: Record<string, string>): Boutique {
 type EtatDemarrage = 'chargement' | 'pret' | 'erreur';
 
 export default function DispositionRacine() {
+  const cheminCourant = usePathname();
   const [etat, setEtat] = useState<EtatDemarrage>('chargement');
   const [messageErreur, setMessageErreur] = useState('');
   const [installe, setInstalle] = useState(false);
   const [boutique, setBoutique] = useState<Boutique>(BOUTIQUE_PAR_DEFAUT);
+  const [profilCommerce, setProfilCommerce] = useState<ProfilCommerceMobile | null>(null);
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
+  const utilisateurCourant = useRef<Utilisateur | null>(null);
+  const [revisionSession, setRevisionSession] = useState(0);
   const [revisionSynchronisation, setRevisionSynchronisation] = useState(0);
   const [etatSynchronisation, setEtatSynchronisation] = useState<EtatSynchronisation>({
     derniereTentative: null,
@@ -190,6 +205,8 @@ export default function DispositionRacine() {
         'SELECT COUNT(*) AS n FROM utilisateur WHERE actif = 1',
       );
       setBoutique(fabriquerBoutique(table));
+      const abonnement = await etatAbonnementCourant();
+      setProfilCommerce(abonnement.droit?.commerce ?? null);
       setInstalle(table[CLES_PARAMETRES.installation] === '1' && (comptes?.n ?? 0) > 0);
       setEtat('pret');
     } catch (erreur) {
@@ -221,11 +238,37 @@ export default function DispositionRacine() {
   }, []);
 
   const ouvrirSession = useCallback((compte: Utilisateur) => {
+    utilisateurCourant.current = compte;
     setUtilisateur(compte);
+    setRevisionSession((revision) => revision + 1);
   }, []);
 
   const fermerSession = useCallback(() => {
+    // Invalider la ref AVANT le rendu empêche une synchro déjà en vol de
+    // restaurer un profil après que l'utilisateur a touché "Se déconnecter".
+    utilisateurCourant.current = null;
     setUtilisateur(null);
+    setRevisionSession((revision) => revision + 1);
+  }, []);
+
+  const revaliderSessionLocale = useCallback(async () => {
+    const courant = utilisateurCourant.current;
+    if (!courant) return;
+    const local = await obtenirUtilisateurParIdLocal(courant.idLocal);
+
+    // Le profil a pu être déconnecté ou remplacé pendant la lecture SQLite.
+    if (utilisateurCourant.current?.idLocal !== courant.idLocal) return;
+
+    const changement = resoudreSessionSynchronisee(courant, local);
+    if (changement.type === 'FERME') {
+      utilisateurCourant.current = null;
+      setUtilisateur(null);
+      setRevisionSession((revision) => revision + 1);
+    } else if (changement.type === 'ACTUALISE') {
+      utilisateurCourant.current = changement.utilisateur;
+      setUtilisateur(changement.utilisateur);
+      setRevisionSession((revision) => revision + 1);
+    }
   }, []);
 
   /**
@@ -252,6 +295,11 @@ export default function DispositionRacine() {
         // relit ces seuls parametres sans repasser la racine en ecran de
         // chargement et sans interrompre la vente en cours.
         setBoutique(fabriquerBoutique(await lireParametres()));
+        const droitActualise = await etatAbonnementCourant();
+        setProfilCommerce(droitActualise.droit?.commerce ?? null);
+
+        // Le pull peut rétrograder ou désactiver le profil courant.
+        await revaliderSessionLocale();
         setRevisionSynchronisation((precedente) => precedente + 1);
       } finally {
         setEtatSynchronisation(await lireEtatSynchronisation().catch(() => ({
@@ -270,7 +318,7 @@ export default function DispositionRacine() {
         synchronisationEnCours.current = null;
       }
     }
-  }, [charger]);
+  }, [revaliderSessionLocale]);
 
   // Les synchronisations declenchees par le systeme ne doivent jamais creer
   // de rejet non gere. Le geste manuel, lui, conserve l'erreur : l'ecran qui
@@ -283,9 +331,11 @@ export default function DispositionRacine() {
     () => ({
       utilisateur,
       boutique,
+      profilCommerce,
       installe,
       ouvrirSession,
       fermerSession,
+      revisionSession,
       recharger: charger,
       revisionSynchronisation,
       etatSynchronisation,
@@ -294,9 +344,11 @@ export default function DispositionRacine() {
     [
       utilisateur,
       boutique,
+      profilCommerce,
       installe,
       ouvrirSession,
       fermerSession,
+      revisionSession,
       charger,
       revisionSynchronisation,
       etatSynchronisation,
@@ -305,6 +357,7 @@ export default function DispositionRacine() {
   );
 
   const pileMontee = etat === 'pret' && installe && utilisateur !== null;
+  const cheminAutorise = !utilisateur || peutAccederCheminMobile(utilisateur.role, cheminCourant);
 
   // Premier examen du stock a l'ouverture, meme si l'appareil n'a pas encore
   // de droit distant (mode hors connexion).
@@ -337,17 +390,27 @@ export default function DispositionRacine() {
     return () => abonnement.remove();
   }, [pileMontee, synchroniserSansBruit]);
 
+  // Un changement local de rôle/activation prend effet immédiatement,
+  // même si aucun objet métier n'est à synchroniser.
+  useEffect(() => {
+    if (!pileMontee) return;
+    return ecouterChangementCompteLocal(() => {
+      void revaliderSessionLocale();
+    });
+  }, [pileMontee, revaliderSessionLocale]);
+
   // Toute ecriture met l'objet dans la file SQLite puis reveille la racine.
   // Le push n'est donc plus conditionne a un redemarrage ou a un changement
   // d'onglet.
   useEffect(() => {
     if (!pileMontee) return;
     return ecouterChangementSynchronisation(() => {
+      void revaliderSessionLocale();
       // Certains services marquent l'outbox dans leur transaction SQLite. On
       // laisse le commit finir avant de lire cette file et de la pousser.
       setTimeout(synchroniserSansBruit, 250);
     });
-  }, [pileMontee, synchroniserSansBruit]);
+  }, [pileMontee, revaliderSessionLocale, synchroniserSansBruit]);
 
   // Filet de securite pour un reseau qui change d'etat sans emettre
   // d'evenement natif (certains Android apres une coupure prolongée).
@@ -363,10 +426,13 @@ export default function DispositionRacine() {
   useEffect(() => {
     if (!pileMontee) return;
     const abonnement = AppState.addEventListener('change', (etatApp) => {
-      if (etatApp === 'active') synchroniserSansBruit();
+      if (etatApp === 'active') {
+        void revaliderSessionLocale();
+        synchroniserSansBruit();
+      }
     });
     return () => abonnement.remove();
-  }, [pileMontee, synchroniserSansBruit]);
+  }, [pileMontee, revaliderSessionLocale, synchroniserSansBruit]);
 
   // La derniere imprimante choisie est reconnectee en arriere-plan. Une
   // imprimante eteinte ou hors de portee ne doit jamais bloquer la caisse.
@@ -406,13 +472,20 @@ export default function DispositionRacine() {
     // ni l'ecran de connexion ne doivent donner acces aux reglages.
     contenu = (
       <FournisseurTiroir
+        key={`session-${revisionSession}-${utilisateur.idLocal}-${utilisateur.role}`}
         infos={{
           boutique: boutique.nom,
+          secteur: profilCommerce?.secteur ?? 'COMMERCE_GENERAL',
+          secteurLibelle: profilCommerce?.secteur_libelle ?? 'Commerce',
+          capabilitiesCommerce: profilCommerce?.capabilities_effectives ?? [],
           utilisateur: utilisateur.nom || utilisateur.login,
           role: utilisateur.role,
           onDeconnexion: fermerSession,
         }}
       >
+        {!cheminAutorise ? (
+          <Redirect href="/(tabs)/accueil" />
+        ) : (
         <Stack
           screenOptions={{
             // Par defaut chaque ecran dessine son propre en-tete. Ceux qui
@@ -427,6 +500,7 @@ export default function DispositionRacine() {
             contentStyle: { backgroundColor: couleurs.fond },
           }}
         />
+        )}
       </FournisseurTiroir>
     );
   }

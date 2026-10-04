@@ -34,6 +34,10 @@ import { listerAlertesStock } from '../db/repositories/produit';
 import { Icone, IconePastille, Pastille } from './icones';
 import type { NomIcone } from './icones';
 import { couleurs, espaces, rayons } from './theme';
+import { resoudreProfilUIMobile, type SecteurCommerce } from '../domain/commerce';
+import type { Role } from '../domain/types';
+import { peutAccederCheminMobile } from '../domain/permissions-mobile';
+import { HABILLEMENT_MOBILE_THEME as H } from '../profile-ui/habillement/theme';
 
 const LARGEUR = Math.min(320, Dimensions.get('window').width * 0.86);
 const DUREE = 220;
@@ -183,8 +187,11 @@ export function useTiroir(): ValeurTiroir {
 
 export interface InfosTiroir {
   boutique: string;
+  secteur: SecteurCommerce;
+  secteurLibelle: string;
+  capabilitiesCommerce: string[];
   utilisateur: string;
-  role: string;
+  role: Role;
   /** Nombre d'alertes de stock, affiche en pastille sur l'entree correspondante. */
   alertes?: number;
   onDeconnexion?: () => void;
@@ -241,7 +248,11 @@ export function FournisseurTiroir({
             <Pressable style={st.plein} onPress={fermer} accessibilityLabel="Fermer le menu" />
           </Animated.View>
           <Animated.View
-            style={[st.panneau, { transform: [{ translateX: glissement }] }]}
+            style={[
+              st.panneau,
+              infos.secteur === 'HABILLEMENT' && { backgroundColor: H.surface },
+              { transform: [{ translateX: glissement }] },
+            ]}
           >
             <ContenuTiroir infos={infos} onFermer={fermer} />
           </Animated.View>
@@ -253,7 +264,25 @@ export function FournisseurTiroir({
 
 function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () => void }) {
   const router = useRouter();
+  const profilUI = resoudreProfilUIMobile({
+    version: 1,
+    secteur: infos.secteur,
+    secteur_libelle: infos.secteurLibelle,
+    mode_vente: 'DETAIL',
+    mode_approvisionnement: 'CLASSIQUE',
+    mode_catalogue: 'SIMPLE',
+    capabilities_effectives: infos.capabilitiesCommerce,
+    capabilities_non_supportees: [],
+    compatible: true,
+    raison: '',
+  });
   const marges = useSafeAreaInsets();
+  const habillement = infos.secteur === 'HABILLEMENT';
+  const accent = habillement ? H.primaire : couleurs.primaire;
+  const accentClair = habillement ? H.primaireClair : couleurs.primaireDouce;
+  const fond = habillement ? H.fond : couleurs.fond;
+  const texte = habillement ? H.texte : couleurs.texte;
+  const texteFaible = habillement ? H.texteFaible : couleurs.texteFaible;
   const [alertes, setAlertes] = useState(infos.alertes ?? 0);
 
   useEffect(() => {
@@ -283,7 +312,10 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
 
   return (
     <View style={st.contenu}>
-      <View style={[st.entete, { paddingTop: marges.top + espaces.m }]}>
+      <View style={[
+        st.entete,
+        { paddingTop: marges.top + espaces.m, backgroundColor: accent },
+      ]}>
         <View style={st.enteteHaut}>
           <View style={st.ecussonLogo}>
             <Image
@@ -310,25 +342,91 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
             <Text style={st.compteNom} numberOfLines={1}>
               {infos.utilisateur}
             </Text>
-            <Text style={st.compteRole}>{infos.role}</Text>
+            <Text style={st.compteRole}>{infos.role} · {profilUI.nom}</Text>
           </View>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={st.liste}>
-        {GROUPES.map((groupe) => (
+        {GROUPES.map((groupe) => {
+          const entrees = groupe.entrees.map((entree) => {
+            if (entree.chemin === '/categories') {
+              return { ...entree, titre: profilUI.libelles.categories };
+            }
+            if (entree.chemin === '/achats') {
+              return { ...entree, titre: profilUI.libelles.achats };
+            }
+            if (entree.chemin === '/inventaire') {
+              return infos.secteur === 'HABILLEMENT'
+                ? { ...entree, titre: 'Inventaire variantes', chemin: '/habillement/inventaire', description: 'Comptage tailles et couleurs' }
+                : { ...entree, titre: profilUI.libelles.inventaire };
+            }
+            return entree;
+          });
+          if (infos.secteur === 'HABILLEMENT' && groupe.titre === 'Gestion') {
+            entrees.unshift({
+              titre: 'Showroom',
+              description: 'Vue visuelle des modèles',
+              chemin: '/habillement/showroom',
+              icone: 'oeil',
+            });
+            entrees.splice(2, 0, {
+              titre: 'Tailles & couleurs',
+              description: 'Variantes, tailles et couleurs',
+              chemin: '/habillement/referentiel',
+              icone: 'etiquette',
+            });
+            if (infos.capabilitiesCommerce.includes('VARIANT_EXCHANGE')) {
+              entrees.splice(2, 0, {
+                titre: 'Échanges',
+                description: 'Changer taille ou couleur vendue',
+                chemin: '/habillement/echanges',
+                icone: 'mouvements',
+              });
+            }
+          }
+          if (infos.secteur === 'HABILLEMENT' && groupe.titre === 'Activite') {
+            entrees.splice(1, 0, {
+              titre: 'Commandes clients',
+              description: 'Réserver et préparer les vêtements',
+              chemin: '/habillement/commandes',
+              icone: 'achats',
+            });
+            entrees.push({
+              titre: 'Rapports Mode',
+              description: 'Ventes, modèles et variantes',
+              chemin: '/habillement/rapports',
+              icone: 'graphique',
+            });
+          }
+          return {
+            ...groupe,
+            entrees: entrees.filter((entree) =>
+              peutAccederCheminMobile(infos.role, entree.chemin),
+            ),
+          };
+        }).filter((groupe) => groupe.entrees.length > 0).map((groupe) => (
           <View key={groupe.titre} style={st.groupe}>
-            <Text style={st.groupeTitre}>{groupe.titre.toUpperCase()}</Text>
+            <Text style={[st.groupeTitre, { color: texteFaible }]}>
+              {groupe.titre.toUpperCase()}
+            </Text>
             {groupe.entrees.map((entree) => (
               <Pressable
                 key={entree.chemin}
                 onPress={() => aller(entree.chemin)}
-                style={({ pressed }) => [st.entree, pressed && st.entreePressee]}
+                style={({ pressed }) => [
+                  st.entree,
+                  pressed && [st.entreePressee, { backgroundColor: fond }],
+                ]}
               >
-                <IconePastille nom={entree.icone} />
+                <IconePastille
+                  nom={entree.icone}
+                  couleur={accent}
+                  fond={accentClair}
+                />
                 <View style={st.entreeTextes}>
-                  <Text style={st.entreeTitre}>{entree.titre}</Text>
-                  <Text style={st.entreeDescription} numberOfLines={1}>
+                  <Text style={[st.entreeTitre, { color: texte }]}>{entree.titre}</Text>
+                  <Text style={[st.entreeDescription, { color: texteFaible }]} numberOfLines={1}>
                     {entree.description}
                   </Text>
                 </View>
@@ -350,15 +448,21 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
         <View style={[st.piedFixe, { paddingBottom: marges.bottom + espaces.s }]}>
           <Pressable
             onPress={() => {
+              // La session est fermée immédiatement : attendre la fin de
+              // l'animation pouvait laisser l'ancien utilisateur actif si le
+              // composant était démonté avant le callback.
+              infos.onDeconnexion?.();
               onFermer();
-              setTimeout(() => infos.onDeconnexion?.(), DUREE);
             }}
             style={({ pressed }) => [st.deconnexion, pressed && st.entreePressee]}
             accessibilityRole="button"
             accessibilityLabel="Se déconnecter"
           >
             <Icone nom="deconnexion" taille={20} couleur={couleurs.danger} />
-            <Text style={st.deconnexionTexte}>Se déconnecter</Text>
+            <View style={st.deconnexionTextes}>
+              <Text style={st.deconnexionTexte}>Se déconnecter</Text>
+              <Text style={st.deconnexionDetail}>Retour au choix des profils</Text>
+            </View>
           </Pressable>
         </View>
       ) : null}
@@ -481,7 +585,9 @@ const st = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: espaces.l,
   },
+  deconnexionTextes: { flex: 1 },
   deconnexionTexte: { fontSize: 15, fontWeight: '600', color: couleurs.danger },
+  deconnexionDetail: { marginTop: 2, fontSize: 11, color: couleurs.texteFaible },
   pied: {
     textAlign: 'center',
     fontSize: 11,

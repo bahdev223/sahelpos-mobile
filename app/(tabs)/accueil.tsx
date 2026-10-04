@@ -43,6 +43,7 @@ import {
   autorise,
   etatCourant as etatAbonnementCourant,
 } from '../../src/services/abonnement';
+import { AccueilHabillement } from '../../src/profile-ui/habillement/AccueilHabillement';
 
 function bornesJour(): { debut: string; fin: string } {
   const debut = new Date();
@@ -91,6 +92,14 @@ type Etat =
   | { phase: 'pret'; donnees: Donnees };
 
 export default function EcranAccueil() {
+  const { profilCommerce } = useSession();
+  if (profilCommerce?.secteur === 'HABILLEMENT') {
+    return <AccueilHabillement />;
+  }
+  return <AccueilStandard />;
+}
+
+function AccueilStandard() {
   const router = useRouter();
   const { utilisateur, boutique, revisionSynchronisation, synchroniserMaintenant } = useSession();
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
