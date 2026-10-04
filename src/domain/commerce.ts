@@ -38,8 +38,9 @@ const ECRITURES_SOCLE_SURES: TypeEcritureCommerce[] = [
   'utilisateurs', 'clients', 'fournisseurs', 'boutique',
 ];
 
-const CAPABILITIES_MOBILE = new Set([
+const CAPABILITIES_MOBILE_REPRESENTEES = new Set([
   'STOCK_SIMPLE', 'MULTI_UNIT', 'BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT',
+  'PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION',
 ]);
 
 export interface ProfilCommerceMobile {
@@ -50,7 +51,9 @@ export interface ProfilCommerceMobile {
   mode_approvisionnement: ModeApprovisionnementCommerce;
   mode_catalogue: 'SIMPLE' | 'ADVANCED';
   capabilities_effectives: string[];
+  capabilities_representees: string[];
   capabilities_non_supportees: string[];
+  capabilities_non_ecrivable: string[];
   ecritures_autorisees: TypeEcritureCommerce[];
   compatible: boolean;
   raison: string;
@@ -87,10 +90,18 @@ export function lireProfilCommerce(value: unknown): ProfilCommerceMobile | null 
 
   // compatible reste un indicateur de parite COMPLETE. Il ne sert plus de
   // coupe-circuit global pour les mutations compatibles.
+  const capabilitiesRepresentees = listeCodes(profil.capabilities_representees)
+    ? profil.capabilities_representees
+    : profil.capabilities_effectives.filter(code => CAPABILITIES_MOBILE_REPRESENTEES.has(code));
+  const capabilitiesNonEcrivable = listeCodes(profil.capabilities_non_ecrivable)
+    ? profil.capabilities_non_ecrivable
+    : profil.capabilities_non_supportees;
+
   const compatible = profil.compatible
     && profil.mode_catalogue === 'SIMPLE'
     && profil.capabilities_non_supportees.length === 0
-    && profil.capabilities_effectives.every(code => CAPABILITIES_MOBILE.has(code));
+    && capabilitiesNonEcrivable.length === 0
+    && profil.capabilities_effectives.every(code => CAPABILITIES_MOBILE_REPRESENTEES.has(code));
 
   return {
     version: 1,
@@ -101,7 +112,9 @@ export function lireProfilCommerce(value: unknown): ProfilCommerceMobile | null 
     mode_approvisionnement: profil.mode_approvisionnement as ModeApprovisionnementCommerce,
     mode_catalogue: profil.mode_catalogue as 'SIMPLE' | 'ADVANCED',
     capabilities_effectives: profil.capabilities_effectives,
+    capabilities_representees: capabilitiesRepresentees,
     capabilities_non_supportees: profil.capabilities_non_supportees,
+    capabilities_non_ecrivable: capabilitiesNonEcrivable,
     ecritures_autorisees: ecrituresAutorisees,
     compatible,
     raison: compatible ? '' : (typeof profil.raison === 'string' && profil.raison
