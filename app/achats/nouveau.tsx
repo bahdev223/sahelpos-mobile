@@ -31,6 +31,8 @@ export default function EcranNouvelAchat() {
   const { commande, matrice } = useLocalSearchParams<{ commande?: string; matrice?: string }>();
   const { boutique, profilCommerce } = useSession();
   const habillement = profilCommerce?.secteur === 'HABILLEMENT';
+  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
+  const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
   const matriceAutorisee =
     habillement && (profilCommerce?.capabilities_effectives.includes('PURCHASE_MATRIX') ?? false);
   const [etape, setEtape] = useState<Etape>(1);
@@ -110,7 +112,7 @@ export default function EcranNouvelAchat() {
         nom: item.nom, facteur: item.facteur, prixIndicatif: Math.round(produit.prixAchat * item.facteur),
       })),
     ];
-    const declinaisons = profilCommerce?.secteur === 'HABILLEMENT'
+    const declinaisons = variantesActives
       ? await listerVariantesProduit(produit.id)
       : [];
     setProduitChoisi(produit);
@@ -120,7 +122,7 @@ export default function EcranNouvelAchat() {
     setUniteChoisie(liste[0]);
     setQuantite('1');
     setPrix(String(liste[0].prixIndicatif || ''));
-  }, [profilCommerce?.secteur]);
+  }, [variantesActives]);
 
   const ajouterArticle = useCallback(() => {
     const q = Number(quantite.replace(',', '.'));
@@ -180,11 +182,11 @@ export default function EcranNouvelAchat() {
       });
       Alert.alert(
         recevoirMaintenant
-          ? (habillement ? 'Approvisionnement reçu' : 'Achat reçu')
-          : (habillement ? 'Approvisionnement enregistré' : 'Achat enregistré'),
+          ? ((habillement || quincaillerie) ? 'Approvisionnement reçu' : 'Achat reçu')
+          : ((habillement || quincaillerie) ? 'Approvisionnement enregistré' : 'Achat enregistré'),
         recevoirMaintenant
           ? `${achat.numero} : la marchandise est entrée en stock.`
-          : `${achat.numero} : ${habillement ? 'approvisionnement' : 'achat'} en attente de réception.`,
+          : `${achat.numero} : ${(habillement || quincaillerie) ? 'approvisionnement' : 'achat'} en attente de réception.`,
         [{ text: 'Voir', onPress: () => router.replace(`/achats/${achat.achatId}`) }],
       );
     } catch (erreur) {
@@ -197,7 +199,7 @@ export default function EcranNouvelAchat() {
     <Stack.Screen options={{ headerShown: false }} />
     <View style={styles.header}>
       <Pressable onPress={retour} style={styles.retour} hitSlop={10}><Icone nom="retour" taille={27} couleur="#061541" /></Pressable>
-      <Text style={styles.titre}>{habillement ? 'Nouvel approvisionnement' : 'Nouvel achat'}</Text>
+      <Text style={styles.titre}>{(habillement || quincaillerie) ? 'Nouvel approvisionnement' : 'Nouvel achat'}</Text>
       <View style={styles.brouillon}><Icone nom="document" taille={17} couleur={couleurs.primaire} /><Text style={styles.brouillonTexte}>Brouillon</Text></View>
     </View>
     <ScrollView contentContainerStyle={styles.contenu} showsVerticalScrollIndicator={false}>
