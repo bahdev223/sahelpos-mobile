@@ -15,7 +15,8 @@ import {
 import { File, Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import { deposer } from './notifications/journal';
-import { jetonAppareil, rafraichir } from './abonnement';
+import { ecritureMobileAutorisee, jetonAppareil, rafraichir } from './abonnement';
+import type { TypeEcritureCommerce } from '../domain/commerce';
 
 const SERVEUR = 'https://sahelpos.saheltech.tech';
 const DELAI_RESEAU = 20000;
@@ -35,6 +36,17 @@ const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
 const TAILLE_IMAGE_SYNC_MAX = 4 * 1024 * 1024;
 
 type TypeObjet = 'produit' | 'client' | 'fournisseur' | 'vente' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
+
+const TYPE_ECRITURE_PAR_OBJET: Record<TypeObjet, TypeEcritureCommerce> = {
+  produit: 'produits',
+  client: 'clients',
+  fournisseur: 'fournisseurs',
+  vente: 'ventes',
+  mouvement: 'mouvements',
+  achat: 'achats',
+  boutique: 'boutique',
+  utilisateur: 'utilisateurs',
+};
 
 interface LigneOutbox {
   type_objet: TypeObjet;
@@ -323,14 +335,15 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
     // Un arret brutal peut laisser des lignes marquees SENDING. Sans accuse
     // local elles doivent etre rejouees; Django les deduplique par id_local.
     await executer("UPDATE sync_outbox SET statut = 'PENDING' WHERE statut = 'SENDING'");
-    const pending = await lireTout<LigneOutbox>(
+    const pendingTous = await lireTout<LigneOutbox>(
       "SELECT type_objet, id_local, statut FROM sync_outbox WHERE statut IN ('PENDING', 'FAILED') ORDER BY date_creation, id",
     );
+    const pending = pendingTous.filter((item) =>
+      ecritureMobileAutorisee(abonnement, TYPE_ECRITURE_PAR_OBJET[item.type_objet]),
+    );
+    const bloquees = pendingTous.length - pending.length;
     let pousses = 0;
     if (pending.length > 0) {
-      if (!abonnement.peutEcrire) {
-        throw new SynchronisationImpossible(abonnement.message || 'Ecritures mobiles non autorisees pour ce profil.');
-      }
       await dansTransaction(async () => {
         for (const item of pending) {
           await executer(
@@ -393,7 +406,12 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
     await ecrireParam(CLE_DERNIER_NOMBRE_PUSH, String(pousses));
     await ecrireParam(CLE_DERNIER_NOMBRE_PULL, String(recus));
     await ecrireParam(CLE_DERNIER_SUCCES, maintenant());
-    await ecrireParam(CLE_DERNIERE_ERREUR, '');
+    await ecrireParam(
+      CLE_DERNIERE_ERREUR,
+      bloquees > 0
+        ? `${bloquees} operation(s) restent en attente : leur fonction metier n'est pas encore modifiable sur cette version mobile.`
+        : '',
+    );
     return { pousses, recus, cursor };
   } catch (erreur) {
     const message = erreur instanceof Error ? erreur.message : 'Erreur de synchronisation inconnue.';
