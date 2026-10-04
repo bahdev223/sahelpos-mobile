@@ -75,3 +75,23 @@ test('habillement core profile is supported and resolves dedicated mobile labels
   assert.equal(ui.libelles.produits, 'Modeles');
   assert.equal(ui.libelles.categories, 'Collections');
 });
+
+
+test('quincaillerie profile is compatible and exposes technical labels', () => {
+  const { lireProfilCommerce, resoudreProfilUIMobile } = charger();
+  const quincaillerie = lireProfilCommerce({
+    ...contrat,
+    secteur: 'QUINCAILLERIE',
+    secteur_libelle: 'Quincaillerie',
+    capabilities_effectives: [
+      'STOCK_SIMPLE', 'MULTI_UNIT', 'PRODUCT_VARIANTS',
+      'TECHNICAL_DIMENSIONS', 'INVENTORY', 'LOW_STOCK_ALERT', 'BARCODE',
+    ],
+  });
+  assert.equal(quincaillerie?.compatible, true);
+  const ui = resoudreProfilUIMobile(quincaillerie);
+  assert.equal(ui.code, 'QUINCAILLERIE');
+  assert.equal(ui.libelles.catalogue, 'Références');
+  assert.equal(ui.libelles.categories, 'Rayons');
+  assert.equal(ui.libelles.achats, 'Appro.');
+});
