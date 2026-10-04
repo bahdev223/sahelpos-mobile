@@ -124,6 +124,7 @@ interface LigneVenteSync {
   unite: string;
   facteur: number | string;
   quantite: number | string;
+  quantite_recue?: number | string;
   quantite_base: number | string;
   prix_unitaire: number | string;
   cout_unitaire: number | string;
@@ -179,6 +180,7 @@ interface MouvementSync {
 }
 
 interface LigneAchatSync {
+  serveur_id?: number | null;
   produit_id_local: string;
   variante_id_local?: string | null;
   libelle: string;
@@ -834,8 +836,8 @@ async function lireAchats(ids: string[]): Promise<AchatSync[]> {
   );
   for (const achat of achats) {
     achat.lignes = await lireTout<LigneAchatSync>(
-      `SELECT p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
-              l.libelle, l.unite, l.facteur, l.quantite, l.quantite_base,
+      `SELECT l.serveur_id, p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
+              l.libelle, l.unite, l.facteur, l.quantite, l.quantite_recue, l.quantite_base,
               l.prix_unitaire, l.total
          FROM ligne_achat l
          JOIN produit p ON p.id = l.produit_id
@@ -1520,12 +1522,13 @@ async function appliquerAchat(a: AchatSync): Promise<void> {
       throw new SynchronisationImpossible(`Variante manquante pour l'achat ${a.numero}.`);
     }
     await executer(
-      `INSERT INTO ligne_achat (achat_id, produit_id, variante_id, libelle, unite, facteur, quantite,
-                                quantite_base, prix_unitaire, total)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      achatId, produit.id, variante?.id ?? null, ligne.libelle, ligne.unite, nombre(ligne.facteur, 1),
-      nombre(ligne.quantite), nombre(ligne.quantite_base), nombre(ligne.prix_unitaire),
-      nombre(ligne.total),
+      `INSERT INTO ligne_achat
+       (achat_id, serveur_id, produit_id, variante_id, libelle, unite, facteur, quantite,
+        quantite_recue, quantite_base, prix_unitaire, total)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      achatId, ligne.serveur_id ?? null, produit.id, variante?.id ?? null, ligne.libelle, ligne.unite,
+      nombre(ligne.facteur, 1), nombre(ligne.quantite), nombre(ligne.quantite_recue),
+      nombre(ligne.quantite_base), nombre(ligne.prix_unitaire), nombre(ligne.total),
     );
   }
   for (const paiement of a.paiements ?? []) {
