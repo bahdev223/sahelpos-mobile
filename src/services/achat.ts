@@ -40,7 +40,8 @@ export interface AchatResume {
 }
 
 export interface LigneAchat {
-  id: number;
+  /** Présent uniquement pour une ligne persistée en SQLite. */
+  id?: number;
   serveurId?: number | null;
   produitId: number;
   varianteId?: number | null;
@@ -420,6 +421,7 @@ export async function recevoirAchatPartiel(
 export async function recevoirAchat(achatId: number): Promise<void> {
   const lignes = await listerLignesAchat(achatId);
   const receptions = lignes
+    .filter((ligne): ligne is LigneAchat & { id: number } => Number.isInteger(ligne.id))
     .map((ligne) => ({
       ligneId: ligne.id,
       quantite: Math.round((ligne.quantite - ligne.quantiteRecue) * 1000) / 1000,
