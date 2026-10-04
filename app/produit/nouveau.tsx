@@ -82,14 +82,18 @@ export interface SaisieSousUnite {
   nom: string;
   facteur: string;
   prix: string;
+  prixGros: string;
 }
 
 export interface SaisieProduit {
   nom: string;
   categorie: string;
+  marque: string;
+  referenceFabricant: string;
   codeBarre: string;
   prixAchat: string;
   prixUnitaire: string;
+  prixGros: string;
   uniteBase: string;
   stockMin: string;
   /** Uniquement a la creation : quantite en unite de base a l'ouverture. */
@@ -105,14 +109,18 @@ export interface SousUniteValide {
   nom: string;
   facteur: number;
   prix: number;
+  prixGros: number;
 }
 
 export interface ProduitValide {
   nom: string;
   categorie: string | null;
+  marque: string;
+  referenceFabricant: string;
   codeBarre: string | null;
   prixAchat: number;
   prixUnitaire: number;
+  prixGros: number;
   uniteBase: string;
   stockMin: number;
   stockInitial: number;
@@ -135,9 +143,12 @@ export function saisieVide(): SaisieProduit {
   return {
     nom: '',
     categorie: '',
+    marque: '',
+    referenceFabricant: '',
     codeBarre: '',
     prixAchat: '',
     prixUnitaire: '',
+    prixGros: '',
     uniteBase: 'Unite',
     stockMin: '10',
     stockInitial: '',
@@ -215,6 +226,9 @@ export function validerSaisie(saisie: SaisieProduit, creation: boolean): {
     erreurs.champs.prixUnitaire = 'Le prix de vente doit etre superieur a 0.';
   }
 
+  const prixGros = analyserNombre(saisie.prixGros) ?? 0;
+  if (prixGros < 0) erreurs.champs.prixGros = 'Le prix gros ne peut pas etre negatif.';
+
   const uniteBase = saisie.uniteBase.trim();
   if (uniteBase === '') erreurs.champs.uniteBase = "L'unite de base est obligatoire.";
 
@@ -231,6 +245,7 @@ export function validerSaisie(saisie: SaisieProduit, creation: boolean): {
     const nomSu = ligne.nom.trim();
     const facteur = analyserNombre(ligne.facteur);
     const prix = analyserNombre(ligne.prix) ?? 0;
+    const prixGrosLigne = analyserNombre(ligne.prixGros) ?? 0;
 
     // Une ligne entierement vide est simplement ignoree : l'utilisateur a
     // ajoute une ligne puis change d'avis, ce n'est pas une erreur.
@@ -248,13 +263,18 @@ export function validerSaisie(saisie: SaisieProduit, creation: boolean): {
       erreurs.sousUnites[index] = 'Cette unite est deja definie.';
       return;
     }
-    if (prix < 0) {
-      erreurs.sousUnites[index] = 'Le prix ne peut pas etre negatif.';
+    if (prix < 0 || prixGrosLigne < 0) {
+      erreurs.sousUnites[index] = 'Les prix ne peuvent pas etre negatifs.';
       return;
     }
     nomsVus.add(nomSu.toLowerCase());
     // Prix laisse a 0 : la caisse appliquera prix de base x facteur.
-    sousUnites.push({ nom: nomSu, facteur, prix: Math.round(prix) });
+    sousUnites.push({
+      nom: nomSu,
+      facteur,
+      prix: Math.round(prix),
+      prixGros: Math.round(prixGrosLigne),
+    });
   });
 
   const categorie = saisie.categorie.trim();
@@ -270,11 +290,14 @@ export function validerSaisie(saisie: SaisieProduit, creation: boolean): {
     valide: {
       nom,
       categorie,
+      marque: saisie.marque.trim(),
+      referenceFabricant: saisie.referenceFabricant.trim(),
       // Chaine vide interdite : la colonne est UNIQUE, et SQLite accepte
       // plusieurs NULL mais une seule chaine vide.
       codeBarre: codeBarre === '' ? null : codeBarre,
       prixAchat: Math.round(prixAchat),
       prixUnitaire: Math.round(prixVente),
+      prixGros: Math.round(prixGros),
       uniteBase,
       stockMin,
       stockInitial,
@@ -314,15 +337,19 @@ export async function creerProduit(valide: ProduitValide): Promise<number> {
   await db.withTransactionAsync(async () => {
     const idLocal = genererIdLocal();
     const insertion = await db.runAsync(
-      `INSERT INTO produit (id_local, nom, categorie, code_barre, prix_unitaire,
-                            prix_achat, unite_base, quantite_base, stock_min,
-                            gestion_stock, chemin_image, actif, date_creation)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+      `INSERT INTO produit
+       (id_local, nom, categorie, marque, reference_fabricant, code_barre,
+        prix_unitaire, prix_gros, prix_achat, unite_base, quantite_base, stock_min,
+        gestion_stock, chemin_image, actif, date_creation)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
       idLocal,
       valide.nom,
       valide.categorie,
+      valide.marque,
+      valide.referenceFabricant,
       valide.codeBarre,
       valide.prixUnitaire,
+      valide.prixGros,
       valide.prixAchat,
       valide.uniteBase,
       valide.stockMin,
@@ -335,11 +362,12 @@ export async function creerProduit(valide: ProduitValide): Promise<number> {
 
     for (const su of valide.sousUnites) {
       await db.runAsync(
-        'INSERT INTO sous_unite (produit_id, nom, facteur, prix) VALUES (?, ?, ?, ?)',
+        'INSERT INTO sous_unite (produit_id, nom, facteur, prix, prix_gros) VALUES (?, ?, ?, ?, ?)',
         identifiant,
         su.nom,
         su.facteur,
         su.prix,
+        su.prixGros,
       );
     }
 
@@ -580,7 +608,8 @@ export interface ProprietesFormulaire {
 }
 
 export function FormulaireProduit(p: ProprietesFormulaire) {
-  const { boutique } = useSession();
+  const { boutique, profilCommerce } = useSession();
+  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
   const [saisie, setSaisie] = useState<SaisieProduit>(p.saisieInitiale);
   const [erreurs, setErreurs] = useState<Erreurs>({ champs: {}, sousUnites: {} });
   const [categories, setCategories] = useState<string[]>([]);
@@ -638,7 +667,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
   const ajouterSousUnite = useCallback(() => {
     setSaisie((precedent) => ({
       ...precedent,
-      sousUnites: [...precedent.sousUnites, { cle: nouvelleCle(), nom: '', facteur: '', prix: '' }],
+      sousUnites: [...precedent.sousUnites, { cle: nouvelleCle(), nom: '', facteur: '', prix: '', prixGros: '' }],
     }));
   }, []);
 
@@ -744,6 +773,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
       enregistrement={enregistrement}
       erreurGlobale={erreurGlobale}
       devise={boutique.devise}
+      quincaillerie={quincaillerie}
       modifier={modifier}
       modifierSousUnite={modifierSousUnite}
       supprimerSousUnite={supprimerSousUnite}
@@ -831,6 +861,23 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
             </View>
           ) : null}
 
+          {quincaillerie ? (
+            <>
+              <Champ
+                libelle="Marque"
+                valeur={saisie.marque}
+                onChange={(v) => modifier('marque', v)}
+                indication="Ex : Legrand, Bosch, Nexans"
+              />
+              <Champ
+                libelle="Référence fabricant"
+                valeur={saisie.referenceFabricant}
+                onChange={(v) => modifier('referenceFabricant', v)}
+                indication="Ex : NX-2.5-B"
+              />
+            </>
+          ) : null}
+
           <View style={s.champ}>
             <Text style={s.libelle}>Code-barres</Text>
             <View style={s.ligneCodeBarre}>
@@ -865,7 +912,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
             suffixe="F"
           />
           <Champ
-            libelle="Prix de vente"
+            libelle={quincaillerie ? "Prix détail" : "Prix de vente"}
             valeur={saisie.prixUnitaire}
             onChange={(v) => modifier('prixUnitaire', v)}
             erreur={erreurs.champs.prixUnitaire}
@@ -873,6 +920,17 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
             indication="0"
             suffixe="F"
           />
+          {quincaillerie ? (
+            <Champ
+              libelle="Prix gros"
+              valeur={saisie.prixGros}
+              onChange={(v) => modifier('prixGros', v)}
+              erreur={erreurs.champs.prixGros}
+              clavier="numeric"
+              indication="0 = non défini"
+              suffixe="F"
+            />
+          ) : null}
           <Text style={s.explication}>
             Prix pour une {saisie.uniteBase.trim() === '' ? 'unite' : saisie.uniteBase}. Les
             sous-unites ci-dessous peuvent avoir leur propre prix.
@@ -982,6 +1040,19 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
                   />
                   <Text style={s.suffixe}>F</Text>
                 </View>
+                {quincaillerie ? (
+                  <View style={[s.zoneSaisie, s.sousUniteNombre]}>
+                    <TextInput
+                      style={s.saisie}
+                      value={ligne.prixGros}
+                      onChangeText={(v) => modifierSousUnite(index, 'prixGros', v)}
+                      placeholder="Gros"
+                      placeholderTextColor={C.texteFaible}
+                      keyboardType="numeric"
+                    />
+                    <Text style={s.suffixe}>F</Text>
+                  </View>
+                ) : null}
                 <Pressable style={s.boutonRetirer} onPress={() => supprimerSousUnite(index)}>
                   <Text style={s.boutonRetirerTexte}>Retirer</Text>
                 </Pressable>
@@ -1083,6 +1154,7 @@ interface ProprietesFormulaireMobile {
   enregistrement: boolean;
   erreurGlobale: string | null;
   devise: string;
+  quincaillerie: boolean;
   modifier: <K extends keyof SaisieProduit>(cle: K, valeur: SaisieProduit[K]) => void;
   modifierSousUnite: (index: number, cle: keyof SaisieSousUnite, valeur: string) => void;
   supprimerSousUnite: (index: number) => void;
@@ -1181,6 +1253,24 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
           </View>
         </View>
 
+        {props.quincaillerie ? (
+          <View style={m.carteMobile}>
+            <Text style={m.titreCarteTexte}>Identification fabricant</Text>
+            <ChampMobile
+              libelle="Marque"
+              valeur={props.saisie.marque}
+              onChangeText={(valeur) => props.modifier('marque', valeur)}
+              indication="Ex : Legrand, Bosch, Nexans"
+            />
+            <ChampMobile
+              libelle="Référence fabricant"
+              valeur={props.saisie.referenceFabricant}
+              onChangeText={(valeur) => props.modifier('referenceFabricant', valeur)}
+              indication="Ex : NX-2.5-B"
+            />
+          </View>
+        ) : null}
+
         <View style={m.carteMobile}>
           <View style={m.titreCarteMobile}>
             <PastilleMobile nom="argent" fond={couleurs.succesDouce} couleur={couleurs.succesFonce} />
@@ -1202,7 +1292,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
             </View>
             <View style={m.champDemi}>
               <ChampMobile
-                libelle="Prix de vente"
+                libelle={props.quincaillerie ? "Prix détail" : "Prix de vente"}
                 obligatoire
                 valeur={props.saisie.prixUnitaire}
                 onChangeText={(valeur) => props.modifier('prixUnitaire', valeur)}
@@ -1212,6 +1302,16 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
               />
             </View>
           </View>
+          {props.quincaillerie ? (
+            <ChampMobile
+              libelle="Prix gros"
+              valeur={props.saisie.prixGros}
+              onChangeText={(valeur) => props.modifier('prixGros', valeur)}
+              indication="0 = non défini"
+              clavier="numeric"
+              erreur={props.erreurs.champs.prixGros}
+            />
+          ) : null}
         </View>
 
         <View style={m.carteRangee}>
@@ -1276,6 +1376,16 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
                 placeholderTextColor={couleurs.texteEteint}
                 keyboardType="numeric"
               />
+              {props.quincaillerie ? (
+                <TextInput
+                  style={[m.saisieMobile, m.sousUnitePrix]}
+                  value={ligne.prixGros}
+                  onChangeText={(valeur) => props.modifierSousUnite(index, 'prixGros', valeur)}
+                  placeholder="Gros"
+                  placeholderTextColor={couleurs.texteEteint}
+                  keyboardType="numeric"
+                />
+              ) : null}
               <Pressable
                 style={m.boutonRetirerMobile}
                 onPress={() => props.supprimerSousUnite(index)}
