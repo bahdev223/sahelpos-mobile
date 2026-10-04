@@ -257,7 +257,7 @@ export async function genererMatriceVariantesLocale(
   if (!produit) throw new Error('Modele introuvable.');
 
   const groupes = Object.values(selections).filter((groupe) => groupe.length > 0);
-  if (groupes.length === 0) throw new Error('Choisissez au moins une taille ou une couleur.');
+  if (groupes.length === 0) throw new Error('Choisissez au moins une caractéristique.');
 
   const combinaisons = produitCartesien(groupes);
   const crees: number[] = [];
@@ -293,7 +293,10 @@ export async function genererMatriceVariantesLocale(
 
       const idLocal = genererIdLocal();
       const suffixe = combinaison.map((v) => skuFragment(v.code || v.nom)).join('-');
-      const sku = `${skuFragment(produit.nom).slice(0, 8) || 'MODELE'}-${produitId}-${suffixe || index}`.slice(0, 60);
+      // L'identité locale UUID évite les collisions entre deux téléphones qui
+      // possèdent chacun leur propre entier SQLite pour le même produit serveur.
+      const identite = idLocal.slice(0, 10).toUpperCase();
+      const sku = `${skuFragment(produit.nom).slice(0, 8) || 'REF'}-${suffixe || 'STD'}-${identite}`.slice(0, 60);
       const insertion = await executer(
         `INSERT INTO variante_produit
          (id_local, produit_id, sku, code_barre, prix_override, prix_achat,
