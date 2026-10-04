@@ -47,7 +47,10 @@ interface ProduitSync {
   nom: string;
   categorie: string | null;
   code_barre: string | null;
+  marque?: string | null;
+  reference_fabricant?: string | null;
   prix_unitaire: number | string;
+  prix_gros?: number | string;
   prix_achat: number | string;
   unite_base: string;
   quantite_base: number | string;
@@ -63,7 +66,7 @@ interface ProduitSync {
   date_creation?: string | null;
   date_modification?: string | null;
   supprime_le?: string | null;
-  sous_unites?: Array<{ nom: string; facteur: number | string; prix: number | string }>;
+  sous_unites?: Array<{ nom: string; facteur: number | string; prix: number | string; prix_gros?: number | string }>;
 }
 
 interface ValeurVarianteSync {
@@ -634,7 +637,8 @@ async function lireUtilisateurs(ids: string[]): Promise<UtilisateurSync[]> {
 async function lireProduits(ids: string[]): Promise<ProduitSync[]> {
   if (ids.length === 0) return [];
   const produits = await lireTout<ProduitSync>(
-    `SELECT id_local, nom, categorie, code_barre, prix_unitaire, prix_achat,
+    `SELECT id_local, nom, categorie, code_barre, marque, reference_fabricant,
+            prix_unitaire, prix_gros, prix_achat,
             unite_base, quantite_base, stock_min, gestion_stock, actif,
             chemin_image, date_creation, date_modification
        FROM produit WHERE id_local IN (${placeholders(ids)})`,
@@ -648,7 +652,7 @@ async function lireProduits(ids: string[]): Promise<ProduitSync[]> {
     );
     produit.sous_unites = local
       ? await lireTout(
-          'SELECT nom, facteur, prix FROM sous_unite WHERE produit_id = ?',
+          'SELECT nom, facteur, prix, prix_gros FROM sous_unite WHERE produit_id = ?',
           local.id,
         )
       : [];
@@ -999,16 +1003,18 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
       ? dejaPresent?.chemin_image ?? null
       : imageRecue;
   await executer(
-    `INSERT INTO produit (id_local, nom, categorie, code_barre, prix_unitaire,
-                          prix_achat, unite_base, quantite_base, stock_min,
-                          gestion_stock, chemin_image, actif, date_creation,
-                          date_modification)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO produit (id_local, nom, categorie, code_barre, marque, reference_fabricant,
+                          prix_unitaire, prix_gros, prix_achat, unite_base, quantite_base, stock_min,
+                          gestion_stock, chemin_image, actif, date_creation, date_modification)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id_local) DO UPDATE SET
        nom = excluded.nom,
        categorie = excluded.categorie,
        code_barre = excluded.code_barre,
+       marque = excluded.marque,
+       reference_fabricant = excluded.reference_fabricant,
        prix_unitaire = excluded.prix_unitaire,
+       prix_gros = excluded.prix_gros,
        prix_achat = excluded.prix_achat,
        unite_base = excluded.unite_base,
        quantite_base = excluded.quantite_base,
@@ -1021,7 +1027,10 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
     p.nom,
     p.categorie ?? null,
     p.code_barre ?? null,
+    p.marque ?? '',
+    p.reference_fabricant ?? '',
     nombre(p.prix_unitaire),
+    nombre(p.prix_gros),
     nombre(p.prix_achat),
     p.unite_base || 'Unite',
     nombre(p.quantite_base),
@@ -1040,11 +1049,12 @@ async function appliquerProduit(p: ProduitSync): Promise<void> {
   await executer('DELETE FROM sous_unite WHERE produit_id = ?', local.id);
   for (const su of p.sous_unites ?? []) {
     await executer(
-      'INSERT INTO sous_unite (produit_id, nom, facteur, prix) VALUES (?, ?, ?, ?)',
+      'INSERT INTO sous_unite (produit_id, nom, facteur, prix, prix_gros) VALUES (?, ?, ?, ?, ?)',
       local.id,
       su.nom,
       nombre(su.facteur, 1),
       nombre(su.prix),
+      nombre(su.prix_gros),
     );
   }
 }
