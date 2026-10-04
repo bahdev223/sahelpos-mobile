@@ -39,6 +39,8 @@ test('variant schema preserves identities and product ownership', () => {
     'code_barre',
     'actif',
     'date_modification',
+    'stock_actuel',
+    'stock_disponible',
     'supprime_le',
   ]) {
     assert.match(schema, new RegExp('variante_produit[\\s\\S]*' + column));
