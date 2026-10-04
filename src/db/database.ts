@@ -286,6 +286,39 @@ async function reparerSchemaCritique(db: SQLite.SQLiteDatabase): Promise<void> {
     }
 
 
+    if (await tableExiste(db, 'ligne_vente')) {
+      const colonnes = await colonnesTable(db, 'ligne_vente');
+      if (!colonnes.has('variante_id_local')) {
+        await db.execAsync('ALTER TABLE ligne_vente ADD COLUMN variante_id_local TEXT');
+      }
+      if (!colonnes.has('variante_sku_snapshot')) {
+        await db.execAsync("ALTER TABLE ligne_vente ADD COLUMN variante_sku_snapshot TEXT NOT NULL DEFAULT ''");
+      }
+      if (!colonnes.has('variante_nom_snapshot')) {
+        await db.execAsync("ALTER TABLE ligne_vente ADD COLUMN variante_nom_snapshot TEXT NOT NULL DEFAULT ''");
+      }
+    }
+
+    if (await tableExiste(db, 'ligne_achat')) {
+      const colonnes = await colonnesTable(db, 'ligne_achat');
+      if (!colonnes.has('variante_id_local')) {
+        await db.execAsync('ALTER TABLE ligne_achat ADD COLUMN variante_id_local TEXT');
+      }
+      if (!colonnes.has('variante_sku_snapshot')) {
+        await db.execAsync("ALTER TABLE ligne_achat ADD COLUMN variante_sku_snapshot TEXT NOT NULL DEFAULT ''");
+      }
+      if (!colonnes.has('variante_nom_snapshot')) {
+        await db.execAsync("ALTER TABLE ligne_achat ADD COLUMN variante_nom_snapshot TEXT NOT NULL DEFAULT ''");
+      }
+    }
+
+    if (await tableExiste(db, 'mouvement_stock')) {
+      const colonnes = await colonnesTable(db, 'mouvement_stock');
+      if (!colonnes.has('variante_id_local')) {
+        await db.execAsync('ALTER TABLE mouvement_stock ADD COLUMN variante_id_local TEXT');
+      }
+    }
+
     if (await tableExiste(db, 'variante_produit')) {
       const colonnes = await colonnesTable(db, 'variante_produit');
       if (!colonnes.has('stock_actuel')) {
