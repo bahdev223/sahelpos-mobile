@@ -26,7 +26,13 @@ async function plusRecent(table: string, idLocal: string, entrant: string): Prom
     `SELECT date_modification FROM ${table} WHERE id_local = ?`,
     idLocal,
   );
-  return Boolean(ligne?.date_modification && ligne.date_modification > entrant);
+  if (!ligne?.date_modification) return false;
+  const locale = Date.parse(ligne.date_modification);
+  const recue = Date.parse(entrant);
+  if (Number.isNaN(locale) || Number.isNaN(recue)) {
+    return ligne.date_modification > entrant;
+  }
+  return locale > recue;
 }
 
 export async function upsertDimension(payload: DimensionVarianteSync): Promise<void> {
