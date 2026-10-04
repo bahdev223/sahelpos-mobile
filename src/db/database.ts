@@ -291,6 +291,9 @@ async function reparerSchemaCritique(db: SQLite.SQLiteDatabase): Promise<void> {
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_sku ON variante_produit(sku)',
       );
       await db.execAsync(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_signature ON variante_produit(produit_id, signature_combinaison) WHERE signature_combinaison <> ''",
+      );
+      await db.execAsync(
         'CREATE INDEX IF NOT EXISTS idx_variante_produit ON variante_produit(produit_id, actif)',
       );
     }
