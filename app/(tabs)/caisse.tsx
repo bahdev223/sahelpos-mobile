@@ -937,11 +937,15 @@ function ModaleUnite({
 
   let refus: string | null = null;
   if (exigeVariante && !variante) {
-    refus = 'Choisissez la taille et la couleur avant d ajouter au panier.';
+    refus = quincaillerie
+      ? 'Choisissez les caractéristiques techniques avant d ajouter au panier.'
+      : 'Choisissez la taille et la couleur avant d ajouter au panier.';
   } else if (quantite <= 0) {
     refus = 'Indiquez une quantite superieure a zero.';
   } else if (prixUnitaire <= 0) {
-    refus = "Ce modele n'a pas de prix de vente pour cette variante.";
+    refus = quincaillerie
+      ? "Cette référence n'a pas de prix de vente pour cette variante."
+      : "Ce modele n'a pas de prix de vente pour cette variante.";
   } else if (produit.gestionStock && quantite > resteApresPanier) {
     refus = `Stock insuffisant : ${formaterQuantite(
       Math.max(0, Math.round(resteApresPanier * 1000) / 1000),
