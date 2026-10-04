@@ -215,7 +215,7 @@ export default function DispositionRacine() {
 
   useEffect(() => {
     void charger();
-  }, [utilisateur]);
+  }, [charger]);
 
   useEffect(() => {
     void lireEtatSynchronisation().then(setEtatSynchronisation).catch(() => {});
@@ -301,7 +301,7 @@ export default function DispositionRacine() {
         synchronisationEnCours.current = null;
       }
     }
-  }, [charger]);
+  }, [utilisateur]);
 
   // Les synchronisations declenchees par le systeme ne doivent jamais creer
   // de rejet non gere. Le geste manuel, lui, conserve l'erreur : l'ecran qui
