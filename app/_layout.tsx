@@ -16,7 +16,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Redirect, Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Network from 'expo-network';
@@ -37,6 +37,7 @@ import type { Role, Utilisateur } from '../src/domain/types';
 import type { ProfilCommerceMobile } from '../src/domain/commerce';
 import { obtenirUtilisateurParIdLocal } from '../src/services/auth';
 import { resoudreSessionSynchronisee } from '../src/domain/session';
+import { peutAccederCheminMobile } from '../src/domain/permissions-mobile';
 import type { LargeurPapier } from '../src/services/impression/escpos';
 import { Chargement, Erreur, couleurs } from '../src/ui/components';
 import { FournisseurTiroir } from '../src/ui/tiroir';
@@ -162,6 +163,7 @@ function fabriquerBoutique(table: Record<string, string>): Boutique {
 type EtatDemarrage = 'chargement' | 'pret' | 'erreur';
 
 export default function DispositionRacine() {
+  const cheminCourant = usePathname();
   const [etat, setEtat] = useState<EtatDemarrage>('chargement');
   const [messageErreur, setMessageErreur] = useState('');
   const [installe, setInstalle] = useState(false);
@@ -340,6 +342,7 @@ export default function DispositionRacine() {
   );
 
   const pileMontee = etat === 'pret' && installe && utilisateur !== null;
+  const cheminAutorise = !utilisateur || peutAccederCheminMobile(utilisateur.role, cheminCourant);
 
   // Premier examen du stock a l'ouverture, meme si l'appareil n'a pas encore
   // de droit distant (mode hors connexion).
@@ -452,6 +455,9 @@ export default function DispositionRacine() {
           onDeconnexion: fermerSession,
         }}
       >
+        {!cheminAutorise ? (
+          <Redirect href="/(tabs)/accueil" />
+        ) : (
         <Stack
           screenOptions={{
             // Par defaut chaque ecran dessine son propre en-tete. Ceux qui
@@ -466,6 +472,7 @@ export default function DispositionRacine() {
             contentStyle: { backgroundColor: couleurs.fond },
           }}
         />
+        )}
       </FournisseurTiroir>
     );
   }
