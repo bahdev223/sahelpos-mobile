@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -362,5 +362,152 @@ export const MIGRATIONS: string[][] = [
   // --- version 9 : photo/profil client ------------------------------------
   [
     `ALTER TABLE client ADD COLUMN chemin_photo TEXT`,
+  ],
+
+  // --- version 10 : fondations Habillement / variantes --------------------
+  [
+    `CREATE TABLE IF NOT EXISTS hab_schema_taille (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local           TEXT    NOT NULL UNIQUE,
+      nom                TEXT    NOT NULL,
+      dimension_code     TEXT    NOT NULL DEFAULT 'TAILLE',
+      est_systeme        INTEGER NOT NULL DEFAULT 0,
+      date_modification  TEXT    NOT NULL,
+      supprime_le        TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_hab_schema_dimension
+       ON hab_schema_taille(dimension_code)`,
+
+    `CREATE TABLE IF NOT EXISTS hab_valeur_schema_taille (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local           TEXT    NOT NULL UNIQUE,
+      schema_id          INTEGER NOT NULL REFERENCES hab_schema_taille(id) ON DELETE CASCADE,
+      valeur             TEXT    NOT NULL,
+      ordre              INTEGER NOT NULL DEFAULT 0,
+      date_modification  TEXT    NOT NULL,
+      supprime_le        TEXT,
+      UNIQUE(schema_id, valeur)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_hab_valeur_schema
+       ON hab_valeur_schema_taille(schema_id, ordre)`,
+
+    `CREATE TABLE IF NOT EXISTS hab_categorie_mode (
+      id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local                 TEXT    NOT NULL UNIQUE,
+      nom                      TEXT    NOT NULL,
+      genre                    TEXT    NOT NULL DEFAULT 'M',
+      est_systeme              INTEGER NOT NULL DEFAULT 0,
+      utilise_couleur          INTEGER NOT NULL DEFAULT 1,
+      utilise_taille           INTEGER NOT NULL DEFAULT 1,
+      schema_taille_defaut_id  INTEGER REFERENCES hab_schema_taille(id) ON DELETE SET NULL,
+      date_modification        TEXT    NOT NULL,
+      supprime_le              TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_hab_categorie_schema
+       ON hab_categorie_mode(schema_taille_defaut_id)`,
+
+    `CREATE TABLE IF NOT EXISTS hab_couleur_mode (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local           TEXT    NOT NULL UNIQUE,
+      nom                TEXT    NOT NULL,
+      hex_code           TEXT    NOT NULL,
+      est_systeme        INTEGER NOT NULL DEFAULT 0,
+      actif              INTEGER NOT NULL DEFAULT 1,
+      date_modification  TEXT    NOT NULL,
+      supprime_le        TEXT
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS hab_marque (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local           TEXT    NOT NULL UNIQUE,
+      nom                TEXT    NOT NULL,
+      date_modification  TEXT    NOT NULL,
+      supprime_le        TEXT
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS hab_saison (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local           TEXT    NOT NULL UNIQUE,
+      nom                TEXT    NOT NULL,
+      date_modification  TEXT    NOT NULL,
+      supprime_le        TEXT
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS hab_collection (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local           TEXT    NOT NULL UNIQUE,
+      nom                TEXT    NOT NULL,
+      date_modification  TEXT    NOT NULL,
+      supprime_le        TEXT
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS hab_produit (
+      id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local                  TEXT    NOT NULL UNIQUE,
+      produit_id                INTEGER NOT NULL UNIQUE REFERENCES produit(id) ON DELETE CASCADE,
+      categorie_mode_id         INTEGER REFERENCES hab_categorie_mode(id) ON DELETE SET NULL,
+      marque_id                 INTEGER REFERENCES hab_marque(id) ON DELETE SET NULL,
+      saison_id                 INTEGER REFERENCES hab_saison(id) ON DELETE SET NULL,
+      collection_id             INTEGER REFERENCES hab_collection(id) ON DELETE SET NULL,
+      schema_taille_id          INTEGER REFERENCES hab_schema_taille(id) ON DELETE SET NULL,
+      fournisseur_id_local      TEXT,
+      date_modification         TEXT    NOT NULL,
+      supprime_le               TEXT
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_hab_produit_categorie
+       ON hab_produit(categorie_mode_id)`,
+
+    `CREATE TABLE IF NOT EXISTS dimension_variante (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local           TEXT    NOT NULL UNIQUE,
+      code               TEXT    NOT NULL UNIQUE,
+      nom                TEXT    NOT NULL,
+      ordre              INTEGER NOT NULL DEFAULT 0,
+      date_modification  TEXT    NOT NULL,
+      supprime_le        TEXT
+    )`,
+
+    `CREATE TABLE IF NOT EXISTS valeur_dimension (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local           TEXT    NOT NULL UNIQUE,
+      dimension_id       INTEGER NOT NULL REFERENCES dimension_variante(id) ON DELETE CASCADE,
+      code               TEXT    NOT NULL,
+      nom                TEXT    NOT NULL,
+      ordre              INTEGER NOT NULL DEFAULT 0,
+      code_hex           TEXT,
+      date_modification  TEXT    NOT NULL,
+      supprime_le        TEXT,
+      UNIQUE(dimension_id, code)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_valeur_dimension_dimension
+       ON valeur_dimension(dimension_id, ordre)`,
+
+    `CREATE TABLE IF NOT EXISTS variante_produit (
+      id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local               TEXT    NOT NULL UNIQUE,
+      produit_id             INTEGER NOT NULL REFERENCES produit(id) ON DELETE CASCADE,
+      sku                    TEXT    NOT NULL,
+      signature_combinaison  TEXT    NOT NULL DEFAULT '',
+      prix_override          REAL,
+      prix_achat             REAL,
+      code_barre             TEXT,
+      actif                  INTEGER NOT NULL DEFAULT 1,
+      date_modification      TEXT    NOT NULL,
+      supprime_le            TEXT,
+      UNIQUE(produit_id, signature_combinaison)
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_sku
+       ON variante_produit(sku)`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_produit
+       ON variante_produit(produit_id, actif)`,
+
+    `CREATE TABLE IF NOT EXISTS variante_valeur (
+      variante_id  INTEGER NOT NULL REFERENCES variante_produit(id) ON DELETE CASCADE,
+      valeur_id    INTEGER NOT NULL REFERENCES valeur_dimension(id) ON DELETE CASCADE,
+      PRIMARY KEY (variante_id, valeur_id),
+      UNIQUE(variante_id, valeur_id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_variante_valeur_valeur
+       ON variante_valeur(valeur_id)`,
   ],
 ];
