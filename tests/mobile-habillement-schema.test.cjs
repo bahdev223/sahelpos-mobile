@@ -45,6 +45,10 @@ test('variant schema preserves identities and product ownership', () => {
   }
 
   assert.match(schema, /UNIQUE\s*\(variante_id,\s*valeur_id\)/);
+  assert.match(
+    schema,
+    /CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_signature[\s\S]*WHERE signature_combinaison <> ''/,
+  );
 });
 
 test('dimension identity prevents merging taille 38 with pointure 38', () => {
