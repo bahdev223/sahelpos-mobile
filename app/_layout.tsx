@@ -35,6 +35,8 @@ import {
 } from '../src/services/synchronisation';
 import type { Role, Utilisateur } from '../src/domain/types';
 import type { ProfilCommerceMobile } from '../src/domain/commerce';
+import { obtenirUtilisateurParIdLocal } from '../src/services/auth';
+import { resoudreSessionSynchronisee } from '../src/domain/session';
 import type { LargeurPapier } from '../src/services/impression/escpos';
 import { Chargement, Erreur, couleurs } from '../src/ui/components';
 import { FournisseurTiroir } from '../src/ui/tiroir';
@@ -54,6 +56,7 @@ export const CLES_PARAMETRES = {
   piedDePage: 'recu_pied_de_page',
   largeurPapier: 'recu_largeur_papier',
   biometrieUtilisateur: 'biometrie_utilisateur_id',
+  dernierUtilisateur: 'dernier_utilisateur_id',
 } as const;
 
 export interface Boutique {
@@ -84,6 +87,8 @@ export interface ValeurSession {
   installe: boolean;
   ouvrirSession: (utilisateur: Utilisateur) => void;
   fermerSession: () => void;
+  /** Change de valeur a chaque changement d'identite ou de droits. */
+  revisionSession: number;
   /** A appeler apres avoir modifie les parametres ou les comptes. */
   recharger: () => Promise<void>;
   /** Change apres une synchronisation distante appliquee dans SQLite. */
@@ -163,6 +168,7 @@ export default function DispositionRacine() {
   const [boutique, setBoutique] = useState<Boutique>(BOUTIQUE_PAR_DEFAUT);
   const [profilCommerce, setProfilCommerce] = useState<ProfilCommerceMobile | null>(null);
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
+  const [revisionSession, setRevisionSession] = useState(0);
   const [revisionSynchronisation, setRevisionSynchronisation] = useState(0);
   const [etatSynchronisation, setEtatSynchronisation] = useState<EtatSynchronisation>({
     derniereTentative: null,
@@ -209,7 +215,7 @@ export default function DispositionRacine() {
 
   useEffect(() => {
     void charger();
-  }, [charger]);
+  }, [utilisateur]);
 
   useEffect(() => {
     void lireEtatSynchronisation().then(setEtatSynchronisation).catch(() => {});
@@ -227,10 +233,14 @@ export default function DispositionRacine() {
 
   const ouvrirSession = useCallback((compte: Utilisateur) => {
     setUtilisateur(compte);
+    setRevisionSession((revision) => revision + 1);
   }, []);
 
   const fermerSession = useCallback(() => {
+    // On ne supprime ni catalogue, ni ventes, ni comptes : seule l'identite
+    // active est detruite. Le prochain utilisateur doit repasser son PIN.
     setUtilisateur(null);
+    setRevisionSession((revision) => revision + 1);
   }, []);
 
   /**
@@ -259,6 +269,20 @@ export default function DispositionRacine() {
         setBoutique(fabriquerBoutique(await lireParametres()));
         const droitActualise = await etatAbonnementCourant();
         setProfilCommerce(droitActualise.droit?.commerce ?? null);
+
+        // Le rôle/état du compte peut avoir changé pendant le pull. La session
+        // ne garde jamais une ancienne copie administrateur en mémoire.
+        if (utilisateur) {
+          const local = await obtenirUtilisateurParIdLocal(utilisateur.idLocal);
+          const changement = resoudreSessionSynchronisee(utilisateur, local);
+          if (changement.type === 'FERME') {
+            setUtilisateur(null);
+            setRevisionSession((revision) => revision + 1);
+          } else if (changement.type === 'ACTUALISE') {
+            setUtilisateur(changement.utilisateur);
+            setRevisionSession((revision) => revision + 1);
+          }
+        }
         setRevisionSynchronisation((precedente) => precedente + 1);
       } finally {
         setEtatSynchronisation(await lireEtatSynchronisation().catch(() => ({
@@ -294,6 +318,7 @@ export default function DispositionRacine() {
       installe,
       ouvrirSession,
       fermerSession,
+      revisionSession,
       recharger: charger,
       revisionSynchronisation,
       etatSynchronisation,
@@ -306,6 +331,7 @@ export default function DispositionRacine() {
       installe,
       ouvrirSession,
       fermerSession,
+      revisionSession,
       charger,
       revisionSynchronisation,
       etatSynchronisation,
@@ -415,6 +441,7 @@ export default function DispositionRacine() {
     // ni l'ecran de connexion ne doivent donner acces aux reglages.
     contenu = (
       <FournisseurTiroir
+        key={`session-${revisionSession}-${utilisateur.idLocal}-${utilisateur.role}`}
         infos={{
           boutique: boutique.nom,
           secteur: profilCommerce?.secteur ?? 'COMMERCE_GENERAL',
