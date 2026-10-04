@@ -382,11 +382,12 @@ export default function DispositionRacine() {
   useEffect(() => {
     if (!pileMontee) return;
     return ecouterChangementSynchronisation(() => {
+      void revaliderSessionLocale();
       // Certains services marquent l'outbox dans leur transaction SQLite. On
       // laisse le commit finir avant de lire cette file et de la pousser.
       setTimeout(synchroniserSansBruit, 250);
     });
-  }, [pileMontee, synchroniserSansBruit]);
+  }, [pileMontee, revaliderSessionLocale, synchroniserSansBruit]);
 
   // Filet de securite pour un reseau qui change d'etat sans emettre
   // d'evenement natif (certains Android apres une coupure prolongée).
@@ -402,10 +403,13 @@ export default function DispositionRacine() {
   useEffect(() => {
     if (!pileMontee) return;
     const abonnement = AppState.addEventListener('change', (etatApp) => {
-      if (etatApp === 'active') synchroniserSansBruit();
+      if (etatApp === 'active') {
+        void revaliderSessionLocale();
+        synchroniserSansBruit();
+      }
     });
     return () => abonnement.remove();
-  }, [pileMontee, synchroniserSansBruit]);
+  }, [pileMontee, revaliderSessionLocale, synchroniserSansBruit]);
 
   // La derniere imprimante choisie est reconnectee en arriere-plan. Une
   // imprimante eteinte ou hors de portee ne doit jamais bloquer la caisse.
