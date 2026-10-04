@@ -15,6 +15,7 @@ import {
   maintenant,
 } from './base';
 import { marquerChangement } from '../../services/synchronisation';
+import { exigerEcriture } from '../../services/abonnement';
 
 interface LigneClient {
   id: number;
@@ -81,6 +82,7 @@ export interface SaisieClient {
 }
 
 export async function creerClient(saisie: SaisieClient): Promise<number> {
+  await exigerEcriture('clients');
   const idLocal = genererIdLocal();
   const horodatage = maintenant();
   const r = await executer(
@@ -101,6 +103,7 @@ export async function creerClient(saisie: SaisieClient): Promise<number> {
 }
 
 export async function modifierClient(id: number, saisie: SaisieClient): Promise<void> {
+  await exigerEcriture('clients');
   const existant = await lirePremier<{ id_local: string }>(
     'SELECT id_local FROM client WHERE id = ?',
     id,
@@ -125,6 +128,7 @@ export async function modifierClient(id: number, saisie: SaisieClient): Promise<
  * de leur acheteur, et le solde du deviendrait introuvable.
  */
 export async function supprimerClient(id: number): Promise<boolean> {
+  await exigerEcriture('clients');
   const ventes = await lirePremier<{ n: number }>(
     'SELECT COUNT(*) AS n FROM vente WHERE client_id = ?',
     id,
