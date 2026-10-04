@@ -25,6 +25,7 @@ test('variant repository exposes idempotent upsert contracts', () => {
   }
   assert.match(source, /ON CONFLICT\(id_local\)/);
   assert.match(source, /date_modification/);
+  assert.match(source, /Date\.parse/);
   assert.match(source, /variante_valeur/);
 });
 
@@ -33,6 +34,7 @@ test('habilitation repository exposes reference and product-extension upserts', 
   assert.match(source, /export async function upsertReferentielHabillement/);
   assert.match(source, /export async function upsertProduitHabillement/);
   assert.match(source, /ON CONFLICT\(id_local\)/);
+  assert.match(source, /Date\.parse/);
   assert.match(source, /Produit Habillement orphelin/);
 });
 
