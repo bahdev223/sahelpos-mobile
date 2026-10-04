@@ -32,6 +32,17 @@ export const LONGUEUR_PIN_MAX = 9;
 /** Compatibilite pour les ecrans qui utilisaient encore cette constante. */
 export const LONGUEUR_PIN = LONGUEUR_PIN_MIN;
 
+const ecouteursCompteLocal = new Set<() => void>();
+
+export function ecouterChangementCompteLocal(ecouteur: () => void): () => void {
+  ecouteursCompteLocal.add(ecouteur);
+  return () => ecouteursCompteLocal.delete(ecouteur);
+}
+
+function notifierChangementCompteLocal(): void {
+  for (const ecouteur of ecouteursCompteLocal) ecouteur();
+}
+
 export class PinInvalide extends Error {
   constructor(message: string) {
     super(message);
@@ -183,6 +194,7 @@ export async function creerUtilisateur(saisie: SaisieUtilisateur): Promise<numbe
   if (saisie.role === 'vendeur' && cree?.id_local) {
     await marquerChangement('utilisateur', cree.id_local);
   }
+  notifierChangementCompteLocal();
   return id;
 }
 
@@ -253,6 +265,7 @@ export async function modifierUtilisateur(
     const role = await lirePremier<{ role: string }>('SELECT role FROM utilisateur WHERE id = ?', id);
     if (role?.role === 'vendeur') await marquerChangement('utilisateur', modifie.id_local);
   }
+  notifierChangementCompteLocal();
 }
 
 /**
