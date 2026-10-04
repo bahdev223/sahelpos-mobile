@@ -17,6 +17,23 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { deposer } from './notifications/journal';
 import { ecritureMobileAutorisee, jetonAppareil, rafraichir } from './abonnement';
 import type { TypeEcritureCommerce } from '../domain/commerce';
+import type {
+  DimensionVarianteSync,
+  ProduitHabillementSync,
+  ReferentielHabillementPayload,
+  ReferentielHabillementType,
+  ValeurDimensionSync,
+  VarianteProduitSync,
+} from '../domain/habillement';
+import {
+  upsertProduitHabillement,
+  upsertReferentielHabillement,
+} from '../db/repositories/habillement';
+import {
+  upsertDimension,
+  upsertValeurDimension,
+  upsertVariante,
+} from '../db/repositories/variante';
 
 const SERVEUR = 'https://sahelpos.saheltech.tech';
 const DELAI_RESEAU = 20000;
@@ -24,7 +41,7 @@ const CLE_CURSOR = 'sync.cursor';
 const CLE_BOUTIQUE = 'sync.boutique';
 const CLE_BOOTSTRAP = 'sync.bootstrap_effectue';
 const CLE_PROTOCOLE = 'sync.protocole';
-const VERSION_PROTOCOLE = '2';
+const VERSION_PROTOCOLE = '3';
 const CLE_DERNIERE_TENTATIVE = 'sync.derniere_tentative';
 const CLE_DERNIER_SUCCES = 'sync.dernier_succes';
 const CLE_DERNIERE_ERREUR = 'sync.derniere_erreur';
@@ -205,6 +222,10 @@ interface UtilisateurSync {
   date_modification?: string | null;
 }
 
+type ReferentielHabillementSync = ReferentielHabillementPayload & {
+  type: ReferentielHabillementType;
+};
+
 interface PullSync {
   cursor: string;
   has_more?: boolean;
@@ -217,6 +238,11 @@ interface PullSync {
   utilisateurs?: UtilisateurSync[];
   boutique?: BoutiqueSync;
   annonces?: AnnonceSync[];
+  referentiels_habillement?: ReferentielHabillementSync[];
+  produits_habillement?: ProduitHabillementSync[];
+  dimensions?: DimensionVarianteSync[];
+  valeurs_dimensions?: ValeurDimensionSync[];
+  variantes?: VarianteProduitSync[];
 }
 
 interface AnnonceSync {
@@ -693,8 +719,28 @@ async function lireBoutique(): Promise<BoutiqueSync> {
 async function appliquerPull(pull: PullSync): Promise<number> {
   let recus = 0;
   await dansTransaction(async () => {
+    for (const reference of pull.referentiels_habillement ?? []) {
+      await upsertReferentielHabillement(reference.type, reference);
+      recus++;
+    }
+    for (const dimension of pull.dimensions ?? []) {
+      await upsertDimension(dimension);
+      recus++;
+    }
+    for (const valeur of pull.valeurs_dimensions ?? []) {
+      await upsertValeurDimension(valeur);
+      recus++;
+    }
     for (const produit of pull.produits ?? []) {
       await appliquerProduit(produit);
+      recus++;
+    }
+    for (const extension of pull.produits_habillement ?? []) {
+      await upsertProduitHabillement(extension);
+      recus++;
+    }
+    for (const variante of pull.variantes ?? []) {
+      await upsertVariante(variante);
       recus++;
     }
     for (const client of pull.clients ?? []) {
