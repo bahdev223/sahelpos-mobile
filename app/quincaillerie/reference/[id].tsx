@@ -10,6 +10,7 @@ import {
   type VarianteMobile,
 } from '../../../src/db/repositories/variante';
 import { BandeauEtat, formaterMontant, formaterQuantite, uriImage } from '../../../src/ui/components';
+import { prixConditionnement, prixGrosConditionnement } from '../../../src/domain/quincaillerie';
 import { Icone } from '../../../src/ui/icones';
 import { couleurs, espaces, rayons } from '../../../src/ui/theme';
 
@@ -158,8 +159,8 @@ export default function FicheReferenceQuincaillerie() {
         <Text style={s.sectionTitre}>Unités & conditionnements</Text>
         <View style={s.ligne}><Text style={s.ligneLabel}>{p.unite_base}</Text><View style={s.prixBloc}><Text style={s.ligneValeur}>Détail {formaterMontant(p.prix_unitaire,boutique.devise)}</Text>{p.prix_gros > 0 ? <Text style={s.muted}>Gros {formaterMontant(p.prix_gros,boutique.devise)}</Text> : null}</View></View>
         {fiche.conditionnements.map((su) => {
-          const detail = su.prix > 0 ? su.prix : p.prix_unitaire * su.facteur;
-          const gros = su.prix_gros > 0 ? su.prix_gros : p.prix_gros > 0 ? p.prix_gros * su.facteur : 0;
+          const detail = prixConditionnement(p.prix_unitaire, su.prix, su.facteur);
+          const gros = prixGrosConditionnement(p.prix_gros, su.prix_gros, su.facteur);
           return <View key={su.nom} style={s.ligne}><View style={s.flex}><Text style={s.ligneLabel}>{su.nom}</Text><Text style={s.muted}>1 {su.nom} = {formaterQuantite(su.facteur)} {p.unite_base}</Text></View><View style={s.prixBloc}><Text style={s.ligneValeur}>Détail {formaterMontant(detail,boutique.devise)}</Text>{gros > 0 ? <Text style={s.muted}>Gros {formaterMontant(gros,boutique.devise)}</Text> : null}</View></View>;
         })}
       </View>
