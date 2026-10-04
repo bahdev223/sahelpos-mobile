@@ -94,8 +94,11 @@ interface LigneProduitSql {
   id_local: string;
   nom: string;
   categorie: string | null;
+  marque: string;
+  reference_fabricant: string;
   code_barre: string | null;
   prix_unitaire: number;
+  prix_gros: number;
   prix_achat: number;
   unite_base: string;
   quantite_base: number;
@@ -105,8 +108,9 @@ interface LigneProduitSql {
   actif: number;
 }
 
-const COLONNES_PRODUIT = `id, id_local, nom, categorie, code_barre, prix_unitaire,
-  prix_achat, unite_base, quantite_base, stock_min, gestion_stock, chemin_image, actif`;
+const COLONNES_PRODUIT = `id, id_local, nom, categorie, marque, reference_fabricant,
+  code_barre, prix_unitaire, prix_gros, prix_achat, unite_base, quantite_base,
+  stock_min, gestion_stock, chemin_image, actif`;
 
 function versProduit(ligne: LigneProduitSql): Produit {
   return {
@@ -114,8 +118,11 @@ function versProduit(ligne: LigneProduitSql): Produit {
     idLocal: ligne.id_local,
     nom: ligne.nom,
     categorie: ligne.categorie,
+    marque: ligne.marque,
+    referenceFabricant: ligne.reference_fabricant,
     codeBarre: ligne.code_barre,
     prixUnitaire: ligne.prix_unitaire,
+    prixGros: ligne.prix_gros,
     prixAchat: ligne.prix_achat,
     uniteBase: ligne.unite_base,
     quantiteBase: ligne.quantite_base,
@@ -138,8 +145,13 @@ async function rechercherProduits(terme: string): Promise<Produit[]> {
   const motif = `%${propre}%`;
   const lignes = await db.getAllAsync<LigneProduitSql>(
     `SELECT ${COLONNES_PRODUIT} FROM produit
-     WHERE actif = 1 AND (nom LIKE ? OR code_barre LIKE ? OR categorie LIKE ?)
+     WHERE actif = 1 AND (
+       nom LIKE ? OR code_barre LIKE ? OR categorie LIKE ?
+       OR marque LIKE ? OR reference_fabricant LIKE ?
+     )
      ORDER BY nom LIMIT 80`,
+    motif,
+    motif,
     motif,
     motif,
     motif,
