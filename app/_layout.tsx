@@ -284,19 +284,8 @@ export default function DispositionRacine() {
         const droitActualise = await etatAbonnementCourant();
         setProfilCommerce(droitActualise.droit?.commerce ?? null);
 
-        // Le rôle/état du compte peut avoir changé pendant le pull. La session
-        // ne garde jamais une ancienne copie administrateur en mémoire.
-        if (utilisateur) {
-          const local = await obtenirUtilisateurParIdLocal(utilisateur.idLocal);
-          const changement = resoudreSessionSynchronisee(utilisateur, local);
-          if (changement.type === 'FERME') {
-            setUtilisateur(null);
-            setRevisionSession((revision) => revision + 1);
-          } else if (changement.type === 'ACTUALISE') {
-            setUtilisateur(changement.utilisateur);
-            setRevisionSession((revision) => revision + 1);
-          }
-        }
+        // Le pull peut rétrograder ou désactiver le profil courant.
+        await revaliderSessionLocale();
         setRevisionSynchronisation((precedente) => precedente + 1);
       } finally {
         setEtatSynchronisation(await lireEtatSynchronisation().catch(() => ({
@@ -315,7 +304,7 @@ export default function DispositionRacine() {
         synchronisationEnCours.current = null;
       }
     }
-  }, [utilisateur]);
+  }, [revaliderSessionLocale]);
 
   // Les synchronisations declenchees par le systeme ne doivent jamais creer
   // de rejet non gere. Le geste manuel, lui, conserve l'erreur : l'ecran qui
