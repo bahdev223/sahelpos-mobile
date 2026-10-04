@@ -1070,8 +1070,9 @@ async function appliquerMouvement(m: MouvementSync): Promise<void> {
     const memeEvenement = await lirePremier<{ id: number }>(
       `SELECT id FROM mouvement_stock
         WHERE source_operation = ? AND reference = ? AND produit_id = ?
+          AND variante_id_local IS ?
           AND stock_avant IS ? AND stock_apres IS ? LIMIT 1`,
-      m.source, m.reference, produit.id,
+      m.source, m.reference, produit.id, m.variante_id_local ?? null,
       nombreOptionnel(m.stock_avant), nombreOptionnel(m.stock_apres),
     );
     if (memeEvenement) return;
