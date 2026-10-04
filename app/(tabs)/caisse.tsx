@@ -283,6 +283,9 @@ export default function EcranCaisse() {
   const { boutique, utilisateur, revisionSynchronisation, profilCommerce } = useSession();
   const habillement = profilCommerce?.secteur === 'HABILLEMENT';
   const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
+  const grosAutorise = quincaillerie
+    && !!profilCommerce?.capabilities_effectives.includes('WHOLESALE')
+    && ['GROS', 'MIXTE'].includes(profilCommerce?.mode_vente ?? 'DETAIL');
   const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
 
   const [recherche, setRecherche] = useState('');
@@ -641,6 +644,7 @@ export default function EcranCaisse() {
           panier={panier}
           devise={boutique.devise}
           quincaillerie={quincaillerie}
+          grosAutorise={grosAutorise}
           onAnnuler={() => setChoix(null)}
           onAjouter={ajouterAuPanier}
         />
@@ -878,6 +882,7 @@ function ModaleUnite({
   panier,
   devise,
   quincaillerie,
+  grosAutorise,
   onAnnuler,
   onAjouter,
 }: {
@@ -885,6 +890,7 @@ function ModaleUnite({
   panier: ArticlePanier[];
   devise: string;
   quincaillerie: boolean;
+  grosAutorise: boolean;
   onAnnuler: () => void;
   onAjouter: (
     produit: Produit,
@@ -962,7 +968,7 @@ function ModaleUnite({
             contentContainerStyle={styles.contenuFeuille}
             keyboardShouldPersistTaps="handled"
           >
-            {quincaillerie ? (
+            {grosAutorise ? (
               <View style={styles.tarifs}>
                 <Pressable
                   style={[styles.tarifChoix, tarif === 'detail' && styles.tarifChoixActif]}
