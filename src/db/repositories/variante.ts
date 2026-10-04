@@ -91,8 +91,8 @@ export async function upsertVariante(payload: VarianteProduitSync): Promise<void
     await executer(
       `INSERT INTO variante_produit
         (id_local, produit_id, sku, signature_combinaison, prix_override, prix_achat,
-         code_barre, actif, date_modification, supprime_le)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         code_barre, actif, stock_actuel, stock_disponible, date_modification, supprime_le)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id_local) DO UPDATE SET
          produit_id = excluded.produit_id,
          sku = excluded.sku,
@@ -101,11 +101,14 @@ export async function upsertVariante(payload: VarianteProduitSync): Promise<void
          prix_achat = excluded.prix_achat,
          code_barre = excluded.code_barre,
          actif = excluded.actif,
+         stock_actuel = excluded.stock_actuel,
+         stock_disponible = excluded.stock_disponible,
          date_modification = excluded.date_modification,
          supprime_le = excluded.supprime_le`,
       payload.id_local, produitId, payload.sku, payload.signature_combinaison,
       payload.prix_override ?? null, payload.prix_achat ?? null,
       payload.code_barre ?? null, payload.actif ? 1 : 0,
+      Number(payload.stock_actuel || 0), Number(payload.stock_disponible || 0),
       payload.date_modification, payload.supprime_le ?? null,
     );
 
@@ -133,12 +136,15 @@ interface LigneVariante {
   prix_achat: number | null;
   code_barre: string | null;
   actif: number | boolean;
+  stock_actuel: number;
+  stock_disponible: number;
 }
 
 export async function listerVariantesProduit(produitId: number): Promise<VarianteProduitLocale[]> {
   const lignes = await lireTout<LigneVariante>(
     `SELECT v.id, v.id_local, v.produit_id, v.sku, v.signature_combinaison,
-            v.prix_override, v.prix_achat, v.code_barre, v.actif
+            v.prix_override, v.prix_achat, v.code_barre, v.actif,
+            v.stock_actuel, v.stock_disponible
        FROM variante_produit v
       WHERE v.produit_id = ?
         AND v.actif = 1
@@ -182,6 +188,8 @@ export async function listerVariantesProduit(produitId: number): Promise<Variant
       prixAchat: ligne.prix_achat,
       codeBarre: ligne.code_barre,
       actif: versBooleen(ligne.actif),
+      stockActuel: Number(ligne.stock_actuel || 0),
+      stockDisponible: Number(ligne.stock_disponible || 0),
       valeurs: valeurs.map((v): ValeurVarianteLocale => ({
         idLocal: v.id_local,
         dimensionIdLocal: v.dimension_id_local,
