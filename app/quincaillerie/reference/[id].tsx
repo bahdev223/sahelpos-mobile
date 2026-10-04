@@ -1,12 +1,15 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useSession } from '../../_layout';
 import { obtenirBase } from '../../../src/db/database';
 import {
+  genererMatriceVariantesLocale,
   libelleVariante,
   listerVariantesProduit,
+  optionsMatriceProduit,
+  type OptionMatriceMobile,
   type VarianteMobile,
 } from '../../../src/db/repositories/variante';
 import { BandeauEtat, formaterMontant, formaterQuantite, uriImage } from '../../../src/ui/components';
@@ -67,10 +70,11 @@ export default function FicheReferenceQuincaillerie() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const identifiant = Number(id);
-  const { boutique } = useSession();
+  const { boutique, synchroniserMaintenant } = useSession();
   const [fiche, setFiche] = useState<FicheReference | null>(null);
   const [etat, setEtat] = useState<'chargement'|'pret'|'absent'|'erreur'>('chargement');
   const [message, setMessage] = useState('');
+  const [matriceOuverte, setMatriceOuverte] = useState(false);
 
   const charger = useCallback(async () => {
     if (!Number.isInteger(identifiant) || identifiant <= 0) {
@@ -182,17 +186,150 @@ export default function FicheReferenceQuincaillerie() {
 
       <View style={s.carte}>
         <Action label="Modifier la référence" detail="Marque, prix, unités et conditionnements" icon="crayon" onPress={() => router.push({pathname:'/produit/modifier/[id]',params:{id:String(p.id)}})}/>
+        <Action label="Ajouter des caractéristiques" detail="Diamètre, section, capacité, tension, couleur…" icon="etiquette" onPress={() => setMatriceOuverte(true)}/>
         <Action label="Mouvements de stock" detail="Entrées, sorties et corrections" icon="mouvements" onPress={() => router.push({pathname:'/stock/mouvements',params:{produit:String(p.id)}})}/>
         <Action label="Ajuster le stock" detail="Enregistrer une entrée ou une sortie" icon="inventaire" onPress={() => router.push({pathname:'/stock/ajustement',params:{produit:String(p.id)}})}/>
       </View>
     </ScrollView>
+    <MatriceTechnique
+      visible={matriceOuverte}
+      produitId={p.id}
+      onFermer={() => setMatriceOuverte(false)}
+      onCree={async () => {
+        setMatriceOuverte(false);
+        await charger();
+        void synchroniserMaintenant().catch(() => {});
+      }}
+    />
   </View>;
+}
+
+
+function MatriceTechnique({
+  visible,
+  produitId,
+  onFermer,
+  onCree,
+}: {
+  visible: boolean;
+  produitId: number;
+  onFermer: () => void;
+  onCree: () => Promise<void>;
+}) {
+  const [dimensions, setDimensions] = useState<Array<{
+    code: string; nom: string; ordre: number; valeurs: OptionMatriceMobile[];
+  }>>([]);
+  const [selection, setSelection] = useState<Record<string, OptionMatriceMobile[]>>({});
+  const [chargement, setChargement] = useState(false);
+  const [enregistrement, setEnregistrement] = useState(false);
+  const [erreur, setErreur] = useState('');
+
+  useFocusEffect(useCallback(() => {
+    if (!visible) return;
+    let vivant = true;
+    setChargement(true);
+    setErreur('');
+    setSelection({});
+    void optionsMatriceProduit()
+      .then((liste) => {
+        if (!vivant) return;
+        setDimensions(liste.filter((d) => d.valeurs.length > 0));
+      })
+      .catch((e) => {
+        if (vivant) setErreur(e instanceof Error ? e.message : 'Référentiel technique indisponible.');
+      })
+      .finally(() => { if (vivant) setChargement(false); });
+    return () => { vivant = false; };
+  }, [visible]));
+
+  const nombre = useMemo(() => {
+    const groupes = Object.values(selection).filter((valeurs) => valeurs.length > 0);
+    if (!groupes.length) return 0;
+    return groupes.reduce((total, valeurs) => total * valeurs.length, 1);
+  }, [selection]);
+
+  const basculer = (dimension: string, valeur: OptionMatriceMobile) => {
+    setSelection((actuel) => {
+      const groupe = actuel[dimension] ?? [];
+      const presente = groupe.some((v) => v.valeurServeurId === valeur.valeurServeurId);
+      return {
+        ...actuel,
+        [dimension]: presente
+          ? groupe.filter((v) => v.valeurServeurId !== valeur.valeurServeurId)
+          : [...groupe, valeur],
+      };
+    });
+  };
+
+  const generer = async () => {
+    if (enregistrement || nombre <= 0) return;
+    if (nombre > 240) {
+      setErreur('Réduisez la sélection : 240 variantes maximum en une opération.');
+      return;
+    }
+    setEnregistrement(true);
+    setErreur('');
+    try {
+      await genererMatriceVariantesLocale(produitId, selection);
+      await onCree();
+    } catch (e) {
+      setErreur(e instanceof Error ? e.message : 'Création des variantes impossible.');
+    } finally {
+      setEnregistrement(false);
+    }
+  };
+
+  return <Modal visible={visible} animationType="slide" onRequestClose={() => !enregistrement && onFermer()}>
+    <View style={s.page}>
+      <View style={s.entete}>
+        <Pressable style={s.icone} disabled={enregistrement} onPress={onFermer} accessibilityLabel="Fermer">
+          <Icone nom="fermer" taille={22} couleur={couleurs.texte}/>
+        </Pressable>
+        <View style={s.flex}>
+          <Text style={s.titre}>Caractéristiques techniques</Text>
+          <Text style={s.muted}>Sélectionnez uniquement les axes qui décrivent cette référence.</Text>
+        </View>
+      </View>
+      {chargement ? <View style={s.centre}><ActivityIndicator color={couleurs.primaire}/></View> :
+        <ScrollView contentContainerStyle={s.contenu}>
+          {erreur ? <Text style={s.erreur}>{erreur}</Text> : null}
+          {dimensions.map((dimension) => <View key={dimension.code} style={s.carte}>
+            <Text style={s.sectionTitre}>{dimension.nom}</Text>
+            <View style={s.optionsTechniques}>
+              {dimension.valeurs.map((valeur) => {
+                const actif=(selection[dimension.code] ?? []).some((v) => v.valeurServeurId === valeur.valeurServeurId);
+                return <Pressable key={valeur.valeurServeurId}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{checked:actif, disabled:enregistrement}}
+                  disabled={enregistrement}
+                  onPress={() => basculer(dimension.code,valeur)}
+                  style={[s.optionTechnique,actif && s.optionTechniqueActive]}>
+                  {valeur.codeHex && /^#[0-9a-f]{6}$/i.test(valeur.codeHex) ? <View style={[s.pastille,{backgroundColor:valeur.codeHex}]}/> : null}
+                  <Text style={[s.optionTechniqueTexte,actif && s.optionTechniqueTexteActive]}>{actif ? '✓ ' : ''}{valeur.nom}</Text>
+                </Pressable>;
+              })}
+            </View>
+          </View>)}
+          {!dimensions.length && !erreur ? <View style={s.carte}><Text style={s.muted}>Aucune caractéristique synchronisée. Lancez une synchronisation puis réessayez.</Text></View> : null}
+          <View style={s.resumeMatrice}>
+            <Text style={s.ligneLabel}>{nombre} variante(s) à créer ou retrouver</Text>
+            <Text style={s.muted}>Exemple : 3 sections × 2 couleurs = 6 variantes. Les doublons existants ne seront pas recréés.</Text>
+          </View>
+        </ScrollView>}
+      <View style={s.piedModal}>
+        <Pressable style={[s.boutonSecondaireModal,enregistrement && s.inactif]} disabled={enregistrement} onPress={onFermer}><Text style={s.boutonSecondaireTexte}>Annuler</Text></Pressable>
+        <Pressable style={[s.bouton,nombre<=0 && s.inactif]} disabled={enregistrement || nombre<=0} onPress={() => void generer()}>
+          {enregistrement ? <ActivityIndicator color="#fff"/> : <Text style={s.boutonTexte}>Créer les variantes</Text>}
+        </Pressable>
+      </View>
+    </View>
+  </Modal>;
 }
 
 function BoutonRetour({onPress}:{onPress:()=>void}){return <Pressable style={s.bouton} onPress={onPress}><Text style={s.boutonTexte}>Retour</Text></Pressable>;}
 function Stat({label,value}:{label:string;value:string}){return <View style={s.stat}><Text style={s.muted}>{label}</Text><Text style={s.statValeur}>{value}</Text></View>;}
 function Info({label,value}:{label:string;value:string}){return <View style={s.ligne}><Text style={s.ligneLabel}>{label}</Text><Text style={s.ligneValeur}>{value}</Text></View>;}
-function Action({label,detail,icon,onPress}:{label:string;detail:string;icon:'crayon'|'mouvements'|'inventaire';onPress:()=>void}){return <Pressable style={s.action} onPress={onPress}><Icone nom={icon} taille={20} couleur={couleurs.primaire}/><View style={s.flex}><Text style={s.ligneLabel}>{label}</Text><Text style={s.muted}>{detail}</Text></View><Icone nom="chevron" taille={16} couleur={couleurs.texteEteint}/></Pressable>;}
+function Action({label,detail,icon,onPress}:{label:string;detail:string;icon:'crayon'|'mouvements'|'inventaire'|'etiquette';onPress:()=>void}){return <Pressable style={s.action} onPress={onPress}><Icone nom={icon} taille={20} couleur={couleurs.primaire}/><View style={s.flex}><Text style={s.ligneLabel}>{label}</Text><Text style={s.muted}>{detail}</Text></View><Icone nom="chevron" taille={16} couleur={couleurs.texteEteint}/></Pressable>;}
 
 const s=StyleSheet.create({
   page:{flex:1,backgroundColor:couleurs.fond}, flex:{flex:1,minWidth:0},
@@ -206,5 +343,15 @@ const s=StyleSheet.create({
   ligne:{minHeight:56,paddingHorizontal:14,paddingVertical:10,flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:12,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:couleurs.bordure},
   ligneLabel:{fontSize:14,fontWeight:'700',color:couleurs.texte}, ligneValeur:{fontSize:14,fontWeight:'700',color:couleurs.texte,textAlign:'right'}, prixBloc:{alignItems:'flex-end'}, inactif:{opacity:.5},
   action:{minHeight:64,padding:14,flexDirection:'row',alignItems:'center',gap:12,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:couleurs.bordure},
+  optionsTechniques:{flexDirection:'row',flexWrap:'wrap',gap:8,padding:14,paddingTop:6},
+  optionTechnique:{minHeight:46,paddingHorizontal:12,paddingVertical:9,borderRadius:10,borderWidth:1,borderColor:couleurs.bordure,backgroundColor:couleurs.surface,flexDirection:'row',alignItems:'center',gap:7},
+  optionTechniqueActive:{backgroundColor:couleurs.primaireDouce,borderColor:couleurs.primaire},
+  optionTechniqueTexte:{fontSize:13,fontWeight:'700',color:couleurs.texte},
+  optionTechniqueTexteActive:{color:couleurs.primaire},
+  pastille:{width:18,height:18,borderRadius:9,borderWidth:1,borderColor:couleurs.bordure},
+  resumeMatrice:{padding:14,borderRadius:12,backgroundColor:couleurs.primaireDouce,gap:5},
+  piedModal:{padding:16,flexDirection:'row',gap:10,backgroundColor:couleurs.surface,borderTopWidth:1,borderTopColor:couleurs.bordure},
+  boutonSecondaireModal:{flex:1,minHeight:48,alignItems:'center',justifyContent:'center',borderRadius:12,borderWidth:1,borderColor:couleurs.bordure},
+  boutonSecondaireTexte:{color:couleurs.texte,fontWeight:'800'},
   centre:{flex:1,alignItems:'center',justifyContent:'center',gap:14,padding:24}, erreur:{color:couleurs.danger,fontSize:14,textAlign:'center'}, bouton:{minHeight:48,paddingHorizontal:18,borderRadius:12,backgroundColor:couleurs.primaire,alignItems:'center',justifyContent:'center'},boutonTexte:{color:'#fff',fontWeight:'800'},
 });
