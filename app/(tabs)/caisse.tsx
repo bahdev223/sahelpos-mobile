@@ -163,8 +163,9 @@ async function chargerSousUnites(produitId: number): Promise<SousUnite[]> {
     nom: string;
     facteur: number;
     prix: number;
+    prix_gros: number;
   }>(
-    'SELECT id, produit_id, nom, facteur, prix FROM sous_unite WHERE produit_id = ? ORDER BY facteur',
+    'SELECT id, produit_id, nom, facteur, prix, prix_gros FROM sous_unite WHERE produit_id = ? ORDER BY facteur',
     produitId,
   );
   // Un facteur nul ou negatif rendrait toute conversion absurde (division par
@@ -177,6 +178,7 @@ async function chargerSousUnites(produitId: number): Promise<SousUnite[]> {
       nom: l.nom,
       facteur: l.facteur,
       prix: l.prix,
+      prixGros: l.prix_gros,
     }));
 }
 
@@ -208,6 +210,7 @@ interface OptionUnite {
   nom: string;
   facteur: number;
   prix: number;
+  prixGros: number;
 }
 
 function optionsUnites(produit: Produit, sousUnites: SousUnite[]): OptionUnite[] {
@@ -215,11 +218,17 @@ function optionsUnites(produit: Produit, sousUnites: SousUnite[]): OptionUnite[]
     nom: produit.uniteBase,
     facteur: 1,
     prix: Math.round(produit.prixUnitaire),
+    prixGros: Math.round(produit.prixGros ?? 0),
   };
   const autres = sousUnites.map<OptionUnite>((su) => ({
     nom: su.nom,
     facteur: su.facteur,
     prix: su.prix > 0 ? Math.round(su.prix) : Math.round(produit.prixUnitaire * su.facteur),
+    prixGros: (su.prixGros ?? 0) > 0
+      ? Math.round(su.prixGros ?? 0)
+      : (produit.prixGros ?? 0) > 0
+        ? Math.round((produit.prixGros ?? 0) * su.facteur)
+        : 0,
   }));
   return [base, ...autres];
 }
@@ -881,10 +890,13 @@ function ModaleUnite({
   const [indexVariante, setIndexVariante] = useState(indexInitial);
   const [indexUnite, setIndexUnite] = useState(0);
   const [quantiteTexte, setQuantiteTexte] = useState('1');
+  const [tarif, setTarif] = useState<'detail' | 'gros'>('detail');
 
   const variante = indexVariante >= 0 ? choix.variantes[indexVariante] : null;
   const unite = choix.unites[indexUnite] ?? choix.unites[0];
-  const prixDefaut = variante?.prixOverride ?? unite?.prix ?? 0;
+  const prixDetail = variante?.prixOverride ?? unite?.prix ?? 0;
+  const prixGros = unite?.prixGros ?? 0;
+  const prixDefaut = tarif === 'gros' && prixGros > 0 ? prixGros : prixDetail;
   const [prixTexte, setPrixTexte] = useState(String(prixDefaut));
 
   const quantite = lireNombre(quantiteTexte);
@@ -937,6 +949,38 @@ function ModaleUnite({
             contentContainerStyle={styles.contenuFeuille}
             keyboardShouldPersistTaps="handled"
           >
+            {quincaillerie ? (
+              <View style={styles.tarifs}>
+                <Pressable
+                  style={[styles.tarifChoix, tarif === 'detail' && styles.tarifChoixActif]}
+                  onPress={() => {
+                    setTarif('detail');
+                    setPrixTexte(String(prixDetail));
+                  }}
+                >
+                  <Text style={[styles.tarifTexte, tarif === 'detail' && styles.tarifTexteActif]}>
+                    Détail · {formaterMontant(prixDetail, devise)}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={prixGros <= 0}
+                  style={[
+                    styles.tarifChoix,
+                    tarif === 'gros' && styles.tarifChoixActif,
+                    prixGros <= 0 && styles.tarifChoixInactif,
+                  ]}
+                  onPress={() => {
+                    if (prixGros <= 0) return;
+                    setTarif('gros');
+                    setPrixTexte(String(prixGros));
+                  }}
+                >
+                  <Text style={[styles.tarifTexte, tarif === 'gros' && styles.tarifTexteActif]}>
+                    {prixGros > 0 ? `Gros · ${formaterMontant(prixGros, devise)}` : 'Gros non défini'}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
             {choix.variantes.length > 0 ? (
               <View>
                 <Text style={styles.sousLabel}>
@@ -953,9 +997,10 @@ function ModaleUnite({
                         accessibilityState={{ selected: actif }}
                         onPress={() => {
                           setIndexVariante(index);
-                          const prix = option.prixOverride ??
-                            ((choix.unites[indexUnite] ?? choix.unites[0])?.prix ?? produit.prixUnitaire);
-                          setPrixTexte(String(prix));
+                          const u = choix.unites[indexUnite] ?? choix.unites[0];
+                          const detail = option.prixOverride ?? u?.prix ?? produit.prixUnitaire;
+                          const gros = u?.prixGros ?? 0;
+                          setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));
                         }}
                         style={[
                           styles.varianteChoix,
