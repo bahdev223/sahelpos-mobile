@@ -193,7 +193,7 @@ export interface ResultatAchat {
 export async function enregistrerAchat(demande: DemandeAchat): Promise<ResultatAchat> {
   // Le verrou est ici et non dans l'ecran : un bouton grise se
   // contourne, une fonction qui refuse d'ecrire, non.
-  await exigerEcriture();
+  await exigerEcriture('achats');
 
   if (demande.articles.length === 0) {
     throw new Error('Ajoutez au moins un produit a cet achat.');
@@ -265,7 +265,7 @@ export async function enregistrerAchat(demande: DemandeAchat): Promise<ResultatA
 export async function recevoirAchat(achatId: number): Promise<void> {
   // Le verrou est ici et non dans l'ecran : un bouton grise se
   // contourne, une fonction qui refuse d'ecrire, non.
-  await exigerEcriture();
+  await exigerEcriture('achats');
 
   await dansTransaction(async () => {
     const a = await lirePremier<{ numero: string; statut: string; id_local: string }>(
@@ -351,7 +351,7 @@ export async function payerAchat(
 ): Promise<void> {
   // Le verrou est ici et non dans l'ecran : un bouton grise se
   // contourne, une fonction qui refuse d'ecrire, non.
-  await exigerEcriture();
+  await exigerEcriture('achats');
 
   const arrondi = arrondir(montant);
   if (arrondi <= 0) throw new Error('Le montant doit etre positif.');
