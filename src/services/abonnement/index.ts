@@ -23,7 +23,7 @@
  */
 import { executer, lireTout } from '../../db/repositories/base';
 import { Droit, LicenceInvalide, droitPerime, lireDroit } from './licence';
-import type { SecteurCommerce, ModeVenteCommerce, ModeApprovisionnementCommerce } from '../../domain/commerce';
+import { ecritureCommerceAutorisee, type SecteurCommerce, type ModeVenteCommerce, type ModeApprovisionnementCommerce, type TypeEcritureCommerce } from '../../domain/commerce';
 
 export type { Droit } from './licence';
 export { LicenceInvalide } from './licence';
@@ -174,7 +174,9 @@ export async function etatCourant(): Promise<EtatAbonnement> {
     active: droit.peutEntrer,
     droit,
     perime: false,
-    peutEcrire: droit.peutEcrire && droit.commerce?.compatible === true,
+    // Indicateur global pour l'UI : au moins une famille d'ecriture reste
+    // disponible. Les services metier utilisent ensuite le controle par type.
+    peutEcrire: droit.peutEcrire && Boolean(droit.commerce?.ecritures_autorisees.length),
     message: droit.raison || (droit.commerce
       ? droit.commerce.raison
       : 'Connectez le telephone a Internet pour verifier le profil commerce. Le serveur doit etre a jour.'),
@@ -191,6 +193,18 @@ export async function etatCourant(): Promise<EtatAbonnement> {
 export function autorise(etat: EtatAbonnement, code: string): boolean {
   if (!etat.droit) return true;
   return etat.droit.fonctionnalites.includes(code);
+}
+
+
+/** Une famille precise peut-elle etre modifiee sur cet APK ? */
+export function ecritureMobileAutorisee(
+  etat: EtatAbonnement,
+  type: TypeEcritureCommerce,
+): boolean {
+  return Boolean(
+    etat.droit?.peutEcrire
+    && ecritureCommerceAutorisee(etat.droit.commerce, type),
+  );
 }
 
 // --- appels au serveur ----------------------------------------------------
@@ -457,9 +471,9 @@ export class EcritureFermee extends Error {
  * commerciale. Le message est ecrit pour le commercant, pas pour le
  * developpeur : il dit quoi faire, et ou.
  */
-export async function exigerEcriture(): Promise<void> {
+export async function exigerEcriture(type?: TypeEcritureCommerce): Promise<void> {
   const etat = await etatCourant();
-  if (etat.peutEcrire) return;
+  if (type ? ecritureMobileAutorisee(etat, type) : etat.peutEcrire) return;
 
   if (!etat.droit) {
     if (!ACTIVATION_OBLIGATOIRE) return;
@@ -479,6 +493,13 @@ export async function exigerEcriture(): Promise<void> {
     throw new EcritureFermee(
       "Votre droit d acces doit etre verifie. Connectez le telephone a " +
         'Internet quelques secondes, puis reessayez.',
+    );
+  }
+
+  if (type && etat.droit?.peutEcrire && etat.droit.commerce) {
+    throw new EcritureFermee(
+      etat.droit.commerce.raison ||
+        "Cette operation utilise une fonction metier qui n'est pas encore disponible sur cette version mobile. Utilisez SahelPOS Web pour cette operation.",
     );
   }
 
