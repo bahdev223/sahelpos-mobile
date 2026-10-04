@@ -30,6 +30,7 @@ export type ModeApprovisionnementCommerce = typeof MODES_APPROVISIONNEMENT[numbe
 const CAPABILITIES_MOBILE = new Set([
   'STOCK_SIMPLE', 'MULTI_UNIT', 'BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT',
   'PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION', 'PURCHASE_MATRIX', 'VARIANT_EXCHANGE',
+  'TECHNICAL_DIMENSIONS',
 ]);
 
 export interface ProfilCommerceMobile {
@@ -156,6 +157,24 @@ const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'c
       nouveauProduit: 'Nouvel article',
     },
     capabilities: ['BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT'],
+  },
+  QUINCAILLERIE: {
+    nom: 'Quincaillerie & Matériaux',
+    libelles: {
+      ...LIBELLES_STANDARD,
+      catalogue: 'Références',
+      achats: 'Appro.',
+      stock: 'Stock',
+      produits: 'Références',
+      produit: 'Référence',
+      nouveauProduit: 'Nouvelle référence',
+      inventaire: 'Inventaire',
+      categories: 'Rayons',
+    },
+    capabilities: [
+      'STOCK_SIMPLE', 'MULTI_UNIT', 'PRODUCT_VARIANTS', 'TECHNICAL_DIMENSIONS',
+      'BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT',
+    ],
   },
 };
 
