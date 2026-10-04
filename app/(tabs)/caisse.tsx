@@ -46,6 +46,7 @@ import {
   type VarianteMobile,
 } from '../../src/db/repositories/variante';
 import { seuilAlerteStock } from '../../src/domain/stock';
+import { prixConditionnement, prixGrosConditionnement } from '../../src/domain/quincaillerie';
 import type {
   Client,
   LigneVente,
@@ -223,12 +224,8 @@ function optionsUnites(produit: Produit, sousUnites: SousUnite[]): OptionUnite[]
   const autres = sousUnites.map<OptionUnite>((su) => ({
     nom: su.nom,
     facteur: su.facteur,
-    prix: su.prix > 0 ? Math.round(su.prix) : Math.round(produit.prixUnitaire * su.facteur),
-    prixGros: (su.prixGros ?? 0) > 0
-      ? Math.round(su.prixGros ?? 0)
-      : (produit.prixGros ?? 0) > 0
-        ? Math.round((produit.prixGros ?? 0) * su.facteur)
-        : 0,
+    prix: prixConditionnement(produit.prixUnitaire, su.prix, su.facteur),
+    prixGros: prixGrosConditionnement(produit.prixGros ?? 0, su.prixGros, su.facteur),
   }));
   return [base, ...autres];
 }
