@@ -459,7 +459,10 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
             accessibilityLabel="Se déconnecter"
           >
             <Icone nom="deconnexion" taille={20} couleur={couleurs.danger} />
-            <Text style={st.deconnexionTexte}>Se déconnecter</Text>
+            <View style={st.deconnexionTextes}>
+              <Text style={st.deconnexionTexte}>Se déconnecter</Text>
+              <Text style={st.deconnexionDetail}>Retour au choix des profils</Text>
+            </View>
           </Pressable>
         </View>
       ) : null}
@@ -582,7 +585,9 @@ const st = StyleSheet.create({
     minHeight: 52,
     paddingHorizontal: espaces.l,
   },
+  deconnexionTextes: { flex: 1 },
   deconnexionTexte: { fontSize: 15, fontWeight: '600', color: couleurs.danger },
+  deconnexionDetail: { marginTop: 2, fontSize: 11, color: couleurs.texteFaible },
   pied: {
     textAlign: 'center',
     fontSize: 11,
