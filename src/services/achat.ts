@@ -203,7 +203,7 @@ export interface ResultatAchat {
 export async function enregistrerAchat(demande: DemandeAchat): Promise<ResultatAchat> {
   // Le verrou est ici et non dans l'ecran : un bouton grise se
   // contourne, une fonction qui refuse d'ecrire, non.
-  await exigerEcriture();
+  await exigerEcriture('achats');
 
   if (demande.articles.length === 0) {
     throw new Error('Ajoutez au moins un produit a cet achat.');
@@ -286,7 +286,7 @@ export async function recevoirAchatPartiel(
   achatId: number,
   receptions: ReceptionLigneAchat[],
 ): Promise<void> {
-  await exigerEcriture();
+  await exigerEcriture('achats');
   if (!receptions.length) throw new Error('Indiquez au moins une quantité à recevoir.');
 
   await dansTransaction(async () => {
@@ -444,7 +444,7 @@ export async function payerAchat(
 ): Promise<void> {
   // Le verrou est ici et non dans l'ecran : un bouton grise se
   // contourne, une fonction qui refuse d'ecrire, non.
-  await exigerEcriture();
+  await exigerEcriture('achats');
 
   const arrondi = arrondir(montant);
   if (arrondi <= 0) throw new Error('Le montant doit etre positif.');
