@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -505,5 +505,15 @@ export const MIGRATIONS: string[][] = [
     `ALTER TABLE ligne_achat ADD COLUMN serveur_id INTEGER`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_ligne_achat_serveur
        ON ligne_achat(serveur_id) WHERE serveur_id IS NOT NULL`,
+  ],
+
+  // --- version 16 : fiche commerciale Quincaillerie ------------------------
+  [
+    `ALTER TABLE produit ADD COLUMN marque TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE produit ADD COLUMN reference_fabricant TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE produit ADD COLUMN prix_gros REAL NOT NULL DEFAULT 0`,
+    `ALTER TABLE sous_unite ADD COLUMN prix_gros REAL NOT NULL DEFAULT 0`,
+    `CREATE INDEX IF NOT EXISTS idx_produit_marque ON produit(marque)`,
+    `CREATE INDEX IF NOT EXISTS idx_produit_reference_fabricant ON produit(reference_fabricant)`,
   ],
 ];
