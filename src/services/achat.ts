@@ -40,8 +40,7 @@ export interface AchatResume {
 }
 
 export interface LigneAchat {
-  /** Présent uniquement pour une ligne persistée en SQLite. */
-  id?: number;
+  id: number;
   serveurId?: number | null;
   produitId: number;
   varianteId?: number | null;
@@ -82,7 +81,9 @@ function arrondir(v: number): number {
   return Math.round(v);
 }
 
-export function calculerLigneAchat(a: ArticleAchat): LigneAchat {
+export type LigneAchatCalculee = Omit<LigneAchat, 'id' | 'serveurId'>;
+
+export function calculerLigneAchat(a: ArticleAchat): LigneAchatCalculee {
   return {
     produitId: a.produitId,
     varianteId: a.varianteId ?? null,
@@ -421,7 +422,6 @@ export async function recevoirAchatPartiel(
 export async function recevoirAchat(achatId: number): Promise<void> {
   const lignes = await listerLignesAchat(achatId);
   const receptions = lignes
-    .filter((ligne): ligne is LigneAchat & { id: number } => Number.isInteger(ligne.id))
     .map((ligne) => ({
       ligneId: ligne.id,
       quantite: Math.round((ligne.quantite - ligne.quantiteRecue) * 1000) / 1000,
