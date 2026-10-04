@@ -513,5 +513,15 @@ export const MIGRATIONS: string[][] = [
     )`,
     `CREATE INDEX IF NOT EXISTS idx_variante_valeur_valeur
        ON variante_valeur(valeur_id)`,
+
+    -- Les transactions existantes restent les mêmes moteurs ; on leur ajoute
+    -- seulement la référence locale de la déclinaison et ses snapshots.
+    `ALTER TABLE ligne_vente ADD COLUMN variante_id_local TEXT`,
+    `ALTER TABLE ligne_vente ADD COLUMN variante_sku_snapshot TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE ligne_vente ADD COLUMN variante_nom_snapshot TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE ligne_achat ADD COLUMN variante_id_local TEXT`,
+    `ALTER TABLE ligne_achat ADD COLUMN variante_sku_snapshot TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE ligne_achat ADD COLUMN variante_nom_snapshot TEXT NOT NULL DEFAULT ''`,
+    `ALTER TABLE mouvement_stock ADD COLUMN variante_id_local TEXT`,
   ],
 ];
