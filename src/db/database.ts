@@ -284,6 +284,28 @@ async function reparerSchemaCritique(db: SQLite.SQLiteDatabase): Promise<void> {
         'CREATE INDEX IF NOT EXISTS idx_sync_outbox_statut_date ON sync_outbox(statut, date_creation)',
       );
     }
+
+
+    if (await tableExiste(db, 'variante_produit')) {
+      await db.execAsync(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_sku ON variante_produit(sku)',
+      );
+      await db.execAsync(
+        'CREATE INDEX IF NOT EXISTS idx_variante_produit ON variante_produit(produit_id, actif)',
+      );
+    }
+
+    if (await tableExiste(db, 'valeur_dimension')) {
+      await db.execAsync(
+        'CREATE INDEX IF NOT EXISTS idx_valeur_dimension_dimension ON valeur_dimension(dimension_id, ordre)',
+      );
+    }
+
+    if (await tableExiste(db, 'variante_valeur')) {
+      await db.execAsync(
+        'CREATE INDEX IF NOT EXISTS idx_variante_valeur_valeur ON variante_valeur(valeur_id)',
+      );
+    }
   });
 }
 
