@@ -186,6 +186,7 @@ export default function FicheReferenceQuincaillerie() {
 
       <View style={s.carte}>
         <Action label="Modifier la référence" detail="Marque, prix, unités et conditionnements" icon="crayon" onPress={() => router.push({pathname:'/produit/modifier/[id]',params:{id:String(p.id)}})}/>
+        <Action label="Gérer les caractéristiques" detail="Diamètre, section, capacité, tension, couleur…" icon="etiquette" onPress={() => router.push({pathname:'/quincaillerie/caracteristiques/[id]',params:{id:String(p.id)}})}/>
         <Action label="Ajouter des caractéristiques" detail="Diamètre, section, capacité, tension, couleur…" icon="etiquette" onPress={() => setMatriceOuverte(true)}/>
         <Action label="Mouvements de stock" detail="Entrées, sorties et corrections" icon="mouvements" onPress={() => router.push({pathname:'/stock/mouvements',params:{produit:String(p.id)}})}/>
         <Action label="Ajuster le stock" detail="Enregistrer une entrée ou une sortie" icon="inventaire" onPress={() => router.push({pathname:'/stock/ajustement',params:{produit:String(p.id)}})}/>
