@@ -87,6 +87,8 @@ export interface VarianteProduitSync extends BaseSyncHabillement {
   prix_achat?: number | string | null;
   code_barre?: string | null;
   actif: boolean | number;
+  stock_actuel: number | string;
+  stock_disponible: number | string;
   valeurs_id_local: string[];
 }
 
@@ -111,5 +113,7 @@ export interface VarianteProduitLocale {
   prixAchat: number | null;
   codeBarre: string | null;
   actif: boolean;
+  stockActuel: number;
+  stockDisponible: number;
   valeurs: ValeurVarianteLocale[];
 }
