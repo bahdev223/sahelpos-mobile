@@ -35,6 +35,8 @@ import { Icone, IconePastille, Pastille } from './icones';
 import type { NomIcone } from './icones';
 import { couleurs, espaces, rayons } from './theme';
 import { resoudreProfilUIMobile, type SecteurCommerce } from '../domain/commerce';
+import type { Role } from '../domain/types';
+import { peutAccederCheminMobile } from '../domain/permissions-mobile';
 import { HABILLEMENT_MOBILE_THEME as H } from '../profile-ui/habillement/theme';
 
 const LARGEUR = Math.min(320, Dimensions.get('window').width * 0.86);
@@ -189,7 +191,7 @@ export interface InfosTiroir {
   secteurLibelle: string;
   capabilitiesCommerce: string[];
   utilisateur: string;
-  role: string;
+  role: Role;
   /** Nombre d'alertes de stock, affiche en pastille sur l'entree correspondante. */
   alertes?: number;
   onDeconnexion?: () => void;
@@ -397,8 +399,13 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
               icone: 'graphique',
             });
           }
-          return { ...groupe, entrees };
-        }).map((groupe) => (
+          return {
+            ...groupe,
+            entrees: entrees.filter((entree) =>
+              peutAccederCheminMobile(infos.role, entree.chemin),
+            ),
+          };
+        }).filter((groupe) => groupe.entrees.length > 0).map((groupe) => (
           <View key={groupe.titre} style={st.groupe}>
             <Text style={[st.groupeTitre, { color: texteFaible }]}>
               {groupe.titre.toUpperCase()}
@@ -441,8 +448,11 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
         <View style={[st.piedFixe, { paddingBottom: marges.bottom + espaces.s }]}>
           <Pressable
             onPress={() => {
+              // La session est fermée immédiatement : attendre la fin de
+              // l'animation pouvait laisser l'ancien utilisateur actif si le
+              // composant était démonté avant le callback.
+              infos.onDeconnexion?.();
               onFermer();
-              setTimeout(() => infos.onDeconnexion?.(), DUREE);
             }}
             style={({ pressed }) => [st.deconnexion, pressed && st.entreePressee]}
             accessibilityRole="button"
