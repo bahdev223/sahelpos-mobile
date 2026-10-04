@@ -492,6 +492,8 @@ export const MIGRATIONS: string[][] = [
       prix_achat             REAL,
       code_barre             TEXT,
       actif                  INTEGER NOT NULL DEFAULT 1,
+      stock_actuel           REAL    NOT NULL DEFAULT 0,
+      stock_disponible       REAL    NOT NULL DEFAULT 0,
       date_modification      TEXT    NOT NULL,
       supprime_le            TEXT
     )`,
