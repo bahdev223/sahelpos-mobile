@@ -970,6 +970,7 @@ async function appliquerVente(v: VenteSync): Promise<void> {
     ? await lirePremier<{ id: number }>('SELECT id FROM utilisateur WHERE id_local = ?', v.vendeur_id_local)
     : null;
   const produits = new Map<string, number>();
+  const variantes = new Map<string, number>();
   for (const ligne of v.lignes ?? []) {
     if (produits.has(ligne.produit_id_local)) continue;
     const produit = await lirePremier<{ id: number }>(
@@ -982,6 +983,18 @@ async function appliquerVente(v: VenteSync): Promise<void> {
       );
     }
     produits.set(ligne.produit_id_local, produit.id);
+    if (ligne.variante_id_local && !variantes.has(ligne.variante_id_local)) {
+      const variante = await lirePremier<{ id: number }>(
+        'SELECT id FROM variante_produit WHERE id_local = ?',
+        ligne.variante_id_local,
+      );
+      if (!variante) {
+        throw new SynchronisationImpossible(
+          `La vente ${v.numero} depend de la variante absente ${ligne.variante_id_local}.`,
+        );
+      }
+      variantes.set(ligne.variante_id_local, variante.id);
+    }
   }
   const venteId = existe?.id ?? (await executer(
     `INSERT INTO vente (id_local, numero, client_id, utilisateur_id, date_vente, total,
@@ -1002,12 +1015,16 @@ async function appliquerVente(v: VenteSync): Promise<void> {
   }
   for (const l of v.lignes ?? []) {
     await executer(
-      `INSERT INTO ligne_vente (vente_id, produit_id, libelle, unite, facteur,
-                                quantite, quantite_base, prix_unitaire,
-                                cout_unitaire, total, benefice_total)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ligne_vente
+        (vente_id, produit_id, variante_id_local, variante_sku_snapshot,
+         variante_nom_snapshot, libelle, unite, facteur, quantite, quantite_base,
+         prix_unitaire, cout_unitaire, total, benefice_total)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       venteId,
       produits.get(l.produit_id_local),
+      l.variante_id_local ?? null,
+      l.variante_sku_snapshot ?? '',
+      l.variante_nom_snapshot ?? '',
       l.libelle,
       l.unite,
       nombre(l.facteur, 1),
@@ -1036,6 +1053,17 @@ async function appliquerMouvement(m: MouvementSync): Promise<void> {
       `Le mouvement ${m.id_local} depend du produit absent ${m.produit_id_local}.`,
     );
   }
+  if (m.variante_id_local) {
+    const variante = await lirePremier<{ id: number }>(
+      'SELECT id FROM variante_produit WHERE id_local = ?',
+      m.variante_id_local,
+    );
+    if (!variante) {
+      throw new SynchronisationImpossible(
+        `Le mouvement ${m.id_local} depend de la variante absente ${m.variante_id_local}.`,
+      );
+    }
+  }
   // La reference est celle de toute la vente ou de tout l'achat. Chaque ligne
   // possede son propre produit et sa propre transition de stock.
   if (m.reference) {
@@ -1049,13 +1077,14 @@ async function appliquerMouvement(m: MouvementSync): Promise<void> {
     if (memeEvenement) return;
   }
   await executer(
-    `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation,
-                                  quantite, unite, quantite_base, stock_avant,
-                                  stock_apres, prix_unitaire, reference, motif,
-                                  utilisateur, date_mouvement)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO mouvement_stock
+      (id_local, produit_id, variante_id_local, nature, source_operation,
+       quantite, unite, quantite_base, stock_avant, stock_apres, prix_unitaire,
+       reference, motif, utilisateur, date_mouvement)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     m.id_local,
     produit.id,
+    m.variante_id_local ?? null,
     m.nature === 'CORRECTION' ? 'AJUSTEMENT' : m.nature,
     m.source,
     nombre(m.quantite),
@@ -1112,11 +1141,26 @@ async function appliquerAchat(a: AchatSync): Promise<void> {
     if (!produit) {
       throw new SynchronisationImpossible(`Produit manquant pour l'achat ${a.numero}.`);
     }
+    if (ligne.variante_id_local) {
+      const variante = await lirePremier<{ id: number }>(
+        'SELECT id FROM variante_produit WHERE id_local = ?',
+        ligne.variante_id_local,
+      );
+      if (!variante) {
+        throw new SynchronisationImpossible(
+          `L'achat ${a.numero} depend de la variante absente ${ligne.variante_id_local}.`,
+        );
+      }
+    }
     await executer(
-      `INSERT INTO ligne_achat (achat_id, produit_id, libelle, unite, facteur, quantite,
-                                quantite_base, prix_unitaire, total)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      achatId, produit.id, ligne.libelle, ligne.unite, nombre(ligne.facteur, 1),
+      `INSERT INTO ligne_achat
+        (achat_id, produit_id, variante_id_local, variante_sku_snapshot,
+         variante_nom_snapshot, libelle, unite, facteur, quantite,
+         quantite_base, prix_unitaire, total)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      achatId, produit.id, ligne.variante_id_local ?? null,
+      ligne.variante_sku_snapshot ?? '', ligne.variante_nom_snapshot ?? '',
+      ligne.libelle, ligne.unite, nombre(ligne.facteur, 1),
       nombre(ligne.quantite), nombre(ligne.quantite_base), nombre(ligne.prix_unitaire),
       nombre(ligne.total),
     );
