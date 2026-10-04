@@ -174,8 +174,23 @@ export default function EcranAbonnement() {
             />
             <Ligne
               libelle="Encaissement"
-              valeur={droit.peutEcrire ? 'Ouvert' : 'Ferme'}
-              alerte={!droit.peutEcrire}
+              valeur={
+                droit.peutEcrire && droit.commerce?.ecritures_autorisees.includes('ventes')
+                  ? 'Ouvert'
+                  : 'Web uniquement'
+              }
+              alerte={!(droit.peutEcrire && droit.commerce?.ecritures_autorisees.includes('ventes'))}
+            />
+            <Ligne
+              libelle="Mode mobile"
+              valeur={
+                droit.commerce?.compatible
+                  ? 'Complet'
+                  : droit.commerce?.ecritures_autorisees.length
+                    ? 'Partiel'
+                    : 'Consultation'
+              }
+              alerte={!droit.commerce?.ecritures_autorisees.length}
             />
             <Text style={styles.aide}>
               {droit.fonctionnalites.length} fonctionnalite(s) comprise(s) dans
