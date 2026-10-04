@@ -287,6 +287,13 @@ async function reparerSchemaCritique(db: SQLite.SQLiteDatabase): Promise<void> {
 
 
     if (await tableExiste(db, 'variante_produit')) {
+      const colonnes = await colonnesTable(db, 'variante_produit');
+      if (!colonnes.has('stock_actuel')) {
+        await db.execAsync('ALTER TABLE variante_produit ADD COLUMN stock_actuel REAL NOT NULL DEFAULT 0');
+      }
+      if (!colonnes.has('stock_disponible')) {
+        await db.execAsync('ALTER TABLE variante_produit ADD COLUMN stock_disponible REAL NOT NULL DEFAULT 0');
+      }
       await db.execAsync(
         'CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_sku ON variante_produit(sku)',
       );
