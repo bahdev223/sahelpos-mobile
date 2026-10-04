@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 14;
+export const SCHEMA_VERSION = 15;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -497,5 +497,13 @@ export const MIGRATIONS: string[][] = [
     `ALTER TABLE commande_client ADD COLUMN conversion_demandee INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE commande_client ADD COLUMN conversion_mode_paiement TEXT`,
     `ALTER TABLE commande_client ADD COLUMN conversion_montant_paye REAL`,
+  ],
+
+  // --- version 15 : receptions partielles fournisseur ----------------------
+  [
+    `ALTER TABLE ligne_achat ADD COLUMN quantite_recue REAL NOT NULL DEFAULT 0`,
+    `ALTER TABLE ligne_achat ADD COLUMN serveur_id INTEGER`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_ligne_achat_serveur
+       ON ligne_achat(serveur_id) WHERE serveur_id IS NOT NULL`,
   ],
 ];
