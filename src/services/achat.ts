@@ -40,12 +40,15 @@ export interface AchatResume {
 }
 
 export interface LigneAchat {
+  id: number;
+  serveurId?: number | null;
   produitId: number;
   varianteId?: number | null;
   libelle: string;
   unite: string;
   facteur: number;
   quantite: number;
+  quantiteRecue: number;
   quantiteBase: number;
   prixUnitaire: number;
   total: number;
@@ -86,6 +89,7 @@ export function calculerLigneAchat(a: ArticleAchat): LigneAchat {
     unite: a.unite,
     facteur: a.facteur,
     quantite: a.quantite,
+    quantiteRecue: 0,
     quantiteBase: a.quantite * a.facteur,
     prixUnitaire: arrondir(a.prixUnitaire),
     total: arrondir(a.quantite * a.prixUnitaire),
@@ -168,7 +172,8 @@ export async function obtenirAchat(id: number): Promise<AchatResume | null> {
 
 export async function listerLignesAchat(achatId: number): Promise<LigneAchat[]> {
   return lireTout<LigneAchat>(
-    `SELECT produit_id AS produitId, variante_id AS varianteId, libelle, unite, facteur, quantite,
+    `SELECT id, serveur_id AS serveurId, produit_id AS produitId, variante_id AS varianteId,
+            libelle, unite, facteur, quantite, quantite_recue AS quantiteRecue,
             quantite_base AS quantiteBase, prix_unitaire AS prixUnitaire, total
      FROM ligne_achat WHERE achat_id = ? ORDER BY id`,
     achatId,
@@ -265,10 +270,22 @@ export async function enregistrerAchat(demande: DemandeAchat): Promise<ResultatA
  * Tout dans une transaction : un achat recu a moitie laisserait du stock
  * fantome, impossible a rattraper autrement qu'en refaisant un inventaire.
  */
-export async function recevoirAchat(achatId: number): Promise<void> {
-  // Le verrou est ici et non dans l'ecran : un bouton grise se
-  // contourne, une fonction qui refuse d'ecrire, non.
+export interface ReceptionLigneAchat {
+  ligneId: number;
+  quantite: number;
+}
+
+/**
+ * Reçoit un sous-ensemble d'un achat. Chaque quantité est exprimée dans l'unité
+ * de la ligne. L'opération est cumulative et atomique : une reprise ne peut pas
+ * refaire entrer une quantité déjà reçue.
+ */
+export async function recevoirAchatPartiel(
+  achatId: number,
+  receptions: ReceptionLigneAchat[],
+): Promise<void> {
   await exigerEcriture();
+  if (!receptions.length) throw new Error('Indiquez au moins une quantité à recevoir.');
 
   await dansTransaction(async () => {
     const a = await lirePremier<{ numero: string; statut: string; id_local: string }>(
@@ -279,97 +296,143 @@ export async function recevoirAchat(achatId: number): Promise<void> {
     if (a.statut !== 'BROUILLON') throw new AchatNonModifiable(a.statut);
 
     const lignes = await lireTout<{
+      id: number;
       produit_id: number;
       variante_id: number | null;
       quantite: number;
-      quantite_base: number;
+      quantite_recue: number;
       unite: string;
       prix_unitaire: number;
       facteur: number;
     }>(
-      `SELECT produit_id, variante_id, quantite, quantite_base, unite, prix_unitaire, facteur
-       FROM ligne_achat WHERE achat_id = ?`,
+      `SELECT id, produit_id, variante_id, quantite, quantite_recue, unite,
+              prix_unitaire, facteur
+         FROM ligne_achat WHERE achat_id = ? ORDER BY id`,
       achatId,
     );
-
+    const parId = new Map(lignes.map((ligne) => [ligne.id, ligne]));
+    const vus = new Set<number>();
     const horodatage = maintenant();
 
-    for (const l of lignes) {
+    for (const entree of receptions) {
+      if (!Number.isInteger(entree.ligneId) || vus.has(entree.ligneId)) {
+        throw new Error('Une ligne de réception est invalide ou dupliquée.');
+      }
+      vus.add(entree.ligneId);
+      const ligne = parId.get(entree.ligneId);
+      if (!ligne) throw new Error('Une ligne de réception ne correspond pas à cet achat.');
+      const quantite = Math.round(entree.quantite * 1000) / 1000;
+      if (!Number.isFinite(quantite) || quantite <= 0) {
+        throw new Error('La quantité reçue doit être strictement positive.');
+      }
+      const restant = Math.round((ligne.quantite - ligne.quantite_recue) * 1000) / 1000;
+      if (quantite > restant) {
+        throw new Error(`Il ne reste que ${restant} ${ligne.unite} à recevoir.`);
+      }
+
       const p = await lirePremier<{ quantite_base: number; gestion_stock: number }>(
         'SELECT quantite_base, gestion_stock FROM produit WHERE id = ?',
-        l.produit_id,
+        ligne.produit_id,
       );
-      if (!p) throw new Error('Un produit de cet achat a ete supprime.');
+      if (!p) throw new Error('Un produit de cet achat a été supprimé.');
 
-      // Le prix d'achat est ramene a l'unite de BASE : acheter un carton de 24
-      // a 12 000 F, c'est 500 F l'unite. Sans cette division, le benefice des
-      // ventes a l'unite serait grotesquement faux.
-      const prixUnitaireBase = l.facteur > 0 ? l.prix_unitaire / l.facteur : l.prix_unitaire;
+      const quantiteBase = Math.round(quantite * ligne.facteur * 1000) / 1000;
+      const prixUnitaireBase = ligne.facteur > 0
+        ? ligne.prix_unitaire / ligne.facteur
+        : ligne.prix_unitaire;
 
-      if (!p.gestion_stock) {
+      if (p.gestion_stock) {
+        const avant = p.quantite_base;
+        const apres = Math.round((avant + quantiteBase) * 1000) / 1000;
+        let stockAvant = avant;
+        let stockApres = apres;
+
+        if (ligne.variante_id) {
+          const variante = await lirePremier<{ stock_actuel: number }>(
+            'SELECT stock_actuel FROM variante_produit WHERE id = ? AND produit_id = ? AND actif = 1',
+            ligne.variante_id,
+            ligne.produit_id,
+          );
+          if (!variante) throw new Error('Une variante de cet achat est introuvable.');
+          stockAvant = variante.stock_actuel;
+          stockApres = Math.round((stockAvant + quantiteBase) * 1000) / 1000;
+          await executer(
+            `UPDATE variante_produit
+                SET stock_actuel = ?, prix_achat = ?, date_modification = ?
+              WHERE id = ?`,
+            stockApres, arrondir(prixUnitaireBase), horodatage, ligne.variante_id,
+          );
+        }
+
+        await executer(
+          `UPDATE produit SET quantite_base = ?, prix_achat = ?, date_modification = ?
+           WHERE id = ?`,
+          apres, arrondir(prixUnitaireBase), horodatage, ligne.produit_id,
+        );
+        const mouvementId = genererIdLocal();
+        await executer(
+          `INSERT INTO mouvement_stock (id_local, produit_id, variante_id, nature, source_operation,
+                                        quantite, unite, quantite_base, stock_avant, stock_apres,
+                                        prix_unitaire, reference, motif, date_mouvement)
+           VALUES (?, ?, ?, 'ENTREE', 'ACHAT', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          mouvementId, ligne.produit_id, ligne.variante_id ?? null, quantite, ligne.unite,
+          quantiteBase, stockAvant, stockApres, ligne.prix_unitaire,
+          a.numero, `Réception partielle ${a.numero}`, horodatage,
+        );
+      } else {
         await executer(
           'UPDATE produit SET prix_achat = ?, date_modification = ? WHERE id = ?',
-          arrondir(prixUnitaireBase), horodatage, l.produit_id,
-        );
-        continue;
-      }
-
-      const avant = p.quantite_base;
-      const apres = avant + l.quantite_base;
-      let avantVariante: number | null = null;
-      let apresVariante: number | null = null;
-
-      if (l.variante_id) {
-        const variante = await lirePremier<{ stock_actuel: number }>(
-          'SELECT stock_actuel FROM variante_produit WHERE id = ? AND produit_id = ? AND actif = 1',
-          l.variante_id,
-          l.produit_id,
-        );
-        if (!variante) throw new Error('Une variante de cet achat est introuvable.');
-        avantVariante = variante.stock_actuel;
-        apresVariante = avantVariante + l.quantite_base;
-        await executer(
-          `UPDATE variante_produit
-              SET stock_actuel = ?, prix_achat = ?, date_modification = ?
-            WHERE id = ?`,
-          apresVariante, arrondir(prixUnitaireBase), horodatage, l.variante_id,
+          arrondir(prixUnitaireBase), horodatage, ligne.produit_id,
         );
       }
 
       await executer(
-        `UPDATE produit SET quantite_base = ?, prix_achat = ?, date_modification = ?
-         WHERE id = ?`,
-        apres, arrondir(prixUnitaireBase), horodatage, l.produit_id,
+        'UPDATE ligne_achat SET quantite_recue = quantite_recue + ? WHERE id = ?',
+        quantite, ligne.id,
       );
-      const mouvementId = genererIdLocal();
-      await executer(
-        `INSERT INTO mouvement_stock (id_local, produit_id, variante_id, nature, source_operation, quantite,
-                                      unite, quantite_base, stock_avant, stock_apres,
-                                      prix_unitaire, reference, motif, date_mouvement)
-         VALUES (?, ?, ?, 'ENTREE', 'ACHAT', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        mouvementId, l.produit_id, l.variante_id ?? null, l.quantite, l.unite, l.quantite_base,
-        avantVariante ?? avant, apresVariante ?? apres, l.prix_unitaire,
-        a.numero, `Achat ${a.numero}`, horodatage,
-      );
-      // Ne pas pousser ce mouvement séparément : le serveur rejoue la
-      // réception depuis l'objet achat et produira son propre mouvement.
-      // Le pousser ici doublerait l'entrée de stock.
     }
 
-    await executer(
-      "UPDATE achat SET statut = 'RECU', date_reception = ?, date_modification = ? WHERE id = ?",
-      horodatage, horodatage, achatId,
+    const restant = await lirePremier<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM ligne_achat
+        WHERE achat_id = ? AND quantite_recue + 0.000001 < quantite`,
+      achatId,
     );
+    if ((restant?.n ?? 0) === 0) {
+      await executer(
+        "UPDATE achat SET statut = 'RECU', date_reception = ?, date_modification = ? WHERE id = ?",
+        horodatage, horodatage, achatId,
+      );
+    } else {
+      await executer('UPDATE achat SET date_modification = ? WHERE id = ?', horodatage, achatId);
+    }
   });
 
-  // Une reception fait REMONTER le stock : c'est le moment ou une rupture
-  // signalee doit disparaitre du journal. Sans cet appel, « Riz epuise »
-  // resterait affiche alors que le riz est dans le magasin.
   const lignes = await listerLignesAchat(achatId);
   void verifierStock(lignes.map((l) => l.produitId));
-  const achat = await lirePremier<{ id_local: string }>('SELECT id_local FROM achat WHERE id = ?', achatId);
+  const achat = await lirePremier<{ id_local: string }>(
+    'SELECT id_local FROM achat WHERE id = ?',
+    achatId,
+  );
   if (achat?.id_local) await marquerChangement('achat', achat.id_local);
 }
+
+/** Reçoit automatiquement tout le reliquat encore attendu. */
+export async function recevoirAchat(achatId: number): Promise<void> {
+  const lignes = await listerLignesAchat(achatId);
+  const receptions = lignes
+    .map((ligne) => ({
+      ligneId: ligne.id,
+      quantite: Math.round((ligne.quantite - ligne.quantiteRecue) * 1000) / 1000,
+    }))
+    .filter((ligne) => ligne.quantite > 0);
+  if (!receptions.length) {
+    const achat = await obtenirAchat(achatId);
+    if (achat?.statut === 'RECU') return;
+    throw new Error('Aucune quantité ne reste à recevoir.');
+  }
+  await recevoirAchatPartiel(achatId, receptions);
+}
+
 
 /** Regle tout ou partie de ce qui reste du au fournisseur. */
 export async function payerAchat(
