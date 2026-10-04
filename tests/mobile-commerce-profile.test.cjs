@@ -69,6 +69,27 @@ test('old signed incompatible licence is migrated to safe core writes', () => {
   assert.equal(ecritureCommerceAutorisee(profil, 'produits'), false);
 });
 
+test('variant foundations are readable before transactional writes are unlocked', () => {
+  const { lireProfilCommerce, ecritureCommerceAutorisee } = charger();
+  const profil = lireProfilCommerce({
+    ...contrat,
+    secteur: 'HABILLEMENT',
+    mode_catalogue: 'ADVANCED',
+    capabilities_effectives: ['STOCK_SIMPLE', 'PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION'],
+    capabilities_representees: ['PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION'],
+    capabilities_non_supportees: [],
+    capabilities_non_ecrivable: ['PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION'],
+    ecritures_autorisees: ['utilisateurs', 'clients', 'fournisseurs', 'boutique'],
+    compatible: false,
+    raison: 'Mode mobile partiel.',
+  });
+  assert.deepEqual(profil.capabilities_non_supportees, []);
+  assert.deepEqual(profil.capabilities_non_ecrivable, ['PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION']);
+  assert.equal(ecritureCommerceAutorisee(profil, 'clients'), true);
+  assert.equal(ecritureCommerceAutorisee(profil, 'produits'), false);
+  assert.equal(profil.compatible, false);
+});
+
 test('unsupported catalogues and capabilities cannot unlock this APK', () => {
   const { lireProfilCommerce } = charger();
   for (const extra of [
