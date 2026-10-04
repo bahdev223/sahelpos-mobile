@@ -264,6 +264,8 @@ type EtatListe = 'chargement' | 'pret' | 'erreur';
 export default function EcranCaisse() {
   const { boutique, utilisateur, revisionSynchronisation, profilCommerce } = useSession();
   const habillement = profilCommerce?.secteur === 'HABILLEMENT';
+  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
+  const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
 
   const [recherche, setRecherche] = useState('');
   const [categorie, setCategorie] = useState<string | null>(null);
@@ -357,7 +359,7 @@ export default function EcranCaisse() {
       // Sans ses sous-unites le produit reste vendable a l'unite de base.
       sousUnites = [];
     }
-    if (profilCommerce?.secteur === 'HABILLEMENT') {
+    if (variantesActives) {
       try {
         variantes = await listerVariantesProduit(produit.id);
       } catch {
@@ -370,7 +372,7 @@ export default function EcranCaisse() {
       variantes,
       varianteInitialeId: varianteInitiale?.id ?? null,
     });
-  }, [profilCommerce?.secteur]);
+  }, [variantesActives]);
 
   const ajouterAuPanier = useCallback(
     (
@@ -456,7 +458,7 @@ export default function EcranCaisse() {
 
   const surCodeScanne = useCallback(
     async (code: string): Promise<string | null> => {
-      if (profilCommerce?.secteur === 'HABILLEMENT') {
+      if (variantesActives) {
         const variante = await trouverVarianteParCodeBarre(code);
         if (variante) {
           const produit = await obtenirProduit(variante.produitId);
@@ -472,7 +474,7 @@ export default function EcranCaisse() {
       await ouvrirChoix(produit);
       return null;
     },
-    [ouvrirChoix, profilCommerce?.secteur],
+    [ouvrirChoix, variantesActives],
   );
 
   const surVenteEnregistree = useCallback(
@@ -620,6 +622,7 @@ export default function EcranCaisse() {
           choix={choix}
           panier={panier}
           devise={boutique.devise}
+          quincaillerie={quincaillerie}
           onAnnuler={() => setChoix(null)}
           onAjouter={ajouterAuPanier}
         />
@@ -856,12 +859,14 @@ function ModaleUnite({
   choix,
   panier,
   devise,
+  quincaillerie,
   onAnnuler,
   onAjouter,
 }: {
   choix: ChoixProduit;
   panier: ArticlePanier[];
   devise: string;
+  quincaillerie: boolean;
   onAnnuler: () => void;
   onAjouter: (
     produit: Produit,
@@ -934,7 +939,9 @@ function ModaleUnite({
           >
             {choix.variantes.length > 0 ? (
               <View>
-                <Text style={styles.sousLabel}>Taille / couleur</Text>
+                <Text style={styles.sousLabel}>
+                  {quincaillerie ? 'Caractéristiques / variante' : 'Taille / couleur'}
+                </Text>
                 <View style={styles.grilleVariantes}>
                   {choix.variantes.map((option, index) => {
                     const actif = index === indexVariante;
