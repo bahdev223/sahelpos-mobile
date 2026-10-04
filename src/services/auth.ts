@@ -91,6 +91,26 @@ function versUtilisateur(l: LigneUtilisateur): Utilisateur {
   };
 }
 
+export async function obtenirUtilisateurParIdLocal(idLocal: string): Promise<Utilisateur | null> {
+  if (!idLocal) return null;
+  const ligne = await lirePremier<LigneUtilisateur>(
+    `SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a
+       FROM utilisateur WHERE id_local = ?`,
+    idLocal,
+  );
+  return ligne ? versUtilisateur(ligne) : null;
+}
+
+export async function obtenirUtilisateurParId(id: number): Promise<Utilisateur | null> {
+  if (!Number.isInteger(id) || id <= 0) return null;
+  const ligne = await lirePremier<LigneUtilisateur>(
+    `SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a
+       FROM utilisateur WHERE id = ?`,
+    id,
+  );
+  return ligne ? versUtilisateur(ligne) : null;
+}
+
 export async function listerUtilisateurs(actifsSeulement = false): Promise<Utilisateur[]> {
   const ou = actifsSeulement ? ' WHERE actif = 1' : '';
   const lignes = await lireTout<LigneUtilisateur>(
