@@ -35,7 +35,10 @@ import {
 } from '../src/services/synchronisation';
 import type { Role, Utilisateur } from '../src/domain/types';
 import type { ProfilCommerceMobile } from '../src/domain/commerce';
-import { obtenirUtilisateurParIdLocal } from '../src/services/auth';
+import {
+  ecouterChangementCompteLocal,
+  obtenirUtilisateurParIdLocal,
+} from '../src/services/auth';
 import { resoudreSessionSynchronisee } from '../src/domain/session';
 import { peutAccederCheminMobile } from '../src/domain/permissions-mobile';
 import type { LargeurPapier } from '../src/services/impression/escpos';
@@ -375,6 +378,15 @@ export default function DispositionRacine() {
     }).catch(() => {});
     return () => abonnement.remove();
   }, [pileMontee, synchroniserSansBruit]);
+
+  // Un changement local de rôle/activation prend effet immédiatement,
+  // même si aucun objet métier n'est à synchroniser.
+  useEffect(() => {
+    if (!pileMontee) return;
+    return ecouterChangementCompteLocal(() => {
+      void revaliderSessionLocale();
+    });
+  }, [pileMontee, revaliderSessionLocale]);
 
   // Toute ecriture met l'objet dans la file SQLite puis reveille la racine.
   // Le push n'est donc plus conditionne a un redemarrage ou a un changement
