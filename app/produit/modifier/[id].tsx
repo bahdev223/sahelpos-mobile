@@ -38,8 +38,11 @@ interface LigneProduit {
   id_local: string;
   nom: string;
   categorie: string | null;
+  marque: string;
+  reference_fabricant: string;
   code_barre: string | null;
   prix_unitaire: number;
+  prix_gros: number;
   prix_achat: number;
   unite_base: string;
   quantite_base: number;
@@ -53,6 +56,7 @@ interface LigneSousUnite {
   nom: string;
   facteur: number;
   prix: number;
+  prix_gros: number;
 }
 
 interface FicheProduit {
@@ -66,7 +70,8 @@ async function chargerFiche(identifiant: number): Promise<FicheProduit | null> {
   const db = await obtenirBase();
 
   const produit = await db.getFirstAsync<LigneProduit>(
-    `SELECT id, id_local, nom, categorie, code_barre, prix_unitaire, prix_achat, unite_base,
+    `SELECT id, id_local, nom, categorie, marque, reference_fabricant, code_barre,
+            prix_unitaire, prix_gros, prix_achat, unite_base,
             quantite_base, stock_min, gestion_stock, chemin_image, actif
        FROM produit WHERE id = ?`,
     identifiant,
@@ -74,7 +79,7 @@ async function chargerFiche(identifiant: number): Promise<FicheProduit | null> {
   if (!produit) return null;
 
   const sousUnites = await db.getAllAsync<LigneSousUnite>(
-    'SELECT nom, facteur, prix FROM sous_unite WHERE produit_id = ? ORDER BY facteur',
+    'SELECT nom, facteur, prix, prix_gros FROM sous_unite WHERE produit_id = ? ORDER BY facteur',
     identifiant,
   );
 
@@ -117,14 +122,18 @@ async function mettreAJourProduit(identifiant: number, valide: ProduitValide): P
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE produit
-          SET nom = ?, categorie = ?, code_barre = ?, prix_unitaire = ?, prix_achat = ?,
+          SET nom = ?, categorie = ?, marque = ?, reference_fabricant = ?, code_barre = ?,
+              prix_unitaire = ?, prix_gros = ?, prix_achat = ?,
               unite_base = ?, stock_min = ?, gestion_stock = ?, chemin_image = ?,
               actif = ?, date_modification = ?
         WHERE id = ?`,
       valide.nom,
       valide.categorie,
+      valide.marque,
+      valide.referenceFabricant,
       valide.codeBarre,
       valide.prixUnitaire,
+      valide.prixGros,
       valide.prixAchat,
       valide.uniteBase,
       valide.stockMin,
@@ -138,11 +147,12 @@ async function mettreAJourProduit(identifiant: number, valide: ProduitValide): P
     await db.runAsync('DELETE FROM sous_unite WHERE produit_id = ?', identifiant);
     for (const su of valide.sousUnites) {
       await db.runAsync(
-        'INSERT INTO sous_unite (produit_id, nom, facteur, prix) VALUES (?, ?, ?, ?)',
+        'INSERT INTO sous_unite (produit_id, nom, facteur, prix, prix_gros) VALUES (?, ?, ?, ?, ?)',
         identifiant,
         su.nom,
         su.facteur,
         su.prix,
+        su.prixGros,
       );
     }
   });
@@ -179,9 +189,12 @@ function versSaisie(fiche: FicheProduit): SaisieProduit {
   return {
     nom: p.nom,
     categorie: p.categorie ?? '',
+    marque: p.marque ?? '',
+    referenceFabricant: p.reference_fabricant ?? '',
     codeBarre: p.code_barre ?? '',
     prixAchat: String(Math.round(p.prix_achat)),
     prixUnitaire: String(Math.round(p.prix_unitaire)),
+    prixGros: p.prix_gros > 0 ? String(Math.round(p.prix_gros)) : '',
     uniteBase: p.unite_base,
     stockMin: formaterQuantite(p.stock_min),
     stockInitial: '',
@@ -193,6 +206,7 @@ function versSaisie(fiche: FicheProduit): SaisieProduit {
       nom: su.nom,
       facteur: formaterQuantite(su.facteur),
       prix: String(Math.round(su.prix)),
+      prixGros: su.prix_gros > 0 ? String(Math.round(su.prix_gros)) : '',
     })),
   };
 }
