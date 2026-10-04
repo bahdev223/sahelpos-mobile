@@ -173,6 +173,7 @@ export default function DispositionRacine() {
   const [boutique, setBoutique] = useState<Boutique>(BOUTIQUE_PAR_DEFAUT);
   const [profilCommerce, setProfilCommerce] = useState<ProfilCommerceMobile | null>(null);
   const [utilisateur, setUtilisateur] = useState<Utilisateur | null>(null);
+  const utilisateurCourant = useRef<Utilisateur | null>(null);
   const [revisionSession, setRevisionSession] = useState(0);
   const [revisionSynchronisation, setRevisionSynchronisation] = useState(0);
   const [etatSynchronisation, setEtatSynchronisation] = useState<EtatSynchronisation>({
@@ -237,29 +238,39 @@ export default function DispositionRacine() {
   }, []);
 
   const ouvrirSession = useCallback((compte: Utilisateur) => {
+    utilisateurCourant.current = compte;
     setUtilisateur(compte);
     setRevisionSession((revision) => revision + 1);
   }, []);
 
   const fermerSession = useCallback(() => {
-    // On ne supprime ni catalogue, ni ventes, ni comptes : seule l'identite
-    // active est detruite. Le prochain utilisateur doit repasser son PIN.
+    // Invalider la ref AVANT le rendu empêche une synchro déjà en vol de
+    // restaurer un profil après que l'utilisateur a touché "Se déconnecter".
+    utilisateurCourant.current = null;
     setUtilisateur(null);
     setRevisionSession((revision) => revision + 1);
   }, []);
 
   const revaliderSessionLocale = useCallback(async () => {
-    if (!utilisateur) return;
-    const local = await obtenirUtilisateurParIdLocal(utilisateur.idLocal);
-    const changement = resoudreSessionSynchronisee(utilisateur, local);
+    const courant = utilisateurCourant.current;
+    if (!courant) return;
+    const local = await obtenirUtilisateurParIdLocal(courant.idLocal);
+
+    // Le profil a pu être déconnecté ou remplacé pendant la lecture SQLite.
+    if (utilisateurCourant.current?.idLocal !== courant.idLocal) return;
+
+    const changement = resoudreSessionSynchronisee(courant, local);
     if (changement.type === 'FERME') {
+      utilisateurCourant.current = null;
       setUtilisateur(null);
       setRevisionSession((revision) => revision + 1);
     } else if (changement.type === 'ACTUALISE') {
+      utilisateurCourant.current = changement.utilisateur;
       setUtilisateur(changement.utilisateur);
       setRevisionSession((revision) => revision + 1);
     }
-  }, [utilisateur]);
+  }, []);
+
   /**
    * Le premier pull peut finir APRES l'affichage de l'accueil. Sans ce signal,
    * la caisse, le catalogue et le tableau de bord conserveraient leur lecture
