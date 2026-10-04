@@ -173,7 +173,7 @@ const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'c
     },
     capabilities: [
       'STOCK_SIMPLE', 'MULTI_UNIT', 'PRODUCT_VARIANTS', 'TECHNICAL_DIMENSIONS',
-      'BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT',
+      'BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT', 'WHOLESALE',
     ],
   },
 };
