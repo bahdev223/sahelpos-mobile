@@ -27,6 +27,17 @@ export type SecteurCommerce = typeof SECTEURS_COMMERCE[number]['code'];
 export type ModeVenteCommerce = typeof MODES_VENTE[number]['code'];
 export type ModeApprovisionnementCommerce = typeof MODES_APPROVISIONNEMENT[number]['code'];
 
+export const TYPES_ECRITURE_COMMERCE = [
+  'utilisateurs', 'produits', 'clients', 'fournisseurs',
+  'achats', 'boutique', 'ventes', 'mouvements',
+] as const;
+
+export type TypeEcritureCommerce = typeof TYPES_ECRITURE_COMMERCE[number];
+
+const ECRITURES_SOCLE_SURES: TypeEcritureCommerce[] = [
+  'utilisateurs', 'clients', 'fournisseurs', 'boutique',
+];
+
 const CAPABILITIES_MOBILE = new Set([
   'STOCK_SIMPLE', 'MULTI_UNIT', 'BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT',
 ]);
@@ -40,12 +51,17 @@ export interface ProfilCommerceMobile {
   mode_catalogue: 'SIMPLE' | 'ADVANCED';
   capabilities_effectives: string[];
   capabilities_non_supportees: string[];
+  ecritures_autorisees: TypeEcritureCommerce[];
   compatible: boolean;
   raison: string;
 }
 
 const listeCodes = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every(code => typeof code === 'string');
+
+const listeTypesEcriture = (value: unknown): value is TypeEcritureCommerce[] =>
+  Array.isArray(value)
+  && value.every(code => TYPES_ECRITURE_COMMERCE.includes(code as TypeEcritureCommerce));
 
 /** Appele uniquement apres verification de la signature de la licence. */
 export function lireProfilCommerce(value: unknown): ProfilCommerceMobile | null {
@@ -60,11 +76,22 @@ export function lireProfilCommerce(value: unknown): ProfilCommerceMobile | null 
     || !listeCodes(profil.capabilities_non_supportees)
     || typeof profil.compatible !== 'boolean') return null;
 
-  // Le serveur peut evoluer avant cet APK : il ne peut pas lui donner une
-  // capacite que cette version ne sait pas encore encoder dans la synchro.
-  const compatible = profil.compatible && profil.mode_catalogue === 'SIMPLE'
+  // Les licences emises avant le contrat granulaire n'ont pas encore ce
+  // champ. On les migre en memoire : profil complet => tout ; profil avance =>
+  // socle sur (clients/fournisseurs/configuration/utilisateurs).
+  const ecrituresAutorisees = listeTypesEcriture(profil.ecritures_autorisees)
+    ? profil.ecritures_autorisees
+    : profil.compatible === true
+      ? [...TYPES_ECRITURE_COMMERCE]
+      : [...ECRITURES_SOCLE_SURES];
+
+  // compatible reste un indicateur de parite COMPLETE. Il ne sert plus de
+  // coupe-circuit global pour les mutations compatibles.
+  const compatible = profil.compatible
+    && profil.mode_catalogue === 'SIMPLE'
     && profil.capabilities_non_supportees.length === 0
     && profil.capabilities_effectives.every(code => CAPABILITIES_MOBILE.has(code));
+
   return {
     version: 1,
     secteur: profil.secteur as SecteurCommerce,
@@ -75,8 +102,16 @@ export function lireProfilCommerce(value: unknown): ProfilCommerceMobile | null 
     mode_catalogue: profil.mode_catalogue as 'SIMPLE' | 'ADVANCED',
     capabilities_effectives: profil.capabilities_effectives,
     capabilities_non_supportees: profil.capabilities_non_supportees,
+    ecritures_autorisees: ecrituresAutorisees,
     compatible,
     raison: compatible ? '' : (typeof profil.raison === 'string' && profil.raison
-      ? profil.raison : 'Consultation uniquement : ce profil exige des fonctions disponibles sur le Web, pas sur cette version mobile.'),
+      ? profil.raison : 'Certaines fonctions de ce profil restent disponibles uniquement sur le Web.'),
   };
+}
+
+export function ecritureCommerceAutorisee(
+  profil: ProfilCommerceMobile | null | undefined,
+  type: TypeEcritureCommerce,
+): boolean {
+  return Boolean(profil?.ecritures_autorisees.includes(type));
 }
