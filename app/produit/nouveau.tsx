@@ -217,6 +217,12 @@ export function validerSaisie(saisie: SaisieProduit, creation: boolean): {
 
   const nom = saisie.nom.trim();
   if (nom === '') erreurs.champs.nom = 'Le nom est obligatoire.';
+  if (saisie.marque.trim().length > 120) {
+    erreurs.champs.marque = 'La marque est limitée à 120 caractères.';
+  }
+  if (saisie.referenceFabricant.trim().length > 120) {
+    erreurs.champs.referenceFabricant = 'La référence fabricant est limitée à 120 caractères.';
+  }
 
   const prixAchat = analyserNombre(saisie.prixAchat) ?? 0;
   if (prixAchat < 0) erreurs.champs.prixAchat = "Le prix d'achat ne peut pas etre negatif.";
@@ -249,7 +255,12 @@ export function validerSaisie(saisie: SaisieProduit, creation: boolean): {
 
     // Une ligne entierement vide est simplement ignoree : l'utilisateur a
     // ajoute une ligne puis change d'avis, ce n'est pas une erreur.
-    if (nomSu === '' && ligne.facteur.trim() === '' && ligne.prix.trim() === '') return;
+    if (
+      nomSu === '' &&
+      ligne.facteur.trim() === '' &&
+      ligne.prix.trim() === '' &&
+      ligne.prixGros.trim() === ''
+    ) return;
 
     if (nomSu === '') {
       erreurs.sousUnites[index] = 'Nom manquant.';
