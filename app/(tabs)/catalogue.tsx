@@ -9,7 +9,7 @@
  * meme sur un telephone d'entree de gamme.
  */
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   ActivityIndicator,
@@ -33,6 +33,7 @@ import { BandeauEtat, BARRE_HORIZONTALE, couleurs } from '../../src/ui/component
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
 import { useSession } from '../_layout';
+import { etatCourant as etatAbonnementCourant } from '../../src/services/abonnement';
 
 // --------------------------------------------------------------------------
 // Acces aux donnees
@@ -112,6 +113,7 @@ type Etat =
 
 export default function Catalogue() {
   const router = useRouter();
+  const [profilHabillement, setProfilHabillement] = useState(false);
   const { revisionSynchronisation, synchroniserMaintenant } = useSession();
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [recherche, setRecherche] = useState('');
@@ -119,6 +121,14 @@ export default function Catalogue() {
   const [inclureInactifs, setInclureInactifs] = useState(false);
   const [rafraichissement, setRafraichissement] = useState(false);
   const [exportEnCours, setExportEnCours] = useState(false);
+
+  useEffect(() => {
+    let actif = true;
+    void etatAbonnementCourant().then(etat => {
+      if (actif) setProfilHabillement(etat.droit?.commerce?.secteur === 'HABILLEMENT');
+    }).catch(() => {});
+    return () => { actif = false; };
+  }, [revisionSynchronisation]);
 
   const charger = useCallback(async (silencieux: boolean) => {
     if (!silencieux) setEtat({ phase: 'chargement' });
@@ -227,6 +237,13 @@ export default function Catalogue() {
   }, [categorie, filtres, recherche]);
 
   const nbInactifs = useMemo(() => produits.filter((p) => p.actif === 0).length, [produits]);
+
+  if (profilHabillement) {
+    // Le catalogue Standard reste intact. Habillement dispose de son écran
+    // métier dédié, alimenté par les variantes synchronisées offline.
+    router.replace('/modeles');
+    return <View style={s.plein}><BandeauEtat /></View>;
+  }
 
   return (
     <View style={s.plein}>
