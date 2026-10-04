@@ -1051,9 +1051,11 @@ function ModaleUnite({
                         accessibilityState={{ selected: actif }}
                         onPress={() => {
                           setIndexUnite(index);
-                          const prix = variante?.prixOverride ??
+                          const detail = variante?.prixOverride ??
                             (option.prix > 0 ? option.prix : produit.prixUnitaire * option.facteur);
-                          setPrixTexte(String(prix));
+                          const gros = option.prixGros ?? 0;
+                          if (tarif === 'gros' && gros <= 0) setTarif('detail');
+                          setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));
                         }}
                         style={[styles.puce, actif && styles.puceActive]}
                       >
@@ -2008,6 +2010,16 @@ const styles = StyleSheet.create({
     borderColor: couleurs.primaire,
   },
   varianteChoixRupture: { opacity: 0.55 },
+  tarifs: { flexDirection: 'row', gap: espaces.s, marginBottom: espaces.m },
+  tarifChoix: {
+    flex: 1, minHeight: 48, borderRadius: rayons.m, borderWidth: 1,
+    borderColor: couleurs.bordure, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: espaces.s, backgroundColor: couleurs.surface,
+  },
+  tarifChoixActif: { backgroundColor: couleurs.primaire, borderColor: couleurs.primaire },
+  tarifChoixInactif: { opacity: 0.4 },
+  tarifTexte: { color: couleurs.texte, fontWeight: '700', fontSize: 12, textAlign: 'center' },
+  tarifTexteActif: { color: couleurs.texteInverse },
   varianteChoixHaut: { flexDirection: 'row', alignItems: 'center', gap: espaces.s },
   varianteChoixNom: { flexShrink: 1, fontSize: 13, fontWeight: '800', color: couleurs.texte },
   varianteChoixStock: { marginTop: 4, fontSize: 11, color: couleurs.texteFaible },
