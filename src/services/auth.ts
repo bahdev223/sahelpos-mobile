@@ -111,6 +111,21 @@ export async function obtenirUtilisateurParId(id: number): Promise<Utilisateur |
   return ligne ? versUtilisateur(ligne) : null;
 }
 
+export interface CompteConnexion extends Utilisateur {
+  aCodeLocal: boolean;
+}
+
+export async function listerComptesConnexion(): Promise<CompteConnexion[]> {
+  const lignes = await lireTout<LigneUtilisateur & { code_pin: string }>(
+    `SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a, code_pin
+       FROM utilisateur WHERE actif = 1 ORDER BY nom COLLATE NOCASE, login COLLATE NOCASE`,
+  );
+  return lignes.map((ligne) => ({
+    ...versUtilisateur(ligne),
+    aCodeLocal: Boolean(ligne.code_pin && ligne.code_pin.trim()),
+  }));
+}
+
 export async function listerUtilisateurs(actifsSeulement = false): Promise<Utilisateur[]> {
   const ou = actifsSeulement ? ' WHERE actif = 1' : '';
   const lignes = await lireTout<LigneUtilisateur>(
