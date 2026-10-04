@@ -245,6 +245,18 @@ export default function DispositionRacine() {
     setRevisionSession((revision) => revision + 1);
   }, []);
 
+  const revaliderSessionLocale = useCallback(async () => {
+    if (!utilisateur) return;
+    const local = await obtenirUtilisateurParIdLocal(utilisateur.idLocal);
+    const changement = resoudreSessionSynchronisee(utilisateur, local);
+    if (changement.type === 'FERME') {
+      setUtilisateur(null);
+      setRevisionSession((revision) => revision + 1);
+    } else if (changement.type === 'ACTUALISE') {
+      setUtilisateur(changement.utilisateur);
+      setRevisionSession((revision) => revision + 1);
+    }
+  }, [utilisateur]);
   /**
    * Le premier pull peut finir APRES l'affichage de l'accueil. Sans ce signal,
    * la caisse, le catalogue et le tableau de bord conserveraient leur lecture
