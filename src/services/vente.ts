@@ -91,7 +91,7 @@ export function calculerTotal(articles: ArticlePanier[]): number {
 export async function enregistrerVente(demande: DemandeVente): Promise<ResultatVente> {
   // Le verrou est ici et non dans l'ecran : un bouton grise se
   // contourne, une fonction qui refuse d'ecrire, non.
-  await exigerEcriture();
+  await exigerEcriture('ventes');
   await verifierAccesCaisse(demande.utilisateurId);
 
   if (demande.articles.length === 0) {
