@@ -250,7 +250,7 @@ export async function genererMatriceVariantesLocale(
   produitId: number,
   selections: Record<string, OptionMatriceMobile[]>,
 ): Promise<number[]> {
-  await exigerEcriture();
+  await exigerEcriture('produits');
   const droit = await etatCourant();
   if (!droit.droit?.commerce?.capabilities_effectives.includes('PRODUCT_VARIANTS')) {
     throw new Error("Les variantes produit ne sont pas activées pour ce profil commerce.");
@@ -353,7 +353,7 @@ export async function corrigerStockVariante(
   stockPhysique: number,
   motif = 'Inventaire variantes',
 ): Promise<void> {
-  await exigerEcriture();
+  await exigerEcriture('mouvements');
   if (!Number.isFinite(stockPhysique) || stockPhysique < 0) {
     throw new Error('Le stock physique doit etre positif ou nul.');
   }
@@ -434,7 +434,7 @@ export async function changerEtatVariante(
   varianteId: number,
   actif: boolean,
 ): Promise<void> {
-  await exigerEcriture();
+  await exigerEcriture('produits');
   const variante = await lirePremier<{ id_local: string }>(
     'SELECT id_local FROM variante_produit WHERE id = ?',
     varianteId,
