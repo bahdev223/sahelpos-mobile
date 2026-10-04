@@ -1,6 +1,6 @@
 import { genererIdLocal, lirePremier, lireTout, executer, dansTransaction, maintenant } from './base';
 import { marquerChangement } from '../../services/synchronisation';
-import { exigerEcriture } from '../../services/abonnement';
+import { etatCourant, exigerEcriture } from '../../services/abonnement';
 
 export interface ValeurVarianteMobile {
   dimensionCode: string;
@@ -251,6 +251,10 @@ export async function genererMatriceVariantesLocale(
   selections: Record<string, OptionMatriceMobile[]>,
 ): Promise<number[]> {
   await exigerEcriture();
+  const droit = await etatCourant();
+  if (!droit.droit?.commerce?.capabilities_effectives.includes('PRODUCT_VARIANTS')) {
+    throw new Error("Les variantes produit ne sont pas activées pour ce profil commerce.");
+  }
   const produit = await lirePremier<{ id_local: string; nom: string }>(
     'SELECT id_local, nom FROM produit WHERE id = ?',
     produitId,
