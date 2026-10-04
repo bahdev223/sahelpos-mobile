@@ -62,6 +62,8 @@ export default function EcranUtilisateurs() {
   const [caisseFermeA, setCaisseFermeA] = useState('');
   const [selecteur, setSelecteur] = useState<'role' | 'ouverture' | 'fermeture' | null>(null);
   const [enCours, setEnCours] = useState(false);
+  const [codePour, setCodePour] = useState<Utilisateur | null>(null);
+  const [nouveauCode, setNouveauCode] = useState('');
 
   const roleChoisi = ROLES.find((r) => r.cle === role) ?? ROLES[2];
 
@@ -129,32 +131,26 @@ export default function EcranUtilisateurs() {
     [charger],
   );
 
-  const changerCode = useCallback(
-    (u: Utilisateur) => {
-      Alert.prompt?.(
-        `Nouveau code pour ${u.login}`,
-        `Entre ${LONGUEUR_PIN_MIN} et ${LONGUEUR_PIN_MAX} chiffres.`,
-        async (saisie) => {
-          try {
-            await modifierUtilisateur(u.id, { pin: saisie });
-            Alert.alert('Code change', `Le code de ${u.login} a ete mis a jour.`);
-          } catch (e) {
-            Alert.alert('Code refuse', e instanceof Error ? e.message : 'Erreur.');
-          }
-        },
-        'plain-text',
-      );
-      // Alert.prompt n'existe que sur iOS. Sur Android, on oriente vers une
-      // action possible plutot que de laisser un bouton sans effet.
-      if (!Alert.prompt) {
-        Alert.alert(
-          'Changer le code',
-          `Pour changer le code de ${u.login}, supprimez ce compte et recreez-le avec un nouveau code.`,
-        );
-      }
-    },
-    [],
-  );
+  const changerCode = useCallback((u: Utilisateur) => {
+    setNouveauCode('');
+    setCodePour(u);
+  }, []);
+
+  const enregistrerCode = useCallback(async () => {
+    if (!codePour) return;
+    setEnCours(true);
+    try {
+      await modifierUtilisateur(codePour.id, { pin: nouveauCode });
+      setCodePour(null);
+      setNouveauCode('');
+      Alert.alert('Code mis à jour', `Le profil ${codePour.nom || codePour.login} peut maintenant se connecter avec ce PIN sur ce téléphone.`);
+      await charger();
+    } catch (e) {
+      Alert.alert('Code refusé', e instanceof Error ? e.message : 'Erreur.');
+    } finally {
+      setEnCours(false);
+    }
+  }, [charger, codePour, nouveauCode]);
 
   if (chargement) return <Chargement message="Lecture des comptes..." />;
 
@@ -327,6 +323,57 @@ export default function EcranUtilisateurs() {
               <Bouton titre="Creer" onPress={() => void creer()} enCours={enCours} />
             </View>
           </ScrollView>
+        </View>
+      ) : null}
+
+      {codePour ? (
+        <View style={styles.voile}>
+          <View style={styles.feuille}>
+            <View style={styles.feuilleEntete}>
+              <Text style={styles.feuilleTitre}>Code de {codePour.nom || codePour.login}</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Fermer le changement de code"
+                onPress={() => {
+                  if (enCours) return;
+                  setCodePour(null);
+                  setNouveauCode('');
+                }}
+                style={styles.fermerFeuille}
+              >
+                <Text style={styles.fermerFeuilleTexte}>X</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.choixDetail}>
+              Ce PIN est local au téléphone. Le rôle et l’activation restent synchronisés avec l’espace SahelPOS.
+            </Text>
+            <Champ
+              valeur={nouveauCode}
+              onChangeText={setNouveauCode}
+              label="Nouveau code PIN"
+              clavier="number-pad"
+              secret
+              aide={`Entre ${LONGUEUR_PIN_MIN} et ${LONGUEUR_PIN_MAX} chiffres.`}
+              autoFocus
+            />
+            <View style={styles.feuilleActions}>
+              <Bouton
+                titre="Annuler"
+                onPress={() => {
+                  setCodePour(null);
+                  setNouveauCode('');
+                }}
+                variante="secondaire"
+                desactive={enCours}
+              />
+              <Bouton
+                titre="Enregistrer le code"
+                onPress={() => void enregistrerCode()}
+                enCours={enCours}
+                desactive={nouveauCode.length < LONGUEUR_PIN_MIN || nouveauCode.length > LONGUEUR_PIN_MAX}
+              />
+            </View>
+          </View>
         </View>
       ) : null}
     </SafeAreaView>
