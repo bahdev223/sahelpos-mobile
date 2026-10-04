@@ -250,6 +250,7 @@ export async function genererMatriceVariantesLocale(
   produitId: number,
   selections: Record<string, OptionMatriceMobile[]>,
 ): Promise<number[]> {
+  await exigerEcriture();
   const produit = await lirePremier<{ id_local: string; nom: string }>(
     'SELECT id_local, nom FROM produit WHERE id = ?',
     produitId,
@@ -259,6 +260,10 @@ export async function genererMatriceVariantesLocale(
   const groupes = Object.values(selections).filter((groupe) => groupe.length > 0);
   if (groupes.length === 0) throw new Error('Choisissez au moins une caractéristique.');
 
+  const nbCombinaisons = groupes.reduce((total, groupe) => total * groupe.length, 1);
+  if (!Number.isSafeInteger(nbCombinaisons) || nbCombinaisons > 240) {
+    throw new Error('La matrice est limitée à 240 combinaisons. Réduisez les caractéristiques sélectionnées.');
+  }
   const combinaisons = produitCartesien(groupes);
   const crees: number[] = [];
 
