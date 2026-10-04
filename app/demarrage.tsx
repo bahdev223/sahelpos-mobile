@@ -467,7 +467,14 @@ export function EcranDemarrage() {
                 <Text style={styles.boutiqueDetail}>Plan {droit?.plan || '-'} recu depuis SahelPOS Web.</Text>
                 <Text style={styles.boutiqueDetail}>{droit?.commerce?.secteur_libelle || 'Profil a verifier'}</Text>
               </View>
-              {!droit?.commerce?.compatible ? <BandeauErreur message={droit?.commerce?.raison || 'Connectez-vous pour verifier le profil commerce.'} /> : null}
+              {!droit?.commerce || droit.commerce.ecritures_autorisees.length === 0 ? (
+                <BandeauErreur message={droit?.commerce?.raison || 'Connectez-vous pour verifier le profil commerce.'} />
+              ) : !droit.commerce.compatible && droit.commerce.raison ? (
+                <View style={styles.infoCreation}>
+                  <View style={styles.infoPastille}><Text style={styles.infoPastilleTexte}>i</Text></View>
+                  <Text style={styles.infoCreationTexte}>{droit.commerce.raison}</Text>
+                </View>
+              ) : null}
               <Champ label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Aminata Diarra" autoFocus />
               <Champ label="Identifiant local" valeur={login} onChangeText={setLogin} placeholder="aminata" erreur={erreurs.login} />
               <Champ label={`Code d'acces (${LONGUEUR_PIN_MIN} a ${LONGUEUR_PIN_MAX} chiffres)`} valeur={pin} onChangeText={(valeur) => setPin(chiffresSeuls(valeur))} placeholder="0000" clavier="number-pad" secret erreur={erreurs.pin} />
@@ -475,7 +482,13 @@ export function EcranDemarrage() {
               {erreurGenerale ? <BandeauErreur message={erreurGenerale} /> : null}
               <View style={styles.piedCode}>
                 <Bouton titre="Retour" variante="secondaire" onPress={precedent} style={styles.piedRetour} />
-                <Bouton titre={droit?.commerce?.compatible ? 'Entrer dans la caisse' : 'Consulter mon espace'} onPress={suivant} enCours={enCours} grand style={styles.piedSuivant} />
+                <Bouton
+                  titre={droit?.commerce?.ecritures_autorisees.length ? 'Entrer dans SahelPOS' : 'Consulter mon espace'}
+                  onPress={suivant}
+                  enCours={enCours}
+                  grand
+                  style={styles.piedSuivant}
+                />
               </View>
             </Carte>
           ) : null}
