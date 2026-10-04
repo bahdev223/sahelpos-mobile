@@ -493,11 +493,13 @@ export const MIGRATIONS: string[][] = [
       code_barre             TEXT,
       actif                  INTEGER NOT NULL DEFAULT 1,
       date_modification      TEXT    NOT NULL,
-      supprime_le            TEXT,
-      UNIQUE(produit_id, signature_combinaison)
+      supprime_le            TEXT
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_sku
        ON variante_produit(sku)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_variante_signature
+       ON variante_produit(produit_id, signature_combinaison)
+       WHERE signature_combinaison <> ''`,
     `CREATE INDEX IF NOT EXISTS idx_variante_produit
        ON variante_produit(produit_id, actif)`,
 
