@@ -118,6 +118,9 @@ interface FournisseurSync extends ClientSync {
 
 interface LigneVenteSync {
   produit_id_local: string;
+  variante_id_local?: string | null;
+  variante_sku_snapshot?: string;
+  variante_nom_snapshot?: string;
   libelle: string;
   unite: string;
   facteur: number | string;
@@ -149,6 +152,7 @@ interface VenteSync {
 interface MouvementSync {
   id_local: string;
   produit_id_local: string;
+  variante_id_local?: string | null;
   nature: string;
   source: string;
   quantite: number | string;
@@ -167,6 +171,9 @@ interface MouvementSync {
 
 interface LigneAchatSync {
   produit_id_local: string;
+  variante_id_local?: string | null;
+  variante_sku_snapshot?: string;
+  variante_nom_snapshot?: string;
   libelle: string;
   unite: string;
   facteur: number | string;
