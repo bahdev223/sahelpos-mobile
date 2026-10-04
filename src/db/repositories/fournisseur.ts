@@ -13,6 +13,7 @@ import {
   maintenant,
 } from './base';
 import { marquerChangement } from '../../services/synchronisation';
+import { exigerEcriture } from '../../services/abonnement';
 
 export interface Fournisseur {
   id: number;
@@ -87,6 +88,7 @@ export interface SaisieFournisseur {
 }
 
 export async function creerFournisseur(saisie: SaisieFournisseur): Promise<number> {
+  await exigerEcriture('fournisseurs');
   if (!saisie.nom.trim()) throw new Error('Le nom du fournisseur est requis.');
   const idLocal = genererIdLocal();
   const horodatage = maintenant();
@@ -111,6 +113,7 @@ export async function modifierFournisseur(
   id: number,
   saisie: SaisieFournisseur,
 ): Promise<void> {
+  await exigerEcriture('fournisseurs');
   const existant = await lirePremier<{ id_local: string }>(
     'SELECT id_local FROM fournisseur WHERE id = ?',
     id,
@@ -135,6 +138,7 @@ export async function modifierFournisseur(
  * achats de leur origine, et la dette fournisseur deviendrait introuvable.
  */
 export async function supprimerFournisseur(id: number): Promise<boolean> {
+  await exigerEcriture('fournisseurs');
   const achats = await lirePremier<{ n: number }>(
     'SELECT COUNT(*) AS n FROM achat WHERE fournisseur_id = ?',
     id,
