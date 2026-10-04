@@ -85,7 +85,7 @@ test('quincaillerie profile is compatible and exposes technical labels', () => {
     secteur_libelle: 'Quincaillerie',
     capabilities_effectives: [
       'STOCK_SIMPLE', 'MULTI_UNIT', 'PRODUCT_VARIANTS',
-      'TECHNICAL_DIMENSIONS', 'INVENTORY', 'LOW_STOCK_ALERT', 'BARCODE',
+      'TECHNICAL_DIMENSIONS', 'WHOLESALE', 'INVENTORY', 'LOW_STOCK_ALERT', 'BARCODE',
     ],
   });
   assert.equal(quincaillerie?.compatible, true);
