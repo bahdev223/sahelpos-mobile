@@ -17,8 +17,17 @@ import { verifierAccesCaisse } from './auth';
 import { verifierStock } from './notifications';
 import { marquerChangement } from './synchronisation';
 
+export interface VariantePanier {
+  idLocal: string;
+  sku: string;
+  nom: string;
+  stockDisponible: number;
+  prixAchat?: number | null;
+}
+
 export interface ArticlePanier {
   produit: Produit;
+  variante?: VariantePanier | null;
   /** Unite choisie : l'unite de base, ou une sous-unite (carton, sac...). */
   unite: string;
   /** Combien d'unites de base vaut l'unite choisie. */
@@ -58,12 +67,18 @@ export function calculerLigne(article: ArticlePanier): LigneVente {
   const quantiteBase = article.quantite * article.facteur;
   const total = arrondir(article.quantite * article.prixUnitaire);
   // Le cout est celui de l'unite de base, ramene a l'unite vendue.
-  const coutUnitaire = arrondir(article.produit.prixAchat * article.facteur);
+  const coutBase = article.variante?.prixAchat ?? article.produit.prixAchat;
+  const coutUnitaire = arrondir(coutBase * article.facteur);
   const beneficeTotal = total - arrondir(coutUnitaire * article.quantite);
 
   return {
     produitId: article.produit.id,
-    libelle: article.produit.nom,
+    varianteIdLocal: article.variante?.idLocal ?? null,
+    varianteSkuSnapshot: article.variante?.sku ?? '',
+    varianteNomSnapshot: article.variante?.nom ?? '',
+    libelle: article.variante
+      ? `${article.produit.nom} · ${article.variante.nom}`
+      : article.produit.nom,
     unite: article.unite,
     facteur: article.facteur,
     quantite: article.quantite,
@@ -95,8 +110,9 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
         !Number.isFinite(article.facteur) || article.facteur <= 0) {
       throw new Error('La quantite et le facteur doivent etre positifs.');
     }
+    const cout = article.variante?.prixAchat ?? article.produit.prixAchat;
     if (!Number.isFinite(article.prixUnitaire) || article.prixUnitaire < 0 ||
-        !Number.isFinite(article.produit.prixAchat) || article.produit.prixAchat < 0) {
+        !Number.isFinite(cout) || Number(cout) < 0) {
       throw new Error('Le prix de vente et le cout doivent etre valides.');
     }
   }
@@ -119,11 +135,19 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
     // Le stock est relu DANS la transaction : le lire avant laisserait une
     // fenetre ou deux ventes simultanees passeraient le meme article.
     const demandesParProduit = new Map<number, number>();
+    const demandesParVariante = new Map<string, { produitId: number; quantite: number }>();
     for (const ligne of lignes) {
       demandesParProduit.set(
         ligne.produitId,
         (demandesParProduit.get(ligne.produitId) ?? 0) + ligne.quantiteBase,
       );
+      if (ligne.varianteIdLocal) {
+        const actuelle = demandesParVariante.get(ligne.varianteIdLocal);
+        demandesParVariante.set(ligne.varianteIdLocal, {
+          produitId: ligne.produitId,
+          quantite: (actuelle?.quantite ?? 0) + ligne.quantiteBase,
+        });
+      }
     }
     for (const [produitId, quantiteDemandee] of demandesParProduit) {
       const p = await db.getFirstAsync<{ nom: string; quantite_base: number; gestion_stock: number }>(
@@ -133,6 +157,26 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
       if (!p) throw new Error(`Produit ${produitId} introuvable.`);
       if (p.gestion_stock && p.quantite_base < quantiteDemandee) {
         throw new StockInsuffisant(p.nom, quantiteDemandee, p.quantite_base);
+      }
+    }
+    for (const [varianteIdLocal, demandeVariante] of demandesParVariante) {
+      const variante = await db.getFirstAsync<{
+        produit_id: number; sku: string; stock_disponible: number; actif: number; supprime_le: string | null;
+      }>(
+        `SELECT produit_id, sku, stock_disponible, actif, supprime_le
+           FROM variante_produit WHERE id_local = ?`,
+        varianteIdLocal,
+      );
+      if (!variante || variante.produit_id !== demandeVariante.produitId ||
+          !variante.actif || variante.supprime_le) {
+        throw new Error(`Variante ${varianteIdLocal} introuvable ou inactive.`);
+      }
+      if (variante.stock_disponible < demandeVariante.quantite) {
+        throw new StockInsuffisant(
+          variante.sku,
+          demandeVariante.quantite,
+          variante.stock_disponible,
+        );
       }
     }
 
@@ -167,13 +211,15 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
 
     for (const l of lignes) {
       await db.runAsync(
-        `INSERT INTO ligne_vente (vente_id, produit_id, libelle, unite, facteur,
-                                  quantite, quantite_base, prix_unitaire,
-                                  cout_unitaire, total, benefice_total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        venteId, l.produitId, l.libelle, l.unite, l.facteur,
-        l.quantite, l.quantiteBase, l.prixUnitaire,
-        l.coutUnitaire, l.total, l.beneficeTotal,
+        `INSERT INTO ligne_vente
+          (vente_id, produit_id, variante_id_local, variante_sku_snapshot,
+           variante_nom_snapshot, libelle, unite, facteur, quantite, quantite_base,
+           prix_unitaire, cout_unitaire, total, benefice_total)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        venteId, l.produitId, l.varianteIdLocal ?? null,
+        l.varianteSkuSnapshot ?? '', l.varianteNomSnapshot ?? '',
+        l.libelle, l.unite, l.facteur, l.quantite, l.quantiteBase,
+        l.prixUnitaire, l.coutUnitaire, l.total, l.beneficeTotal,
       );
 
       const avant = await db.getFirstAsync<{ quantite_base: number; gestion_stock: number }>(
@@ -182,18 +228,44 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
       );
       if (!avant?.gestion_stock) continue;
 
+      if (l.varianteIdLocal) {
+        const varianteAvant = await db.getFirstAsync<{
+          stock_actuel: number; stock_disponible: number;
+        }>(
+          'SELECT stock_actuel, stock_disponible FROM variante_produit WHERE id_local = ?',
+          l.varianteIdLocal,
+        );
+        if (!varianteAvant) throw new Error(`Variante ${l.varianteIdLocal} introuvable.`);
+        const stockActuelApres = varianteAvant.stock_actuel - l.quantiteBase;
+        const stockDisponibleApres = varianteAvant.stock_disponible - l.quantiteBase;
+        if (stockDisponibleApres < 0) {
+          throw new StockInsuffisant(
+            l.varianteSkuSnapshot || l.libelle,
+            l.quantiteBase,
+            varianteAvant.stock_disponible,
+          );
+        }
+        await db.runAsync(
+          'UPDATE variante_produit SET stock_actuel = ?, stock_disponible = ?, date_modification = ? WHERE id_local = ?',
+          stockActuelApres, stockDisponibleApres, maintenant, l.varianteIdLocal,
+        );
+      }
+
       const apres = avant.quantite_base - l.quantiteBase;
       await db.runAsync(
         'UPDATE produit SET quantite_base = ?, date_modification = ? WHERE id = ?',
         apres, maintenant, l.produitId,
       );
       await db.runAsync(
-        `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
-                                      unite, quantite_base, stock_avant, stock_apres,
-                                      prix_unitaire, reference, motif, utilisateur, date_mouvement)
-         VALUES (lower(hex(randomblob(16))), ?, 'SORTIE', 'VENTE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        l.produitId, l.quantite, l.unite, l.quantiteBase,
-        avant.quantite_base, apres, l.prixUnitaire, numero, `Vente ${numero}`, nomVendeur, maintenant,
+        `INSERT INTO mouvement_stock
+          (id_local, produit_id, variante_id_local, nature, source_operation, quantite,
+           unite, quantite_base, stock_avant, stock_apres, prix_unitaire, reference,
+           motif, utilisateur, date_mouvement)
+         VALUES (lower(hex(randomblob(16))), ?, ?, 'SORTIE', 'VENTE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        l.produitId, l.varianteIdLocal ?? null,
+        l.quantite, l.unite, l.quantiteBase,
+        avant.quantite_base, apres, l.prixUnitaire, numero,
+        `Vente ${numero}`, nomVendeur, maintenant,
       );
     }
 
