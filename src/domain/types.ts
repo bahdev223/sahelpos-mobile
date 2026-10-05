@@ -52,6 +52,9 @@ export interface Produit {
 
 export interface LigneVente {
   produitId: number;
+  varianteIdLocal?: string | null;
+  varianteSkuSnapshot?: string;
+  varianteNomSnapshot?: string;
   libelle: string;
   unite: string;
   facteur: number;
