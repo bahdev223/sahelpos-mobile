@@ -648,9 +648,10 @@ async function lireVentes(ids: string[]): Promise<VenteSync[]> {
   );
   for (const vente of ventes) {
     vente.lignes = await lireTout<LigneVenteSync>(
-      `SELECT p.id_local AS produit_id_local, l.libelle, l.unite, l.facteur,
-              l.quantite, l.quantite_base, l.prix_unitaire, l.cout_unitaire,
-              l.total, l.benefice_total
+      `SELECT p.id_local AS produit_id_local,
+              l.variante_id_local, l.variante_sku_snapshot, l.variante_nom_snapshot,
+              l.libelle, l.unite, l.facteur, l.quantite, l.quantite_base,
+              l.prix_unitaire, l.cout_unitaire, l.total, l.benefice_total
          FROM ligne_vente l
          JOIN produit p ON p.id = l.produit_id
         WHERE l.vente_id = ?`,
