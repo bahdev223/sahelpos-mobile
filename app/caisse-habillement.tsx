@@ -327,7 +327,7 @@ function SelecteurVariante({
   onFermer: () => void;
   onAjouter: (variante: VarianteProduitLocale, quantite: number) => void;
 }) {
-  const couleurs = useMemo(() => {
+  const optionsCouleurs = useMemo(() => {
     const noms = new Map<string, string | null>();
     for (const variante of modele.variantes) {
       const d = decrireVariante(variante);
@@ -336,7 +336,7 @@ function SelecteurVariante({
     return [...noms].map(([nom, codeHex]) => ({ nom, codeHex }));
   }, [modele]);
 
-  const [couleur, setCouleur] = useState<string | null>(couleurs[0]?.nom ?? null);
+  const [couleur, setCouleur] = useState<string | null>(optionsCouleurs[0]?.nom ?? null);
   const [taille, setTaille] = useState<string | null>(null);
   const [quantite, setQuantite] = useState(1);
 
@@ -389,7 +389,7 @@ function SelecteurVariante({
         <ScrollView contentContainerStyle={styles.selecteurContenu}>
           <Text style={styles.etapeTitre}>1. Couleur</Text>
           <View style={styles.choixWrap}>
-            {couleurs.length === 0 ? <Text style={styles.aide}>Aucune couleur</Text> : couleurs.map((c) => (
+            {optionsCouleurs.length === 0 ? <Text style={styles.aide}>Aucune couleur</Text> : optionsCouleurs.map((c) => (
               <Pressable
                 key={c.nom}
                 style={[styles.choix, couleur === c.nom && styles.choixActif]}
