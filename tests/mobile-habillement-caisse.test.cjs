@@ -49,3 +49,10 @@ test('adding a variant to cart preserves identity and enforces available stock',
   assert.equal(second.ok, false);
   assert.match(second.erreur, /Stock insuffisant/);
 });
+
+
+test('cash register tab routes habillement to dedicated native checkout', () => {
+  const source = readFileSync(resolve(__dirname, '../app/(tabs)/caisse.tsx'), 'utf8');
+  assert.match(source, /secteur === 'HABILLEMENT'/);
+  assert.match(source, /caisse-habillement/);
+});
