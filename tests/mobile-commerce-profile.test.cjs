@@ -53,7 +53,7 @@ test('advanced profile keeps safe mobile writes without flattening its catalogue
   assert.equal(ecritureCommerceAutorisee(profil, 'clients'), true);
   assert.equal(ecritureCommerceAutorisee(profil, 'fournisseurs'), true);
   assert.equal(ecritureCommerceAutorisee(profil, 'produits'), false);
-  assert.equal(ecritureCommerceAutorisee(profil, 'ventes'), false);
+  assert.equal(ecritureCommerceAutorisee(profil, 'ventes'), true);
 });
 
 test('old signed incompatible licence is migrated to safe core writes', () => {
