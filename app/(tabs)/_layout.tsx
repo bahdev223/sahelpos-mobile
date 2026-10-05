@@ -66,6 +66,7 @@ export default function DispositionOnglets() {
     >
       <Tabs.Screen name="accueil" options={{ title: 'Accueil', tabBarIcon: icone('accueil') }} />
       <Tabs.Screen name="caisse" options={{ title: 'Caisse', tabBarIcon: icone('caisse') }} />
+      <Tabs.Screen name="caisse-habillement" options={{ href: null }} />
       <Tabs.Screen
         name="catalogue"
         options={{ title: 'Catalogue', tabBarIcon: icone('catalogue') }}
