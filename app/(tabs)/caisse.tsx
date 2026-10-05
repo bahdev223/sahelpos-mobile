@@ -35,7 +35,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import type { BarcodeScanningResult } from 'expo-camera';
-import { useFocusEffect } from 'expo-router';
+import { Redirect, useFocusEffect } from 'expo-router';
 
 import { obtenirBase } from '../../src/db/database';
 import { seuilAlerteStock } from '../../src/domain/stock';
@@ -77,6 +77,7 @@ import {
 import { useSession } from '../_layout';
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
+import { etatCourant as etatAbonnementCourant } from '../../src/services/abonnement';
 
 // --- Acces aux donnees ------------------------------------------------------
 
@@ -252,6 +253,32 @@ interface VenteTerminee {
 type EtatListe = 'chargement' | 'pret' | 'erreur';
 
 export default function EcranCaisse() {
+  const [secteur, setSecteur] = useState<string | null>(null);
+
+  useEffect(() => {
+    let actif = true;
+    void etatAbonnementCourant()
+      .then((etat) => {
+        if (actif) setSecteur(etat.droit?.commerce?.secteur ?? 'STANDARD');
+      })
+      .catch(() => {
+        if (actif) setSecteur('STANDARD');
+      });
+    return () => {
+      actif = false;
+    };
+  }, []);
+
+  if (secteur === null) {
+    return <Chargement message="Préparation de la caisse..." />;
+  }
+  if (secteur === 'HABILLEMENT') {
+    return <Redirect href="/caisse-habillement" />;
+  }
+  return <CaisseStandard />;
+}
+
+function CaisseStandard() {
   const { boutique, utilisateur, revisionSynchronisation } = useSession();
 
   const [recherche, setRecherche] = useState('');
