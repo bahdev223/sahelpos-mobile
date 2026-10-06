@@ -299,8 +299,8 @@ export async function rattacherAchatArrivage(
   achatId: number,
 ): Promise<void> {
   await exigerArrivages();
-  const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
-    'SELECT id_local, statut FROM arrivage WHERE id = ?',
+  const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage; numero: string }>(
+    'SELECT id_local, statut, numero FROM arrivage WHERE id = ?',
     arrivageId,
   );
   if (!arrivage) throw new Error('Arrivage introuvable.');
@@ -624,8 +624,9 @@ export async function validerReceptionArrivage(arrivageId: number): Promise<void
     const lignes = await lireTout<{
       id: number; produit_id: number; variante_id: number | null;
       quantite_prevue: number; quantite_recue: number; comptee: number;
+      prix_achat_unitaire: number;
     }>(
-      'SELECT id, produit_id, variante_id, quantite_prevue, quantite_recue, comptee FROM ligne_arrivage WHERE arrivage_id = ? AND supprime_le IS NULL',
+      'SELECT id, produit_id, variante_id, quantite_prevue, quantite_recue, comptee, prix_achat_unitaire FROM ligne_arrivage WHERE arrivage_id = ? AND supprime_le IS NULL',
       arrivageId,
     );
     const aucunComptage = arrivage.statut === 'EN_TRANSIT' && !lignes.some(l => l.comptee || l.quantite_recue > 0);
@@ -643,16 +644,63 @@ export async function validerReceptionArrivage(arrivageId: number): Promise<void
     for (const ligne of lignes) {
       const q = Number(ligne.quantite_recue || 0);
       if (q <= 0) continue;
-      await executer(
-        'UPDATE produit SET quantite_base = quantite_base + ?, date_modification = ? WHERE id = ?',
-        q, maintenant(), ligne.produit_id,
+
+      const produit = await lirePremier<{
+        nom: string; quantite_base: number; gestion_stock: number; unite_base: string;
+      }>(
+        'SELECT nom, quantite_base, gestion_stock, unite_base FROM produit WHERE id = ?',
+        ligne.produit_id,
       );
+      if (!produit) throw new Error('Produit introuvable pendant la réception.');
+
+      let stockAvant = Number(produit.quantite_base || 0);
+      let stockApres = stockAvant;
       if (ligne.variante_id) {
-        await executer(
-          'UPDATE variante_produit SET stock_actuel = stock_actuel + ?, date_modification = ? WHERE id = ?',
-          q, maintenant(), ligne.variante_id,
+        const variante = await lirePremier<{ stock_actuel: number }>(
+          'SELECT stock_actuel FROM variante_produit WHERE id = ? AND produit_id = ?',
+          ligne.variante_id, ligne.produit_id,
         );
+        if (!variante) throw new Error('Variante introuvable pendant la réception.');
+        stockAvant = Number(variante.stock_actuel || 0);
+        stockApres = stockAvant + q;
+      } else {
+        stockApres = stockAvant + q;
       }
+
+      if (produit.gestion_stock) {
+        await executer(
+          'UPDATE produit SET quantite_base = quantite_base + ?, date_modification = ? WHERE id = ?',
+          q, maintenant(), ligne.produit_id,
+        );
+        if (ligne.variante_id) {
+          await executer(
+            'UPDATE variante_produit SET stock_actuel = stock_actuel + ?, date_modification = ? WHERE id = ?',
+            q, maintenant(), ligne.variante_id,
+          );
+        }
+      }
+
+      // Journal local immédiat. Le pull serveur le déduplique grâce aux mêmes
+      // source/référence/produit/variante/stock avant-après.
+      await executer(
+        `INSERT INTO mouvement_stock
+          (id_local, produit_id, variante_id, nature, source_operation,
+           quantite, unite, quantite_base, stock_avant, stock_apres,
+           prix_unitaire, reference, motif, date_mouvement)
+         VALUES (lower(hex(randomblob(16))), ?, ?, 'ENTREE', 'ACHAT',
+                 ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ligne.produit_id,
+        ligne.variante_id ?? null,
+        q,
+        produit.unite_base,
+        produit.gestion_stock ? q : 0,
+        stockAvant,
+        produit.gestion_stock ? stockApres : stockAvant,
+        Number(ligne.prix_achat_unitaire || 0),
+        arrivage.numero,
+        'Réception convoi ' + arrivage.numero,
+        maintenant(),
+      );
     }
     const dateReception = maintenant();
     await executer(
