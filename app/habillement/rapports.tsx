@@ -13,6 +13,9 @@ interface Rapport {
   ventes: number;
   benefice: number;
   pieces: number;
+  arrivagesRecus: number;
+  fraisApproche: number;
+  valeurRendue: number;
   tops: Array<{ nom: string; qte: number; ca: number }>;
   variantes: Array<{ libelle: string; qte: number }>;
 }
@@ -40,12 +43,43 @@ async function charger(): Promise<Rapport> {
     "SELECT lv.libelle, COALESCE(SUM(lv.quantite), 0) AS qte FROM ligne_vente lv JOIN vente v ON v.id = lv.vente_id WHERE v.date_vente >= ? AND v.statut <> 'annulee' AND lv.variante_id IS NOT NULL GROUP BY lv.libelle ORDER BY qte DESC LIMIT 8",
     depuis,
   );
+  const logistique = await db.getFirstAsync<{
+    arrivagesRecus: number;
+    fraisApproche: number;
+    valeurRendue: number;
+  }>(
+    `SELECT
+       (SELECT COUNT(*) FROM arrivage a
+         WHERE a.statut = 'RECEPTIONNE'
+           AND COALESCE(a.date_reception_reelle, a.date_creation) >= ?) AS arrivagesRecus,
+       COALESCE((
+         SELECT SUM(f.montant)
+           FROM frais_arrivage f
+           JOIN arrivage a ON a.id = f.arrivage_id
+          WHERE a.statut = 'RECEPTIONNE'
+            AND f.supprime_le IS NULL
+            AND COALESCE(a.date_reception_reelle, a.date_creation) >= ?
+       ), 0) AS fraisApproche,
+       COALESCE((
+         SELECT SUM(la.cout_revient_unitaire * la.quantite_recue)
+           FROM ligne_arrivage la
+           JOIN arrivage a ON a.id = la.arrivage_id
+          WHERE a.statut = 'RECEPTIONNE'
+            AND la.supprime_le IS NULL
+            AND la.quantite_recue > 0
+            AND COALESCE(a.date_reception_reelle, a.date_creation) >= ?
+       ), 0) AS valeurRendue`,
+    depuis, depuis, depuis,
+  );
 
   return {
     ca: totaux?.ca ?? 0,
     ventes: totaux?.ventes ?? 0,
     benefice: totaux?.benefice ?? 0,
     pieces: pieces?.pieces ?? 0,
+    arrivagesRecus: logistique?.arrivagesRecus ?? 0,
+    fraisApproche: logistique?.fraisApproche ?? 0,
+    valeurRendue: logistique?.valeurRendue ?? 0,
     tops,
     variantes,
   };
@@ -55,7 +89,9 @@ export default function RapportsMode() {
   const router = useRouter();
   const { boutique, revisionSynchronisation } = useSession();
   const [rapport, setRapport] = useState<Rapport>({
-    ca: 0, ventes: 0, benefice: 0, pieces: 0, tops: [], variantes: [],
+    ca: 0, ventes: 0, benefice: 0, pieces: 0,
+    arrivagesRecus: 0, fraisApproche: 0, valeurRendue: 0,
+    tops: [], variantes: [],
   });
 
   useFocusEffect(useCallback(() => {
@@ -83,6 +119,9 @@ export default function RapportsMode() {
           <Kpi label="Bénéfice" value={money(rapport.benefice)} />
           <Kpi label="Ventes" value={String(rapport.ventes)} />
           <Kpi label="Pièces vendues" value={String(rapport.pieces)} />
+          <Kpi label="Arrivages reçus" value={String(rapport.arrivagesRecus)} />
+          <Kpi label="Frais d’approche" value={money(rapport.fraisApproche)} />
+          <Kpi label="Valeur rendue reçue" value={money(rapport.valeurRendue)} />
         </View>
 
         <Text style={s.section}>Modèles les plus vendus</Text>
