@@ -137,6 +137,10 @@ export function AccueilHabillement() {
             <Action titre="Arrivages & transit" icone="achats"
               onPress={()=>router.push('/habillement/arrivages')}/>
           ) : null}
+          {profilCommerce?.capabilities_effectives.includes('LOT_TRACKING') ? (
+            <Action titre="Lots & péremptions" icone="etiquette"
+              onPress={()=>router.push('/habillement/lots')}/>
+          ) : null}
         </View>
 
         <View style={s.sectionEntete}>
