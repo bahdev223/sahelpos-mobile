@@ -51,3 +51,6 @@ Validation consolidée V2 après correction des tests historiques, du schéma sy
 
 
 Suite complète relancée après mise à jour des harness historiques multi-profils/Expo/droits granulaires/variantes.
+
+
+Validation de parité écran par écran relancée après caisse/achats/stock/inventaire/mouvements.
