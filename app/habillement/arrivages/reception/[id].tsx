@@ -79,7 +79,7 @@ export default function ReceptionArrivageHabillement() {
   const invalide=useMemo(()=>{
     if(!arrivage)return true;
     return comptages.some(c=>{
-      if(c.quantiteRecue<0||c.quantiteRejetee!<0)return true;
+      if(c.quantiteRecue<0||(c.quantiteRejetee ?? 0)<0)return true;
       const ligne=arrivage.lignes.find(l=>l.id===c.ligneId);
       if(!ligne)return true;
       return c.quantiteRecue+c.quantiteRejetee<0;
