@@ -395,6 +395,14 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
                 icone: 'achats',
               });
             }
+            if (infos.capabilitiesCommerce.includes('LOT_TRACKING')) {
+              entrees.splice(2, 0, {
+                titre: 'Lots & péremptions',
+                description: 'Traçabilité des lots reçus et dates de péremption',
+                chemin: '/habillement/lots',
+                icone: 'etiquette',
+              });
+            }
           }
           if (infos.secteur === 'HABILLEMENT' && groupe.titre === 'Activite') {
             entrees.splice(1, 0, {
