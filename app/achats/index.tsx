@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useSession } from '../_layout';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
 
 import {
   Bouton,
@@ -55,7 +56,7 @@ function dateCourte(iso: string): string {
 export default function EcranAchats() {
   const router = useRouter();
   const { boutique, synchroniserMaintenant, profilCommerce } = useSession();
-  const habillement = profilCommerce?.secteur === 'HABILLEMENT';
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
   const [achats, setAchats] = useState<AchatResume[]>([]);
   const [filtre, setFiltre] = useState<StatutAchat | 'TOUS'>('TOUS');
   const [recherche, setRecherche] = useState('');
@@ -96,7 +97,7 @@ export default function EcranAchats() {
 
   return (
     <SafeAreaView style={styles.page} edges={['bottom']}>
-      <Stack.Screen options={{ headerShown: true, title: habillement ? 'Approvisionnements' : 'Achats' }} />
+      <Stack.Screen options={{ headerShown: true, title: profilUI.libelles.achats }} />
 
       {erreur ? (
         <Erreur message={erreur} onReessayer={charger} />
