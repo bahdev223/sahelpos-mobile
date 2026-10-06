@@ -39,3 +39,6 @@ Restent obligatoires avant fusion : suite complète verte, contrôle de types co
 La partie Web possède les profils, presets, migration et référentiel électrique ; la généralisation de ses formulaires/fiches encore limités à QUINCAILLERIE reste distincte de cette intégration mobile. Ne pas annoncer la parité Web/mobile terminée.
 
 Les anciens APK ne connaissent pas ELECTRICITE : ne pas activer ce secteur en production avant la disponibilité d'une version compatible compilée par le propriétaire du projet. Aucune fusion dans master, aucun déploiement, aucune compilation APK/AAB pour ce lot. Les outils temporaires de transfert des sources ont été supprimés après publication du commit vérifié.
+
+
+Validation finale relancée après unités électriques, libellés d'approvisionnement et règles de tarifs/fiche technique.
