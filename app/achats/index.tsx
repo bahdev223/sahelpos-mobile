@@ -57,6 +57,7 @@ export default function EcranAchats() {
   const router = useRouter();
   const { boutique, synchroniserMaintenant, profilCommerce } = useSession();
   const profilUI = resoudreProfilUIMobile(profilCommerce);
+  const approvisionnementSpecialise = ['HABILLEMENT', 'QUINCAILLERIE', 'ELECTRICITE'].includes(profilUI.code);
   const [achats, setAchats] = useState<AchatResume[]>([]);
   const [filtre, setFiltre] = useState<StatutAchat | 'TOUS'>('TOUS');
   const [recherche, setRecherche] = useState('');
@@ -132,10 +133,12 @@ export default function EcranAchats() {
           ListEmptyComponent={
             <ListeVide
               titre="Aucun achat"
-              message={habillement
+              message={profilUI.code === 'HABILLEMENT'
                 ? "Enregistrez vos approvisionnements par modèle, taille et couleur."
-                : "Enregistrez vos achats fournisseur pour faire entrer la marchandise en stock et suivre ce que vous devez."}
-              actionTitre={habillement ? "Nouvel approvisionnement" : "Enregistrer un achat"}
+                : approvisionnementSpecialise
+                  ? "Enregistrez vos approvisionnements par référence et caractéristiques."
+                  : "Enregistrez vos achats fournisseur pour faire entrer la marchandise en stock et suivre ce que vous devez."}
+              actionTitre={approvisionnementSpecialise ? "Nouvel approvisionnement" : "Enregistrer un achat"}
               onAction={() => router.push('/achats/nouveau')}
             />
           }
@@ -172,7 +175,7 @@ export default function EcranAchats() {
 
       <View style={styles.pied}>
         <Bouton
-          titre={habillement ? "Nouvel approvisionnement" : "Enregistrer un achat"}
+          titre={approvisionnementSpecialise ? "Nouvel approvisionnement" : "Enregistrer un achat"}
           onPress={() => router.push('/achats/nouveau')}
           grand
         />
