@@ -324,10 +324,11 @@ export async function rattacherAchatArrivage(
     );
     const lignes = await lireTout<{
       serveur_id: number | null; produit_id: number; variante_id: number | null;
-      facteur: number; quantite: number; quantite_base: number; prix_unitaire: number;
+      facteur: number; quantite: number; quantite_recue: number;
+      quantite_base: number; prix_unitaire: number;
     }>(
       `SELECT serveur_id, produit_id, variante_id, facteur, quantite,
-              quantite_base, prix_unitaire
+              quantite_recue, quantite_base, prix_unitaire
          FROM ligne_achat
         WHERE achat_id = ?
         ORDER BY id`,
@@ -341,11 +342,14 @@ export async function rattacherAchatArrivage(
           )
         : null;
       if (existe) continue;
+      const restantUnite = Math.max(0, ligne.quantite - ligne.quantite_recue);
+      const restantBase = Math.round(restantUnite * ligne.facteur * 1000) / 1000;
+      if (restantBase <= 0) continue;
       await insererLigne(arrivageId, {
         produitId: ligne.produit_id,
         varianteId: ligne.variante_id,
         ligneAchatServeurId: ligne.serveur_id,
-        quantitePrevue: ligne.quantite_base,
+        quantitePrevue: restantBase,
         prixAchatUnitaire: ligne.facteur > 0
           ? ligne.prix_unitaire / ligne.facteur
           : ligne.prix_unitaire,
