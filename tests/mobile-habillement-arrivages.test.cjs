@@ -27,6 +27,8 @@ test('arrival service covers full offline lifecycle', () => {
     'ajouterFraisArrivage',
   ]) assert.match(source, new RegExp('export async function ' + fn));
   assert.match(source, /marquerChangement\('arrivage'/);
+  assert.match(source, /UPDATE achat[\s\S]*statut = 'RECU'/);
+  assert.match(source, /fraisApprocheAlloues|frais_approche_alloues/);
 });
 
 test('arrival synchronization uses protocol 7 and carries arrivals', () => {
