@@ -76,6 +76,7 @@ interface LigneMouvement {
 
 interface Filtres {
   produitId: number | null;
+  varianteId: number | null;
   nature: NatureMouvement | null;
   source: SourceOperation | null;
   /** Bornes au format AAAA-MM-JJ, ou null pour "depuis toujours". */
@@ -86,6 +87,7 @@ interface Filtres {
 
 const FILTRES_VIDES: Filtres = {
   produitId: null,
+  varianteId: null,
   nature: null,
   source: null,
   du: null,
@@ -106,6 +108,10 @@ function construireConditions(filtres: Filtres): {
   if (filtres.produitId !== null) {
     conditions.push('m.produit_id = ?');
     parametres.push(filtres.produitId);
+  }
+  if (filtres.varianteId !== null) {
+    conditions.push('m.variante_id = ?');
+    parametres.push(filtres.varianteId);
   }
   if (filtres.nature !== null) {
     conditions.push('m.nature = ?');
@@ -307,17 +313,20 @@ export default function Mouvements() {
   const router = useRouter();
   const { profilCommerce } = useSession();
   const profilUI = resoudreProfilUIMobile(profilCommerce);
-  const parametres = useLocalSearchParams<{ produit?: string; nature?: string }>();
+  const parametres = useLocalSearchParams<{ produit?: string; variante?: string; nature?: string }>();
 
   // Les autres ecrans arrivent ici avec un filtre deja pose : la fiche produit
   // sur un produit, l'ecran des receptions sur les entrees.
   const [filtres, setFiltres] = useState<Filtres>(() => {
     const produitInitial = Number(parametres.produit);
+    const varianteInitiale = Number(parametres.variante);
     const nature = parametres.nature;
     return {
       ...FILTRES_VIDES,
       produitId:
         Number.isInteger(produitInitial) && produitInitial > 0 ? produitInitial : null,
+      varianteId:
+        Number.isInteger(varianteInitiale) && varianteInitiale > 0 ? varianteInitiale : null,
       nature:
         nature === 'ENTREE' || nature === 'SORTIE' || nature === 'AJUSTEMENT' ? nature : null,
     };
@@ -396,6 +405,7 @@ export default function Mouvements() {
   const nbFiltresActifs = useMemo(() => {
     let nombre = 0;
     if (filtres.produitId !== null) nombre += 1;
+    if (filtres.varianteId !== null) nombre += 1;
     if (filtres.nature !== null) nombre += 1;
     if (filtres.source !== null) nombre += 1;
     if (filtres.du !== null || filtres.au !== null) nombre += 1;
@@ -442,7 +452,13 @@ export default function Mouvements() {
           {filtres.produitId !== null ? (
             <Etiquette
               texte={nomProduitFiltre || 'Produit'}
-              onRetirer={() => setFiltres({ ...filtres, produitId: null })}
+              onRetirer={() => setFiltres({ ...filtres, produitId: null, varianteId: null })}
+            />
+          ) : null}
+          {filtres.varianteId !== null ? (
+            <Etiquette
+              texte={`Variante #${filtres.varianteId}`}
+              onRetirer={() => setFiltres({ ...filtres, varianteId: null })}
             />
           ) : null}
           {filtres.nature !== null ? (
