@@ -41,7 +41,13 @@ function chargerSynchronisation(options = {}) {
     './notifications/journal': { deposer: async () => {} },
     './abonnement': {
       jetonAppareil: async () => options.jeton ?? null,
-      rafraichir: async () => options.abonnement ?? { peutEcrire: true, message: '' },
+      rafraichir: async () => options.abonnement ?? {
+        peutEcrire: true,
+        message: '',
+        droit: { peutEcrire: true, commerce: { ecritures_autorisees: ['utilisateurs','produits','clients','fournisseurs','achats','boutique','ventes','mouvements'] } },
+      },
+      ecritureMobileAutorisee: (etat, type) =>
+        Boolean(etat?.droit?.peutEcrire && etat?.droit?.commerce?.ecritures_autorisees?.includes(type)),
     },
   };
   const moduleCharge = new Module(chemin, module);
@@ -61,18 +67,26 @@ test('a linked phone never clears local data to switch to another shop', async (
   assert.equal(mutations.some(({ sql }) => /DELETE FROM (sync_outbox|vente|utilisateur)/i.test(sql)), false);
 });
 
-test('a changed commerce profile blocks push and preserves pending operations', async () => {
+test('a changed commerce profile keeps blocked writes pending while allowing pull', async () => {
   const { synchroniser, mutations } = chargerSynchronisation({
     jeton: 'test-token',
-    abonnement: { peutEcrire: false, message: 'Profil incompatible : variantes.' },
+    abonnement: {
+      peutEcrire: true,
+      message: 'Profil partiel.',
+      droit: { peutEcrire: true, commerce: { ecritures_autorisees: ['clients'] } },
+    },
     base: { lireTout: async () => [{ type_objet: 'vente', id_local: 'v1', statut: 'PENDING' }] },
   });
   const originalFetch = global.fetch;
   let calls = 0;
-  global.fetch = async () => { calls += 1; throw new Error('unexpected request'); };
+  global.fetch = async () => {
+    calls += 1;
+    return { ok: true, json: async () => ({ cursor: 'cursor-1' }) };
+  };
   try {
-    await assert.rejects(() => synchroniser(), /Profil incompatible/);
-    assert.equal(calls, 0);
+    const resultat = await synchroniser();
+    assert.equal(resultat.pousses, 0);
+    assert.ok(calls >= 1);
     assert.equal(mutations.some(({ sql }) => /DELETE FROM sync_outbox/.test(sql)), false);
     assert.equal(mutations.some(({ sql }) => /SET statut = 'SENDING'/.test(sql)), false);
   } finally { global.fetch = originalFetch; }
@@ -85,8 +99,9 @@ test('SQLite keeps every movement and reconciles the legacy outgoing quantity si
     CREATE TABLE sync_outbox (id INTEGER PRIMARY KEY, type_objet TEXT, id_local TEXT,
       statut TEXT, date_creation TEXT, derniere_erreur TEXT, tentatives INTEGER);
     CREATE TABLE produit (id INTEGER PRIMARY KEY, id_local TEXT UNIQUE);
+    CREATE TABLE variante_produit (id INTEGER PRIMARY KEY, id_local TEXT UNIQUE, produit_id INTEGER, actif INTEGER, stock_actuel REAL);
     CREATE TABLE mouvement_stock (id INTEGER PRIMARY KEY, id_local TEXT UNIQUE, produit_id INTEGER,
-      nature TEXT, source_operation TEXT, quantite REAL, unite TEXT, quantite_base REAL,
+      variante_id INTEGER, nature TEXT, source_operation TEXT, quantite REAL, unite TEXT, quantite_base REAL,
       stock_avant REAL, stock_apres REAL, prix_unitaire REAL, reference TEXT, motif TEXT,
       utilisateur TEXT, date_mouvement TEXT);
     INSERT INTO produit VALUES (1, 'p1'), (2, 'p2');
