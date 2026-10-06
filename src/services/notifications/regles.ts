@@ -80,8 +80,8 @@ export async function evaluerStock(produitsTouches?: number[]): Promise<number> 
         cle: cleRupture(p.id),
         genre: 'rupture',
         gravite: 'urgent',
-        titre: `${p.nom} est epuise`,
-        corps: "Il n'en reste plus en stock. Pensez a le commander.",
+        titre: `${p.nom} est épuisé`,
+        corps: "Il n'en reste plus en stock. Pensez à le réapprovisionner.",
         chemin: '/stock/alertes',
         produitId: p.id,
       });
@@ -131,8 +131,8 @@ export async function evaluerStock(produitsTouches?: number[]): Promise<number> 
     gravite: 'attention',
     titre:
       produitsBas.length === 1
-        ? '1 produit est sous son seuil'
-        : `${produitsBas.length} produits sont sous leur seuil`,
+        ? '1 article est sous son seuil'
+        : `${produitsBas.length} articles sont sous leur seuil`,
     corps: `${exemples}${reste}.`,
     chemin: '/stock/alertes',
   });
