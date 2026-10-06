@@ -669,12 +669,6 @@ export async function validerReceptionArrivage(arrivageId: number): Promise<void
           WHERE id = ? AND statut = 'BROUILLON'`,
         dateReception, dateReception, achat_id,
       );
-      await executer(
-        `UPDATE ligne_achat
-            SET quantite_recue = quantite
-          WHERE achat_id = ?`,
-        achat_id,
-      );
     }
 
     await repartirFraisLocal(arrivageId, true);
