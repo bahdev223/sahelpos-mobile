@@ -48,3 +48,6 @@ Validation consolidée après mise à jour des harness historiques et du header 
 
 
 Validation consolidée V2 après correction des tests historiques, du schéma sync et des libellés d'approvisionnement.
+
+
+Suite complète relancée après mise à jour des harness historiques multi-profils/Expo/droits granulaires/variantes.
