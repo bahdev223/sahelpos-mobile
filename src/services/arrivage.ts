@@ -294,6 +294,101 @@ export async function creerArrivage(saisie: SaisieArrivage): Promise<number> {
   return id;
 }
 
+export async function rattacherAchatArrivage(
+  arrivageId: number,
+  achatId: number,
+): Promise<void> {
+  await exigerArrivages();
+  const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
+    'SELECT id_local, statut FROM arrivage WHERE id = ?',
+    arrivageId,
+  );
+  if (!arrivage) throw new Error('Arrivage introuvable.');
+  if (arrivage.statut !== 'BROUILLON') {
+    throw new Error('Un bon fournisseur ne peut être rattaché qu’au brouillon.');
+  }
+  const achat = await lirePremier<{ serveur_id: number | null; statut: string }>(
+    'SELECT serveur_id, statut FROM achat WHERE id = ?',
+    achatId,
+  );
+  if (!achat) throw new Error('Achat introuvable.');
+  if (achat.statut !== 'BROUILLON') throw new Error('Seul un achat non reçu peut être rattaché.');
+  if (!achat.serveur_id) {
+    throw new Error('Synchronisez d’abord ce bon fournisseur pour pouvoir le rattacher à un arrivage.');
+  }
+
+  await dansTransaction(async () => {
+    await executer(
+      'INSERT OR IGNORE INTO arrivage_achat (arrivage_id, achat_id) VALUES (?, ?)',
+      arrivageId, achatId,
+    );
+    const lignes = await lireTout<{
+      serveur_id: number | null; produit_id: number; variante_id: number | null;
+      facteur: number; quantite: number; quantite_base: number; prix_unitaire: number;
+    }>(
+      `SELECT serveur_id, produit_id, variante_id, facteur, quantite,
+              quantite_base, prix_unitaire
+         FROM ligne_achat
+        WHERE achat_id = ?
+        ORDER BY id`,
+      achatId,
+    );
+    for (const ligne of lignes) {
+      const existe = ligne.serveur_id
+        ? await lirePremier<{ id: number }>(
+            'SELECT id FROM ligne_arrivage WHERE arrivage_id = ? AND ligne_achat_serveur_id = ?',
+            arrivageId, ligne.serveur_id,
+          )
+        : null;
+      if (existe) continue;
+      await insererLigne(arrivageId, {
+        produitId: ligne.produit_id,
+        varianteId: ligne.variante_id,
+        ligneAchatServeurId: ligne.serveur_id,
+        quantitePrevue: ligne.quantite_base,
+        prixAchatUnitaire: ligne.facteur > 0
+          ? ligne.prix_unitaire / ligne.facteur
+          : ligne.prix_unitaire,
+      });
+    }
+    await executer('UPDATE arrivage SET date_modification = ? WHERE id = ?', maintenant(), arrivageId);
+    await marquerChangement('arrivage', arrivage.id_local);
+  });
+}
+
+export async function supprimerLigneArrivage(arrivageId: number, ligneId: number): Promise<void> {
+  await exigerArrivages();
+  const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
+    'SELECT id_local, statut FROM arrivage WHERE id = ?',
+    arrivageId,
+  );
+  if (!arrivage) throw new Error('Arrivage introuvable.');
+  if (arrivage.statut !== 'BROUILLON') throw new Error('Cette ligne est déjà scellée.');
+  await dansTransaction(async () => {
+    await executer('DELETE FROM ligne_arrivage WHERE id = ? AND arrivage_id = ?', ligneId, arrivageId);
+    await executer('UPDATE arrivage SET date_modification = ? WHERE id = ?', maintenant(), arrivageId);
+    await marquerChangement('arrivage', arrivage.id_local);
+  });
+}
+
+export async function supprimerFraisArrivage(arrivageId: number, fraisId: number): Promise<void> {
+  await exigerArrivages();
+  const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
+    'SELECT id_local, statut FROM arrivage WHERE id = ?',
+    arrivageId,
+  );
+  if (!arrivage) throw new Error('Arrivage introuvable.');
+  if (arrivage.statut === 'RECEPTIONNE' || arrivage.statut === 'ANNULE') {
+    throw new Error('Ce frais ne peut plus être retiré.');
+  }
+  await dansTransaction(async () => {
+    await executer('DELETE FROM frais_arrivage WHERE id = ? AND arrivage_id = ?', fraisId, arrivageId);
+    await repartirFraisLocal(arrivageId, false);
+    await executer('UPDATE arrivage SET date_modification = ? WHERE id = ?', maintenant(), arrivageId);
+    await marquerChangement('arrivage', arrivage.id_local);
+  });
+}
+
 export async function ajouterLigneArrivage(
   arrivageId: number,
   saisie: SaisieLigneArrivage,
