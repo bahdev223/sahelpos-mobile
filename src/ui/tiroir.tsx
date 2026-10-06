@@ -384,6 +384,17 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
                 icone: 'mouvements',
               });
             }
+            if (
+              infos.capabilitiesCommerce.includes('ARRIVAL_MANAGEMENT') ||
+              infos.capabilitiesCommerce.includes('ARRIVALS')
+            ) {
+              entrees.splice(1, 0, {
+                titre: 'Arrivages & transit',
+                description: 'Expéditions, réception, lots et coût rendu',
+                chemin: '/habillement/arrivages',
+                icone: 'achats',
+              });
+            }
           }
           if (infos.secteur === 'HABILLEMENT' && groupe.titre === 'Activite') {
             entrees.splice(1, 0, {
