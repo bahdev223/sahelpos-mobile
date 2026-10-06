@@ -29,6 +29,8 @@ test('arrival service covers full offline lifecycle', () => {
   assert.match(source, /marquerChangement\('arrivage'/);
   assert.match(source, /UPDATE achat[\s\S]*statut = 'RECU'/);
   assert.match(source, /fraisApprocheAlloues|frais_approche_alloues/);
+  assert.match(source, /INSERT INTO mouvement_stock/);
+  assert.match(source, /source_operation[\s\S]*'ACHAT'/);
 });
 
 test('arrival synchronization uses protocol 7 and carries arrivals', () => {
@@ -45,6 +47,8 @@ test('arrival screens are dedicated pages and valid TSX', () => {
     'app/habillement/arrivages/nouveau.tsx',
     'app/habillement/arrivages/[id].tsx',
     'app/habillement/arrivages/reception/[id].tsx',
+    'app/habillement/lots.tsx',
+    'app/habillement/rapports.tsx',
   ]) {
     const chemin = resolve(__dirname, '..', relatif);
     assert.equal(existsSync(chemin), true, relatif);
