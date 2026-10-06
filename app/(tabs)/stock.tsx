@@ -46,6 +46,8 @@ import { verifierStock } from '../../src/services/notifications';
 import { marquerChangement } from '../../src/services/synchronisation';
 import { useSession } from '../_layout';
 import { StockHabillement } from '../../src/profile-ui/habillement/StockHabillement';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
+import { estReferenceTechnique, routeReferenceTechnique } from '../../src/domain/presentation-commerce';
 
 // --------------------------------------------------------------------------
 // Vocabulaire du domaine
@@ -184,6 +186,7 @@ export interface ProduitStock {
   chemin_image: string | null;
   sous_unites: string | null;
   nb_mouvements: number;
+  nb_variantes: number;
 }
 
 /**
@@ -239,7 +242,8 @@ const SELECTION_PRODUIT_STOCK = `
          p.chemin_image,
          (SELECT GROUP_CONCAT(su.nom || ':' || su.facteur, '|')
             FROM sous_unite su WHERE su.produit_id = p.id) AS sous_unites,
-         (SELECT COUNT(*) FROM mouvement_stock m WHERE m.produit_id = p.id) AS nb_mouvements
+         (SELECT COUNT(*) FROM mouvement_stock m WHERE m.produit_id = p.id) AS nb_mouvements,
+         (SELECT COUNT(*) FROM variante_produit vp WHERE vp.produit_id = p.id AND vp.actif = 1) AS nb_variantes
     FROM produit p`;
 
 export async function chargerProduitsStock(): Promise<ProduitStock[]> {
@@ -610,7 +614,9 @@ export default function Stock() {
 
 function StockStandard() {
   const router = useRouter();
-  const { boutique, revisionSynchronisation, synchroniserMaintenant } = useSession();
+  const { boutique, revisionSynchronisation, synchroniserMaintenant, profilCommerce } = useSession();
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
+  const referenceTechnique = estReferenceTechnique(profilCommerce);
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [recherche, setRecherche] = useState('');
   const [filtre, setFiltre] = useState<Filtre>('tous');
@@ -692,7 +698,7 @@ function StockStandard() {
         <BoutonMenu />
         <View style={sl.enteteTitre}>
           <Text style={sl.titreEcran}>Etat du stock</Text>
-          <Text style={sl.sousTitreEcran}>{produits.length} produits</Text>
+          <Text style={sl.sousTitreEcran}>{produits.length} {profilUI.libelles.produits.toLocaleLowerCase('fr')}</Text>
         </View>
         <View style={sl.enteteActions}>
           <Pressable style={sl.boutonIcone} onPress={() => router.push('/stock/alertes')}>
@@ -738,7 +744,9 @@ function StockStandard() {
                   style={s.saisie}
                   value={recherche}
                   onChangeText={setRecherche}
-                  placeholder="Rechercher un produit, un code, une categorie..."
+                  placeholder={referenceTechnique
+                    ? `Rechercher une ${profilUI.libelles.produit.toLocaleLowerCase('fr')}, un code, un rayon...`
+                    : "Rechercher un produit, un code, une categorie..."}
                   placeholderTextColor={C.texteFaible}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -781,9 +789,9 @@ function StockStandard() {
             <View style={sl.centre}>
               {produits.length === 0 ? (
                 <>
-                  <Text style={sl.centreTitre}>Aucun produit actif</Text>
+                  <Text style={sl.centreTitre}>Aucun {profilUI.libelles.produit.toLocaleLowerCase('fr')} actif</Text>
                   <Text style={sl.centreTexte}>
-                    Le stock se remplit a partir du catalogue. Creez d&apos;abord vos produits.
+                    Le stock se remplit a partir du catalogue. Creez d&apos;abord vos {profilUI.libelles.produits.toLocaleLowerCase('fr')}.
                   </Text>
                   <Pressable
                     style={s.boutonSecondaire}
@@ -823,10 +831,7 @@ function StockStandard() {
               produit={item}
               devise={boutique.devise}
               onOuvrir={() =>
-                router.push({
-                  pathname: '/produit/[id]',
-                  params: { id: String(item.id) },
-                })
+                router.push(routeReferenceTechnique(profilCommerce, item.id))
               }
               onAjuster={() =>
                 router.push({
@@ -878,6 +883,11 @@ function LigneProduitStock(p: {
               {p.produit.categorie || 'Sans categorie'}
             </Text>
             <Text style={sl.meta} numberOfLines={1}>Code : {p.produit.code_barre || '-'}</Text>
+            {p.produit.nb_variantes > 0 ? (
+              <Text style={sl.meta} numberOfLines={1}>
+                {p.produit.nb_variantes} variante(s) · stock total consolidé
+              </Text>
+            ) : null}
           </View>
           <View style={sl.carteProduitActions}>
             <View
