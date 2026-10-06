@@ -17,6 +17,12 @@ export function libelleReferenceTechnique(profil: ProfilSecteur): string {
   return profil?.secteur === 'ELECTRICITE' ? 'Référence électrique' : 'Référence Quincaillerie';
 }
 
+export function libelleCaracteristiquesTechniques(profil: ProfilSecteur): string {
+  return profil?.secteur === 'ELECTRICITE'
+    ? 'Section, puissance, tension, intensité/calibre, couleur et longueur'
+    : 'Diamètre, section, longueur, capacité, puissance, tension, calibre et couleur';
+}
+
 function parametreReference(id: number) {
   if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Référence invalide.');
   return { id: String(id) };
