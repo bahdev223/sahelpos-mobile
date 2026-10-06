@@ -369,7 +369,10 @@ export async function supprimerLigneArrivage(arrivageId: number, ligneId: number
   if (!arrivage) throw new Error('Arrivage introuvable.');
   if (arrivage.statut !== 'BROUILLON') throw new Error('Cette ligne est déjà scellée.');
   await dansTransaction(async () => {
-    await executer('DELETE FROM ligne_arrivage WHERE id = ? AND arrivage_id = ?', ligneId, arrivageId);
+    await executer(
+      'UPDATE ligne_arrivage SET supprime_le = ?, date_modification = ? WHERE id = ? AND arrivage_id = ?',
+      maintenant(), maintenant(), ligneId, arrivageId,
+    );
     await executer('UPDATE arrivage SET date_modification = ? WHERE id = ?', maintenant(), arrivageId);
     await marquerChangement('arrivage', arrivage.id_local);
   });
@@ -386,7 +389,10 @@ export async function supprimerFraisArrivage(arrivageId: number, fraisId: number
     throw new Error('Ce frais ne peut plus être retiré.');
   }
   await dansTransaction(async () => {
-    await executer('DELETE FROM frais_arrivage WHERE id = ? AND arrivage_id = ?', fraisId, arrivageId);
+    await executer(
+      'UPDATE frais_arrivage SET supprime_le = ?, date_modification = ? WHERE id = ? AND arrivage_id = ?',
+      maintenant(), maintenant(), fraisId, arrivageId,
+    );
     await repartirFraisLocal(arrivageId, false);
     await executer('UPDATE arrivage SET date_modification = ? WHERE id = ?', maintenant(), arrivageId);
     await marquerChangement('arrivage', arrivage.id_local);
