@@ -98,13 +98,19 @@ test('SQLite keeps every movement and reconciles the legacy outgoing quantity si
     CREATE TABLE parametre (cle TEXT PRIMARY KEY, valeur TEXT, date_modification TEXT);
     CREATE TABLE sync_outbox (id INTEGER PRIMARY KEY, type_objet TEXT, id_local TEXT,
       statut TEXT, date_creation TEXT, derniere_erreur TEXT, tentatives INTEGER);
-    CREATE TABLE produit (id INTEGER PRIMARY KEY, id_local TEXT UNIQUE);
+    CREATE TABLE produit (
+      id INTEGER PRIMARY KEY,
+      id_local TEXT UNIQUE,
+      quantite_base REAL NOT NULL DEFAULT 0,
+      date_modification TEXT
+    );
     CREATE TABLE variante_produit (id INTEGER PRIMARY KEY, id_local TEXT UNIQUE, produit_id INTEGER, actif INTEGER, stock_actuel REAL);
     CREATE TABLE mouvement_stock (id INTEGER PRIMARY KEY, id_local TEXT UNIQUE, produit_id INTEGER,
       variante_id INTEGER, nature TEXT, source_operation TEXT, quantite REAL, unite TEXT, quantite_base REAL,
       stock_avant REAL, stock_apres REAL, prix_unitaire REAL, reference TEXT, motif TEXT,
       utilisateur TEXT, date_mouvement TEXT);
-    INSERT INTO produit VALUES (1, 'p1'), (2, 'p2');
+    INSERT INTO produit (id, id_local, quantite_base) VALUES
+      (1, 'p1', 10), (2, 'p2', 5);
     INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation,
       quantite_base, stock_avant, stock_apres, reference)
       VALUES ('local-1', 1, 'SORTIE', 'VENTE', 2, 10, 8, 'V-1');
