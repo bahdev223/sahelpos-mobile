@@ -353,15 +353,40 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
         {GROUPES.map((groupe) => {
           const entrees = groupe.entrees.map((entree) => {
             if (entree.chemin === '/categories') {
-              return { ...entree, titre: profilUI.libelles.categories };
+              return {
+                ...entree,
+                titre: profilUI.libelles.categories,
+                description: infos.secteur === 'ELECTRICITE' || infos.secteur === 'QUINCAILLERIE'
+                  ? 'Rayons des références'
+                  : 'Catégories du catalogue',
+              };
             }
             if (entree.chemin === '/achats') {
-              return { ...entree, titre: profilUI.libelles.achats };
+              return {
+                ...entree,
+                titre: profilUI.libelles.achats,
+                description: infos.secteur === 'ELECTRICITE' || infos.secteur === 'QUINCAILLERIE'
+                  ? 'Approvisionnements fournisseurs'
+                  : 'Commandes fournisseur',
+              };
             }
             if (entree.chemin === '/inventaire') {
-              return infos.secteur === 'HABILLEMENT'
-                ? { ...entree, titre: 'Inventaire variantes', chemin: '/habillement/inventaire', description: 'Comptage tailles et couleurs' }
-                : { ...entree, titre: profilUI.libelles.inventaire };
+              if (infos.secteur === 'HABILLEMENT') {
+                return { ...entree, titre: 'Inventaire variantes', chemin: '/habillement/inventaire', description: 'Comptage tailles et couleurs' };
+              }
+              if (infos.secteur === 'ELECTRICITE') {
+                return { ...entree, titre: 'Inventaire technique', chemin: '/electricite/inventaire', description: 'Comptage par caractéristique' };
+              }
+              if (infos.secteur === 'QUINCAILLERIE') {
+                return { ...entree, titre: 'Inventaire technique', chemin: '/quincaillerie/inventaire', description: 'Comptage par variante' };
+              }
+              return { ...entree, titre: profilUI.libelles.inventaire };
+            }
+            if (entree.chemin === '/stock/alertes') {
+              return {
+                ...entree,
+                description: `${profilUI.libelles.produits} sous le seuil`,
+              };
             }
             return entree;
           });
