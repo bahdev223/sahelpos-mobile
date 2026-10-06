@@ -610,8 +610,10 @@ async function repartirFraisLocal(arrivageId: number, receptionne: boolean): Pro
 
 export async function validerReceptionArrivage(arrivageId: number): Promise<void> {
   await exigerArrivages();
-  const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
-    'SELECT id_local, statut FROM arrivage WHERE id = ?',
+  const arrivage = await lirePremier<{
+    id_local: string; statut: StatutArrivage; numero: string;
+  }>(
+    'SELECT id_local, statut, numero FROM arrivage WHERE id = ?',
     arrivageId,
   );
   if (!arrivage) throw new Error('Arrivage introuvable.');
