@@ -360,6 +360,56 @@ export async function rattacherAchatArrivage(
   });
 }
 
+export async function detacherAchatArrivage(
+  arrivageId: number,
+  achatId: number,
+): Promise<void> {
+  await exigerArrivages();
+  const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
+    'SELECT id_local, statut FROM arrivage WHERE id = ?',
+    arrivageId,
+  );
+  if (!arrivage) throw new Error('Arrivage introuvable.');
+  if (arrivage.statut !== 'BROUILLON') {
+    throw new Error('Un bon fournisseur ne peut être détaché que du brouillon.');
+  }
+  const achat = await lirePremier<{ serveur_id: number | null }>(
+    'SELECT serveur_id FROM achat WHERE id = ?',
+    achatId,
+  );
+  if (!achat) throw new Error('Achat introuvable.');
+
+  await dansTransaction(async () => {
+    const date = maintenant();
+    if (achat.serveur_id) {
+      const lignesServeur = await lireTout<{ serveur_id: number | null }>(
+        'SELECT serveur_id FROM ligne_achat WHERE achat_id = ? AND serveur_id IS NOT NULL',
+        achatId,
+      );
+      const ids = lignesServeur
+        .map((ligne) => ligne.serveur_id)
+        .filter((id): id is number => id != null);
+      for (const serveurId of ids) {
+        await executer(
+          `UPDATE ligne_arrivage
+              SET supprime_le = ?, date_modification = ?
+            WHERE arrivage_id = ? AND ligne_achat_serveur_id = ? AND supprime_le IS NULL`,
+          date, date, arrivageId, serveurId,
+        );
+      }
+    }
+    await executer(
+      'DELETE FROM arrivage_achat WHERE arrivage_id = ? AND achat_id = ?',
+      arrivageId, achatId,
+    );
+    await executer(
+      'UPDATE arrivage SET date_modification = ? WHERE id = ?',
+      date, arrivageId,
+    );
+    await marquerChangement('arrivage', arrivage.id_local);
+  });
+}
+
 export async function supprimerLigneArrivage(arrivageId: number, ligneId: number): Promise<void> {
   await exigerArrivages();
   const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
