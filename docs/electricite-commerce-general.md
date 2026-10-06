@@ -42,3 +42,6 @@ Les anciens APK ne connaissent pas ELECTRICITE : ne pas activer ce secteur en pr
 
 
 Validation finale relancée après unités électriques, libellés d'approvisionnement et règles de tarifs/fiche technique.
+
+
+Validation consolidée après mise à jour des harness historiques et du header achats par profil.
