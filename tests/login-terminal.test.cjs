@@ -4,23 +4,16 @@ const { readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 
 const racine = resolve(__dirname, '..');
+const lire = (relatif) => readFileSync(resolve(racine, relatif), 'utf8');
 
-function lire(relatif) {
-  return readFileSync(resolve(racine, relatif), 'utf8');
-}
-
-test('login mobile uses a terminal-bound account, not an account selector', () => {
+test('login mobile exposes explicit local profiles and requires the selected profile PIN', () => {
   const ecran = lire('app/connexion.tsx');
 
-  assert.match(ecran, /Connexion caisse/);
-  assert.match(ecran, /Ouvrir la caisse/);
+  assert.match(ecran, /Choisir un profil/);
+  assert.match(ecran, /listerComptesConnexion/);
+  assert.match(ecran, /selectionner/);
+  assert.match(ecran, /connecter\(compte\.login, pin\)/);
   assert.match(ecran, /authenticateAsync/);
-  assert.match(ecran, /connecter\(/);
-
-  assert.doesNotMatch(ecran, /accessibilityRole="checkbox"/);
-  assert.doesNotMatch(ecran, /compteChoisi/);
-  assert.doesNotMatch(ecran, /liaisonBiometrie/);
-  assert.doesNotMatch(ecran, /Entrer avec/);
-  assert.doesNotMatch(ecran, /Choisissez votre nom/);
+  assert.match(ecran, /biometrieUtilisateurId === compte\.id/);
+  assert.doesNotMatch(ecran, /connecter automatiquement/i);
 });
-
