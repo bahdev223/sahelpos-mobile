@@ -6,7 +6,7 @@ import {
   lireTout,
   maintenant,
 } from '../db/repositories/base';
-import { exigerEcriture } from './abonnement';
+import { etatCourant, exigerEcriture } from './abonnement';
 import { marquerChangement } from './synchronisation';
 
 export type StatutArrivage =
@@ -124,6 +124,15 @@ export interface ComptageArrivage {
   motifEcart?: string;
   numeroLot?: string;
   datePeremption?: string | null;
+}
+
+async function exigerArrivages(): Promise<void> {
+  await exigerEcriture('achats');
+  const etat = await etatCourant();
+  const caps = etat.droit?.commerce?.capabilities_effectives ?? [];
+  if (!caps.includes('ARRIVAL_MANAGEMENT') && !caps.includes('ARRIVALS')) {
+    throw new Error("La gestion des arrivages n’est pas activée dans votre offre.");
+  }
 }
 
 function arrondir2(v: number): number {
@@ -245,7 +254,7 @@ async function insererFrais(
 }
 
 export async function creerArrivage(saisie: SaisieArrivage): Promise<number> {
-  await exigerEcriture('achats');
+  await exigerArrivages();
   const titre = saisie.titre.trim();
   if (!titre) throw new Error("Le titre de l'arrivage est obligatoire.");
   let id = 0;
@@ -289,7 +298,7 @@ export async function ajouterLigneArrivage(
   arrivageId: number,
   saisie: SaisieLigneArrivage,
 ): Promise<void> {
-  await exigerEcriture('achats');
+  await exigerArrivages();
   const arrivage = await lirePremier<{ id_local: string; statut: string }>(
     'SELECT id_local, statut FROM arrivage WHERE id = ?',
     arrivageId,
@@ -309,7 +318,7 @@ export async function ajouterFraisArrivage(
   arrivageId: number,
   saisie: SaisieFraisArrivage,
 ): Promise<void> {
-  await exigerEcriture('achats');
+  await exigerArrivages();
   const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
     'SELECT id_local, statut FROM arrivage WHERE id = ?',
     arrivageId,
@@ -327,7 +336,7 @@ export async function ajouterFraisArrivage(
 }
 
 export async function passerArrivageEnTransit(arrivageId: number): Promise<void> {
-  await exigerEcriture('achats');
+  await exigerArrivages();
   const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
     'SELECT id_local, statut FROM arrivage WHERE id = ?',
     arrivageId,
@@ -354,7 +363,7 @@ export async function passerArrivageEnTransit(arrivageId: number): Promise<void>
 }
 
 export async function demarrerReceptionArrivage(arrivageId: number): Promise<void> {
-  await exigerEcriture('achats');
+  await exigerArrivages();
   const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
     'SELECT id_local, statut FROM arrivage WHERE id = ?',
     arrivageId,
@@ -374,7 +383,7 @@ export async function enregistrerComptageArrivage(
   arrivageId: number,
   comptages: ComptageArrivage[],
 ): Promise<void> {
-  await exigerEcriture('achats');
+  await exigerArrivages();
   const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
     'SELECT id_local, statut FROM arrivage WHERE id = ?',
     arrivageId,
@@ -484,7 +493,7 @@ async function repartirFraisLocal(arrivageId: number, receptionne: boolean): Pro
 }
 
 export async function validerReceptionArrivage(arrivageId: number): Promise<void> {
-  await exigerEcriture('achats');
+  await exigerArrivages();
   const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage }>(
     'SELECT id_local, statut FROM arrivage WHERE id = ?',
     arrivageId,
@@ -541,7 +550,7 @@ export async function validerReceptionArrivage(arrivageId: number): Promise<void
 }
 
 export async function annulerArrivage(arrivageId: number, motif = ''): Promise<void> {
-  await exigerEcriture('achats');
+  await exigerArrivages();
   const arrivage = await lirePremier<{ id_local: string; statut: StatutArrivage; notes: string }>(
     'SELECT id_local, statut, notes FROM arrivage WHERE id = ?',
     arrivageId,
