@@ -52,6 +52,9 @@ function fixture() {
     '../../services/abonnement': {
       exigerEcriture: async () => {},
     },
+    '../../services/abonnement': {
+      exigerEcriture: async () => {},
+    },
   });
   return { db, repo, changements };
 }
