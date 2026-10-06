@@ -19,6 +19,7 @@ const fichiers = [
   'app/habillement/arrivages/nouveau.tsx',
   'app/habillement/arrivages/[id].tsx',
   'app/habillement/arrivages/reception/[id].tsx',
+  'app/habillement/lots.tsx',
   'app/habillement/showroom.tsx',
   'app/habillement/rapports.tsx',
   'app/habillement/commandes/index.tsx',
