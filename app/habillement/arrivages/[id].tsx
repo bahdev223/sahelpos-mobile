@@ -8,6 +8,7 @@ import {
   ajouterFraisArrivage,
   ajouterLigneArrivage,
   annulerArrivage,
+  detacherAchatArrivage,
   obtenirArrivage,
   passerArrivageEnTransit,
   rattacherAchatArrivage,
@@ -90,6 +91,10 @@ export default function DetailArrivageHabillement() {
     ()=>achats.filter(a=>!arrivage?.achatIds.includes(a.id)),
     [achats,arrivage],
   );
+  const achatsRattaches=useMemo(
+    ()=>achats.filter(a=>arrivage?.achatIds.includes(a.id)),
+    [achats,arrivage],
+  );
 
   const agir=useCallback(async(action:()=>Promise<void>,succes?:string)=>{
     setEnCours(true);
@@ -151,6 +156,17 @@ export default function DetailArrivageHabillement() {
           <Kpi label="Coût rendu" value={formaterMontant(arrivage.coutTotalRendu,boutique.devise)}/>
         </View>
       </View>
+
+      {editable&&achatsRattaches.length>0?<Section titre="Bons fournisseurs rattachés">
+        {achatsRattaches.map(a=><View key={a.id} style={s.bon}>
+          <View style={{flex:1}}><Text style={s.bonTitre}>{a.numero}</Text><Text style={s.meta}>{a.fournisseurNom||'Sans fournisseur'} · {formaterMontant(a.total,boutique.devise)}</Text></View>
+          <Pressable onPress={()=>Alert.alert(
+            'Détacher le bon',
+            'Les lignes préremplies depuis ce bon seront retirées du brouillon.',
+            [{text:'Annuler',style:'cancel'},{text:'Détacher',style:'destructive',onPress:()=>void agir(()=>detacherAchatArrivage(arrivage.id,a.id),'Bon fournisseur détaché.')}],
+          )}><Text style={s.lienDanger}>Détacher</Text></Pressable>
+        </View>)}
+      </Section>:null}
 
       {editable&&achatsDisponibles.length>0?<Section titre="Bons fournisseurs disponibles">
         {achatsDisponibles.map(a=><Pressable key={a.id} style={s.bon} onPress={()=>void agir(()=>rattacherAchatArrivage(arrivage.id,a.id),'Bon fournisseur rattaché.')}>
@@ -233,7 +249,7 @@ function Champ({label,value,onChange}:{label:string;value:string;onChange:(v:str
 const s=StyleSheet.create({
   page:{flex:1,backgroundColor:H.fond},entete:{flexDirection:'row',alignItems:'center',gap:espaces.m,padding:espaces.m,backgroundColor:H.surface,borderBottomWidth:1,borderBottomColor:H.bordure},enteteTextes:{flex:1},titre:{fontSize:18,fontWeight:'900',color:H.texte},sous:{marginTop:2,fontSize:11,color:H.texteFaible},badge:{paddingHorizontal:8,paddingVertical:4,borderRadius:999,backgroundColor:H.primaireClair},badgeTexte:{fontSize:9,fontWeight:'900',color:H.primaire},
   contenu:{padding:espaces.m,paddingBottom:170,gap:espaces.m},resume:{padding:espaces.m,borderRadius:rayons.m,backgroundColor:H.surface,borderWidth:1,borderColor:H.bordure},infoLigne:{flexDirection:'row',justifyContent:'space-between',gap:8,paddingVertical:4},infoLabel:{fontSize:11,color:H.texteFaible},infoValeur:{fontSize:11,fontWeight:'800',color:H.texte},kpis:{marginTop:10,flexDirection:'row',flexWrap:'wrap',gap:7},kpi:{minWidth:'46%',flexGrow:1,padding:9,borderRadius:9,backgroundColor:H.fondSecondaire},kpiLabel:{fontSize:9,color:H.texteFaible},kpiValeur:{marginTop:2,fontSize:13,fontWeight:'900',color:H.texte},
-  section:{borderRadius:rayons.m,borderWidth:1,borderColor:H.bordure,backgroundColor:H.surface,overflow:'hidden'},sectionEntete:{minHeight:46,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:espaces.m},sectionTitre:{fontSize:14,fontWeight:'900',color:H.texte},lien:{fontSize:11,fontWeight:'900',color:H.primaire},
+  section:{borderRadius:rayons.m,borderWidth:1,borderColor:H.bordure,backgroundColor:H.surface,overflow:'hidden'},sectionEntete:{minHeight:46,flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:espaces.m},sectionTitre:{fontSize:14,fontWeight:'900',color:H.texte},lien:{fontSize:11,fontWeight:'900',color:H.primaire},lienDanger:{fontSize:11,fontWeight:'900',color:H.danger},
   ligne:{minHeight:60,flexDirection:'row',alignItems:'center',gap:10,padding:espaces.m,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:H.bordure},ligneTitre:{fontSize:13,fontWeight:'900',color:H.texte},variante:{marginTop:2,fontSize:11,fontWeight:'800',color:H.primaire},meta:{marginTop:2,fontSize:10,color:H.texteFaible},lot:{marginTop:4,fontSize:10,fontWeight:'800',color:'#15803D'},videTexte:{padding:espaces.m,fontSize:11,color:H.texteFaible},notes:{padding:espaces.m,fontSize:12,lineHeight:18,color:H.texteCorps},
   bon:{flexDirection:'row',alignItems:'center',gap:8,padding:espaces.m,borderTopWidth:StyleSheet.hairlineWidth,borderTopColor:H.bordure},bonTitre:{fontSize:12,fontWeight:'900',color:H.texte},
   pied:{padding:espaces.m,gap:8,borderTopWidth:1,borderTopColor:H.bordure,backgroundColor:H.surface},annuler:{minHeight:42,alignItems:'center',justifyContent:'center'},annulerTexte:{fontSize:12,fontWeight:'900',color:H.danger},
