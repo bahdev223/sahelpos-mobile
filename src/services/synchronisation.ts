@@ -942,6 +942,59 @@ async function lireAchats(ids: string[]): Promise<AchatSync[]> {
   return achats;
 }
 
+async function lireArrivages(ids: string[]): Promise<ArrivageSync[]> {
+  if (ids.length === 0) return [];
+  const arrivages = await lireTout<ArrivageSync & { id: number }>(
+    `SELECT id, id_local, serveur_id, numero, titre, statut, transporteur,
+            tracking_number, date_creation, date_expedition,
+            date_reception_estimee, date_reception_reelle, notes,
+            date_modification, supprime_le
+       FROM arrivage
+      WHERE id_local IN (${placeholders(ids)})`,
+    ...ids,
+  );
+  for (const arrivage of arrivages) {
+    arrivage.lignes = await lireTout<LigneArrivageSync>(
+      `SELECT la.id_local, la.serveur_id,
+              p.id_local AS produit_id_local,
+              vp.id_local AS variante_id_local,
+              la.ligne_achat_serveur_id,
+              la.comptee, la.quantite_prevue, la.quantite_recue,
+              la.quantite_rejetee, la.motif_ecart, la.prix_achat_unitaire,
+              la.poids_unitaire_kg, la.volume_unitaire_m3,
+              la.frais_approche_alloues, la.cout_revient_unitaire,
+              la.lot_serveur_id, la.numero_lot, la.date_peremption,
+              la.produit_nom_snapshot, la.variante_sku_snapshot,
+              la.variante_nom_snapshot, la.date_modification, la.supprime_le
+         FROM ligne_arrivage la
+         JOIN produit p ON p.id = la.produit_id
+         LEFT JOIN variante_produit vp ON vp.id = la.variante_id
+        WHERE la.arrivage_id = ?
+        ORDER BY la.id`,
+      arrivage.id,
+    );
+    arrivage.frais = await lireTout<FraisArrivageSync>(
+      `SELECT id_local, serveur_id, type_frais, libelle, montant,
+              mode_repartition, date_frais, date_modification, supprime_le
+         FROM frais_arrivage
+        WHERE arrivage_id = ?
+        ORDER BY id`,
+      arrivage.id,
+    );
+    arrivage.achats_serveur_ids = (
+      await lireTout<{ serveur_id: number | null }>(
+        `SELECT a.serveur_id
+           FROM arrivage_achat aa
+           JOIN achat a ON a.id = aa.achat_id
+          WHERE aa.arrivage_id = ? AND a.serveur_id IS NOT NULL
+          ORDER BY a.id`,
+        arrivage.id,
+      )
+    ).map(x => x.serveur_id).filter((x): x is number => x != null);
+  }
+  return arrivages;
+}
+
 async function lireBoutique(): Promise<BoutiqueSync> {
   const valeurs = await lireTout<{ cle: string; valeur: string | null }>(
     `SELECT cle, valeur FROM parametre
