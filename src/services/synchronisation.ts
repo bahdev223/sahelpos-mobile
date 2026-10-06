@@ -198,6 +198,8 @@ interface MouvementSync {
 }
 
 interface LigneAchatSync {
+  /** Cumul reçu dans l'unité de la ligne (absent sur l'ancien protocole). */
+  quantite_recue?: number | string;
   serveur_id?: number | null;
   produit_id_local: string;
   variante_id_local?: string | null;

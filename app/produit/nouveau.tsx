@@ -47,6 +47,7 @@ import { BandeauEtat, formaterMontant, uriImage } from '../../src/ui/components'
 import { couleurs } from '../../src/ui/theme';
 import { Icone } from '../../src/ui/icones';
 import { useSession } from '../_layout';
+import { estReferenceTechnique, tarifGrosDisponible } from '../../src/domain/presentation-commerce';
 export { C };
 
 // --------------------------------------------------------------------------
@@ -620,7 +621,8 @@ export interface ProprietesFormulaire {
 
 export function FormulaireProduit(p: ProprietesFormulaire) {
   const { boutique, profilCommerce } = useSession();
-  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
+  const referenceTechnique = estReferenceTechnique(profilCommerce);
+  const tarifsGros = tarifGrosDisponible(profilCommerce);
   const [saisie, setSaisie] = useState<SaisieProduit>(p.saisieInitiale);
   const [erreurs, setErreurs] = useState<Erreurs>({ champs: {}, sousUnites: {} });
   const [categories, setCategories] = useState<string[]>([]);
@@ -784,7 +786,8 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
       enregistrement={enregistrement}
       erreurGlobale={erreurGlobale}
       devise={boutique.devise}
-      quincaillerie={quincaillerie}
+      referenceTechnique={referenceTechnique}
+      tarifsGros={tarifsGros}
       modifier={modifier}
       modifierSousUnite={modifierSousUnite}
       supprimerSousUnite={supprimerSousUnite}
@@ -872,7 +875,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
             </View>
           ) : null}
 
-          {quincaillerie ? (
+          {referenceTechnique ? (
             <>
               <Champ
                 libelle="Marque"
@@ -923,7 +926,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
             suffixe="F"
           />
           <Champ
-            libelle={quincaillerie ? "Prix détail" : "Prix de vente"}
+            libelle={referenceTechnique ? "Prix détail" : "Prix de vente"}
             valeur={saisie.prixUnitaire}
             onChange={(v) => modifier('prixUnitaire', v)}
             erreur={erreurs.champs.prixUnitaire}
@@ -931,7 +934,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
             indication="0"
             suffixe="F"
           />
-          {quincaillerie ? (
+          {tarifsGros ? (
             <Champ
               libelle="Prix gros"
               valeur={saisie.prixGros}
@@ -1051,7 +1054,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
                   />
                   <Text style={s.suffixe}>F</Text>
                 </View>
-                {quincaillerie ? (
+                {tarifsGros ? (
                   <View style={[s.zoneSaisie, s.sousUniteNombre]}>
                     <TextInput
                       style={s.saisie}
@@ -1165,7 +1168,8 @@ interface ProprietesFormulaireMobile {
   enregistrement: boolean;
   erreurGlobale: string | null;
   devise: string;
-  quincaillerie: boolean;
+  referenceTechnique: boolean;
+  tarifsGros: boolean;
   modifier: <K extends keyof SaisieProduit>(cle: K, valeur: SaisieProduit[K]) => void;
   modifierSousUnite: (index: number, cle: keyof SaisieSousUnite, valeur: string) => void;
   supprimerSousUnite: (index: number) => void;
@@ -1264,7 +1268,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
           </View>
         </View>
 
-        {props.quincaillerie ? (
+        {props.referenceTechnique ? (
           <View style={m.carteMobile}>
             <Text style={m.titreCarteTexte}>Identification fabricant</Text>
             <ChampMobile
@@ -1303,7 +1307,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
             </View>
             <View style={m.champDemi}>
               <ChampMobile
-                libelle={props.quincaillerie ? "Prix détail" : "Prix de vente"}
+                libelle={props.referenceTechnique ? "Prix détail" : "Prix de vente"}
                 obligatoire
                 valeur={props.saisie.prixUnitaire}
                 onChangeText={(valeur) => props.modifier('prixUnitaire', valeur)}
@@ -1313,7 +1317,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
               />
             </View>
           </View>
-          {props.quincaillerie ? (
+          {props.tarifsGros ? (
             <ChampMobile
               libelle="Prix gros"
               valeur={props.saisie.prixGros}
@@ -1387,7 +1391,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
                 placeholderTextColor={couleurs.texteEteint}
                 keyboardType="numeric"
               />
-              {props.quincaillerie ? (
+              {props.tarifsGros ? (
                 <TextInput
                   style={[m.saisieMobile, m.sousUnitePrix]}
                   value={ligne.prixGros}

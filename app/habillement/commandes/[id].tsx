@@ -67,7 +67,7 @@ export default function DetailCommandeHabillement(){
       </View>
 
       <View style={s.progressionBloc}><View style={s.progressionEntete}><Text style={s.progressionTitre}>Préparation</Text><Text style={s.progressionPct}>{Math.round(progression)} %</Text></View>
-        <View style={s.progressionFond}><View style={[s.progressionBarre,{width:progression+'%'}]}/></View>
+        <View style={s.progressionFond}><View style={[s.progressionBarre,{width:`${progression}%` as const}]}/></View>
         <Text style={s.progressionMeta}>{commande.preparees} / {commande.pieces} pièce(s) préparée(s)</Text></View>
 
       <Text style={s.section}>Articles</Text>

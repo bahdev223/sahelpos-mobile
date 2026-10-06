@@ -33,6 +33,7 @@ import { BandeauEtat, BARRE_HORIZONTALE, couleurs } from '../../src/ui/component
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
 import { useSession } from '../_layout';
+import { estReferenceTechnique, routeReferenceTechnique } from '../../src/domain/presentation-commerce';
 import { CatalogueHabillement } from '../../src/profile-ui/habillement/CatalogueHabillement';
 
 // --------------------------------------------------------------------------
@@ -126,7 +127,7 @@ export default function Catalogue() {
 function CatalogueStandard() {
   const router = useRouter();
   const { revisionSynchronisation, synchroniserMaintenant, profilCommerce } = useSession();
-  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
+  const referenceTechnique = estReferenceTechnique(profilCommerce);
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [recherche, setRecherche] = useState('');
   const [categorie, setCategorie] = useState<string | null>(null);
@@ -286,7 +287,7 @@ function CatalogueStandard() {
             style={s.saisie}
             value={recherche}
             onChangeText={setRecherche}
-            placeholder={quincaillerie ? "Nom, marque, référence ou code-barres" : "Nom, categorie ou code-barres"}
+            placeholder={referenceTechnique ? "Nom, marque, référence ou code-barres" : "Nom, categorie ou code-barres"}
             placeholderTextColor={C.texteFaible}
             autoCapitalize="none"
             autoCorrect={false}
@@ -399,9 +400,7 @@ function CatalogueStandard() {
             <CarteProduit
               produit={item}
               onPress={() =>
-                router.push(quincaillerie
-                  ? { pathname: '/quincaillerie/reference/[id]', params: { id: String(item.id) } }
-                  : { pathname: '/produit/[id]', params: { id: String(item.id) } })
+                router.push(routeReferenceTechnique(profilCommerce, item.id))
               }
             />
           )}

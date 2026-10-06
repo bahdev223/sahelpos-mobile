@@ -171,7 +171,8 @@ function page(corps: string): string {
 
 export interface DonneesBonCommande {
   achat: AchatResume;
-  lignes: LigneAchat[];
+  // Une liste à commander n'a pas encore d'identité SQLite ni de réception.
+  lignes: Array<Pick<LigneAchat, 'libelle' | 'unite' | 'quantite' | 'prixUnitaire' | 'total'>>;
   fournisseur: Fournisseur | null;
   parametres: Parametres;
 }

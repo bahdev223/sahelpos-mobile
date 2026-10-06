@@ -21,9 +21,9 @@ import { C, formaterFrancs, formaterQuantite, s } from '../produit/nouveau';
 import { BandeauEtat, couleurs, Vignette } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { ActionsDocument } from '../../src/ui/ActionsDocument';
-import { bonDeCommandeHtml } from '../../src/services/pdf';
+import { bonDeCommandeHtml, type DonneesBonCommande } from '../../src/services/pdf';
 import { lireParametres } from '../../src/services/parametres';
-import type { AchatResume, LigneAchat } from '../../src/services/achat';
+import type { AchatResume } from '../../src/services/achat';
 
 interface LigneCommande {
   produit: ProduitStock;
@@ -90,7 +90,7 @@ export default function ListeCommande() {
       dateAchat: new Date().toISOString(), total, montantPaye: 0,
       statut: 'BROUILLON', dateReception: null,
     };
-    const articles: LigneAchat[] = lignes.map((ligne) => ({
+    const articles: DonneesBonCommande['lignes'] = lignes.map((ligne) => ({
       produitId: ligne.produit.id, libelle: ligne.produit.nom, unite: ligne.produit.unite_base,
       facteur: 1, quantite: ligne.quantite, quantiteBase: ligne.quantite,
       prixUnitaire: ligne.produit.prix_achat, total: ligne.quantite * ligne.produit.prix_achat,

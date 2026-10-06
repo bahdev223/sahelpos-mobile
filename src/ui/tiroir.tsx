@@ -273,6 +273,8 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
     mode_catalogue: 'SIMPLE',
     capabilities_effectives: infos.capabilitiesCommerce,
     capabilities_non_supportees: [],
+    // Objet de présentation uniquement : il n'accorde aucun droit d'écriture.
+    ecritures_autorisees: [],
     compatible: true,
     raison: '',
   });

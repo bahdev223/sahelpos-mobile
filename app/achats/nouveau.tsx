@@ -16,6 +16,7 @@ import {
 } from '../../src/db/repositories/variante';
 import { listerFournisseurs, type Fournisseur } from '../../src/db/repositories/fournisseur';
 import { useSession } from '../_layout';
+import { estReferenceTechnique } from '../../src/domain/presentation-commerce';
 import { calculerLigneAchat, enregistrerAchat, type ArticleAchat, type ModePaiementAchat } from '../../src/services/achat';
 import type { Produit, SousUnite } from '../../src/domain/types';
 
@@ -31,7 +32,7 @@ export default function EcranNouvelAchat() {
   const { commande, matrice } = useLocalSearchParams<{ commande?: string; matrice?: string }>();
   const { boutique, profilCommerce } = useSession();
   const habillement = profilCommerce?.secteur === 'HABILLEMENT';
-  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
+  const referenceTechnique = estReferenceTechnique(profilCommerce);
   const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
   const matriceAutorisee =
     habillement && (profilCommerce?.capabilities_effectives.includes('PURCHASE_MATRIX') ?? false);
@@ -182,11 +183,11 @@ export default function EcranNouvelAchat() {
       });
       Alert.alert(
         recevoirMaintenant
-          ? ((habillement || quincaillerie) ? 'Approvisionnement reçu' : 'Achat reçu')
-          : ((habillement || quincaillerie) ? 'Approvisionnement enregistré' : 'Achat enregistré'),
+          ? ((habillement || referenceTechnique) ? 'Approvisionnement reçu' : 'Achat reçu')
+          : ((habillement || referenceTechnique) ? 'Approvisionnement enregistré' : 'Achat enregistré'),
         recevoirMaintenant
           ? `${achat.numero} : la marchandise est entrée en stock.`
-          : `${achat.numero} : ${(habillement || quincaillerie) ? 'approvisionnement' : 'achat'} en attente de réception.`,
+          : `${achat.numero} : ${(habillement || referenceTechnique) ? 'approvisionnement' : 'achat'} en attente de réception.`,
         [{ text: 'Voir', onPress: () => router.replace(`/achats/${achat.achatId}`) }],
       );
     } catch (erreur) {
@@ -199,7 +200,7 @@ export default function EcranNouvelAchat() {
     <Stack.Screen options={{ headerShown: false }} />
     <View style={styles.header}>
       <Pressable onPress={retour} style={styles.retour} hitSlop={10}><Icone nom="retour" taille={27} couleur="#061541" /></Pressable>
-      <Text style={styles.titre}>{(habillement || quincaillerie) ? 'Nouvel approvisionnement' : 'Nouvel achat'}</Text>
+      <Text style={styles.titre}>{(habillement || referenceTechnique) ? 'Nouvel approvisionnement' : 'Nouvel achat'}</Text>
       <View style={styles.brouillon}><Icone nom="document" taille={17} couleur={couleurs.primaire} /><Text style={styles.brouillonTexte}>Brouillon</Text></View>
     </View>
     <ScrollView contentContainerStyle={styles.contenu} showsVerticalScrollIndicator={false}>

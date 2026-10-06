@@ -47,6 +47,8 @@ import {
 } from '../../src/db/repositories/variante';
 import { seuilAlerteStock } from '../../src/domain/stock';
 import { prixConditionnement, prixGrosConditionnement } from '../../src/domain/quincaillerie';
+import { estReferenceTechnique, tarifGrosDisponible } from '../../src/domain/presentation-commerce';
+import { cleArticleCommerce, prixDetailVariante } from '../../src/domain/prix-commerce';
 import type {
   Client,
   LigneVente,
@@ -282,10 +284,8 @@ type EtatListe = 'chargement' | 'pret' | 'erreur';
 export default function EcranCaisse() {
   const { boutique, utilisateur, revisionSynchronisation, profilCommerce } = useSession();
   const habillement = profilCommerce?.secteur === 'HABILLEMENT';
-  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
-  const grosAutorise = quincaillerie
-    && !!profilCommerce?.capabilities_effectives.includes('WHOLESALE')
-    && ['GROS', 'MIXTE'].includes(profilCommerce?.mode_vente ?? 'DETAIL');
+  const referenceTechnique = estReferenceTechnique(profilCommerce);
+  const grosAutorise = tarifGrosDisponible(profilCommerce);
   const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
 
   const [recherche, setRecherche] = useState('');
@@ -403,12 +403,11 @@ export default function EcranCaisse() {
       variante?: VarianteMobile | null,
     ) => {
       setPanier((actuel) => {
-        const index = actuel.findIndex(
-          (article) =>
-            article.produit.id === produit.id &&
-            article.unite === unite.nom &&
-            (article.variante?.id ?? null) === (variante?.id ?? null),
-        );
+        // Une même référence à deux tarifs reste deux lignes distinctes.
+        const cle = cleArticleCommerce({
+          produit, variante, unite: unite.nom, facteur: unite.facteur, prixUnitaire: unite.prix,
+        });
+        const index = actuel.findIndex((article) => cleArticleCommerce(article) === cle);
         if (index >= 0) {
           const copie = [...actuel];
           copie[index] = {
@@ -448,11 +447,13 @@ export default function EcranCaisse() {
         const autresLignes = panier.reduce(
           (somme, ligne, i) =>
             i !== index && ligne.produit.id === article.produit.id
+              && (ligne.variante?.id ?? null) === (article.variante?.id ?? null)
               ? somme + ligne.quantite * ligne.facteur
               : somme,
           0,
         );
-        if (autresLignes + nouvelle * article.facteur > article.produit.quantiteBase) {
+        const stockDisponible = article.variante?.stockActuel ?? article.produit.quantiteBase;
+        if (autresLignes + nouvelle * article.facteur > stockDisponible) {
           setAlertePanier(`Stock insuffisant pour ${article.produit.nom}.`);
           return;
         }
@@ -643,7 +644,8 @@ export default function EcranCaisse() {
           choix={choix}
           panier={panier}
           devise={boutique.devise}
-          quincaillerie={quincaillerie}
+          referenceTechnique={referenceTechnique}
+          habillement={habillement}
           grosAutorise={grosAutorise}
           onAnnuler={() => setChoix(null)}
           onAjouter={ajouterAuPanier}
@@ -881,7 +883,8 @@ function ModaleUnite({
   choix,
   panier,
   devise,
-  quincaillerie,
+  referenceTechnique,
+  habillement,
   grosAutorise,
   onAnnuler,
   onAjouter,
@@ -889,7 +892,8 @@ function ModaleUnite({
   choix: ChoixProduit;
   panier: ArticlePanier[];
   devise: string;
-  quincaillerie: boolean;
+  referenceTechnique: boolean;
+  habillement: boolean;
   grosAutorise: boolean;
   onAnnuler: () => void;
   onAjouter: (
@@ -909,7 +913,7 @@ function ModaleUnite({
 
   const variante = indexVariante >= 0 ? choix.variantes[indexVariante] : null;
   const unite = choix.unites[indexUnite] ?? choix.unites[0];
-  const prixDetail = variante?.prixOverride ?? unite?.prix ?? 0;
+  const prixDetail = prixDetailVariante(unite.prix, unite.facteur, variante?.prixOverride);
   const prixGros = unite?.prixGros ?? 0;
   const prixDefaut = tarif === 'gros' && prixGros > 0 ? prixGros : prixDetail;
   const [prixTexte, setPrixTexte] = useState(String(prixDefaut));
@@ -943,13 +947,13 @@ function ModaleUnite({
 
   let refus: string | null = null;
   if (exigeVariante && !variante) {
-    refus = quincaillerie
+    refus = referenceTechnique
       ? 'Choisissez les caractéristiques techniques avant d ajouter au panier.'
       : 'Choisissez la taille et la couleur avant d ajouter au panier.';
   } else if (quantite <= 0) {
     refus = 'Indiquez une quantite superieure a zero.';
   } else if (prixUnitaire <= 0) {
-    refus = quincaillerie
+    refus = referenceTechnique
       ? "Cette référence n'a pas de prix de vente pour cette variante."
       : "Ce modele n'a pas de prix de vente pour cette variante.";
   } else if (produit.gestionStock && quantite > resteApresPanier) {
@@ -1003,7 +1007,7 @@ function ModaleUnite({
             {choix.variantes.length > 0 ? (
               <View>
                 <Text style={styles.sousLabel}>
-                  {quincaillerie ? 'Caractéristiques / variante' : 'Taille / couleur'}
+                  {referenceTechnique ? 'Caractéristiques / variante' : 'Taille / couleur'}
                 </Text>
                 <View style={styles.grilleVariantes}>
                   {choix.variantes.map((option, index) => {
@@ -1017,19 +1021,19 @@ function ModaleUnite({
                         onPress={() => {
                           setIndexVariante(index);
                           const u = choix.unites[indexUnite] ?? choix.unites[0];
-                          const detail = option.prixOverride ?? u?.prix ?? produit.prixUnitaire;
+                          const detail = prixDetailVariante(u.prix, u.facteur, option.prixOverride);
                           const gros = u?.prixGros ?? 0;
                           setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));
                         }}
                         style={[
                           styles.varianteChoix,
-                          choix.variantes.length > 0 && {
+                          habillement && {
                             borderColor: H.bordure,
                             backgroundColor: H.surface,
                           },
                           actif && [
                             styles.varianteChoixActive,
-                            { backgroundColor: H.primaire, borderColor: H.primaire },
+                            habillement && { backgroundColor: H.primaire, borderColor: H.primaire },
                           ],
                           option.stockActuel <= 0 && styles.varianteChoixRupture,
                         ]}
@@ -1070,8 +1074,7 @@ function ModaleUnite({
                         accessibilityState={{ selected: actif }}
                         onPress={() => {
                           setIndexUnite(index);
-                          const detail = variante?.prixOverride ??
-                            (option.prix > 0 ? option.prix : produit.prixUnitaire * option.facteur);
+                          const detail = prixDetailVariante(option.prix, option.facteur, variante?.prixOverride);
                           const gros = option.prixGros ?? 0;
                           if (tarif === 'gros' && gros <= 0) setTarif('detail');
                           setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));

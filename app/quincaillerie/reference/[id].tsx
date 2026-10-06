@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useSession } from '../../_layout';
+import { libelleReferenceTechnique, routeCaracteristiquesTechniques } from '../../../src/domain/presentation-commerce';
 import { obtenirBase } from '../../../src/db/database';
 import {
   genererMatriceVariantesLocale,
@@ -70,7 +71,7 @@ export default function FicheReferenceQuincaillerie() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const identifiant = Number(id);
-  const { boutique, synchroniserMaintenant } = useSession();
+  const { boutique, profilCommerce, synchroniserMaintenant } = useSession();
   const [fiche, setFiche] = useState<FicheReference | null>(null);
   const [etat, setEtat] = useState<'chargement'|'pret'|'absent'|'erreur'>('chargement');
   const [message, setMessage] = useState('');
@@ -130,7 +131,7 @@ export default function FicheReferenceQuincaillerie() {
     <BandeauEtat/>
     <View style={s.entete}>
       <Pressable style={s.icone} onPress={() => router.back()} accessibilityLabel="Retour"><Icone nom="retour" taille={22} couleur={couleurs.texte}/></Pressable>
-      <View style={s.flex}><Text style={s.titre} numberOfLines={1}>{p.nom}</Text><Text style={s.muted}>Référence Quincaillerie</Text></View>
+      <View style={s.flex}><Text style={s.titre} numberOfLines={1}>{p.nom}</Text><Text style={s.muted}>{libelleReferenceTechnique(profilCommerce)}</Text></View>
       <Pressable style={s.icone} onPress={() => router.push({pathname:'/produit/modifier/[id]',params:{id:String(p.id)}})} accessibilityLabel="Modifier la référence"><Icone nom="crayon" taille={21} couleur={couleurs.primaire}/></Pressable>
     </View>
 
@@ -186,7 +187,7 @@ export default function FicheReferenceQuincaillerie() {
 
       <View style={s.carte}>
         <Action label="Modifier la référence" detail="Marque, prix, unités et conditionnements" icon="crayon" onPress={() => router.push({pathname:'/produit/modifier/[id]',params:{id:String(p.id)}})}/>
-        <Action label="Gérer les caractéristiques" detail="Diamètre, section, capacité, tension, couleur…" icon="etiquette" onPress={() => router.push({pathname:'/quincaillerie/caracteristiques/[id]',params:{id:String(p.id)}})}/>
+        <Action label="Gérer les caractéristiques" detail="Diamètre, section, capacité, tension, couleur…" icon="etiquette" onPress={() => router.push(routeCaracteristiquesTechniques(profilCommerce, p.id))}/>
         <Action label="Ajouter des caractéristiques" detail="Diamètre, section, capacité, tension, couleur…" icon="etiquette" onPress={() => setMatriceOuverte(true)}/>
         <Action label="Mouvements de stock" detail="Entrées, sorties et corrections" icon="mouvements" onPress={() => router.push({pathname:'/stock/mouvements',params:{produit:String(p.id)}})}/>
         <Action label="Ajuster le stock" detail="Enregistrer une entrée ou une sortie" icon="inventaire" onPress={() => router.push({pathname:'/stock/ajustement',params:{produit:String(p.id)}})}/>
