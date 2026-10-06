@@ -17,9 +17,33 @@ jobs:
       - name: Apply and verify the reviewed source tree (no application execution)
         shell: bash
         run: |
-          python .automation/wire_electricite.py
           python - <<'PY'
+          from pathlib import Path
           import subprocess
+          reference = 'app/quincaillerie/reference/[id].tsx'
+          before = Path(reference).read_text()
+          observed = subprocess.check_output(['git', 'hash-object', reference], text=True).strip()
+          if observed != '3e797b0a136f253c21c189b2f2c416b27a5e9603':
+              raise SystemExit('Reference source changed; review again before patching')
+          changes = [
+              ("import { useSession } from '../../_layout';", "import { useSession } from '../../_layout';\nimport { libelleReferenceTechnique, routeCaracteristiquesTechniques } from '../../../src/domain/presentation-commerce';"),
+              ('  const { boutique, synchroniserMaintenant } = useSession();', '  const { boutique, profilCommerce, synchroniserMaintenant } = useSession();'),
+              ('<Text style={s.muted}>Référence Quincaillerie</Text>', '<Text style={s.muted}>{libelleReferenceTechnique(profilCommerce)}</Text>'),
+              ("router.push({pathname:'/quincaillerie/caracteristiques/[id]',params:{id:String(p.id)}})", 'router.push(routeCaracteristiquesTechniques(profilCommerce, p.id))'),
+          ]
+          expected_reference = before
+          for old, new in changes:
+              if expected_reference.count(old) != 1:
+                  raise SystemExit('Unexpected reference structure')
+              expected_reference = expected_reference.replace(old, new)
+          source = Path('.automation/wire_electricite.py').read_text()
+          old = "c = rep(c, '  const { boutique } = useSession();', '  const { boutique, profilCommerce } = useSession();')"
+          new = "c = rep(c, '  const { boutique, synchroniserMaintenant } = useSession();', '  const { boutique, profilCommerce, synchroniserMaintenant } = useSession();')"
+          if source.count(old) != 1:
+              raise SystemExit('Unexpected reviewed transformation')
+          exec(compile(source.replace(old, new), '.automation/wire_electricite.py', 'exec'), {})
+          if Path(reference).read_text() != expected_reference:
+              raise SystemExit('Reference diff contains an unreviewed change')
           expected = {
             'app/(tabs)/caisse.tsx': 'f66e072c3150cd67a10175f9f446e0e736bcc16c',
             'app/(tabs)/catalogue.tsx': '855d001928cf08c09c522f1263f15e2bb0c21da6',
@@ -31,7 +55,6 @@ jobs:
             'app/habillement/commandes/index.tsx': 'd581393ee0c905d36a4a4794559acbe25f88a418',
             'app/habillement/modele/nouveau.tsx': '2b4bfe0d41406f76b4d51ce671cb692f9a6c1fab',
             'app/produit/nouveau.tsx': '33d124dcc38b2f256fb14bca1a026b45b17d86bd',
-            'app/quincaillerie/reference/[id].tsx': 'c829c907d718c2d3f36612dc4cd4793424beee41',
             'app/stock/commande.tsx': '2d7d769c00dd08e4ad91b288007b307b9473b7c7',
             'src/services/pdf.ts': 'e06f71ddd9b508a7e27bc5c37cbc4c94e578ad6e',
             'src/services/synchronisation.ts': '74729991232e04d9a4aa296c547027bf007b173a',
@@ -41,12 +64,13 @@ jobs:
               actual = subprocess.check_output(['git', 'hash-object', filename], text=True).strip()
               if actual != sha:
                   raise SystemExit(f'Reviewed blob mismatch: {filename}')
-          subprocess.run(['git', 'add', '--', *expected], check=True)
+          paths = [*expected, reference]
+          subprocess.run(['git', 'add', '--', *paths], check=True)
           changed = set(subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines())
-          if changed != set(expected):
+          if changed != set(paths):
               raise SystemExit('Unexpected staged paths')
           subprocess.run(['git', 'diff', '--cached', '--check'], check=True)
-          print('15 source blobs match the reviewed local tree.')
+          print('15 source files verified; existing reference matrix preserved.')
           PY
       - name: Commit only to the feature branch
         run: |
