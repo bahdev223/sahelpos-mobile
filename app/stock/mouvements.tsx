@@ -44,6 +44,8 @@ import {
 import {
   BARRE_HORIZONTALE, BandeauEtat, couleurs } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
+import { useSession } from '../_layout';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
 
 const PAR_PAGE = 25;
 
@@ -191,10 +193,10 @@ async function chercherProduits(terme: string): Promise<Suggestion[]> {
   const db = await obtenirBase();
   return db.getAllAsync<Suggestion>(
     `SELECT id, nom FROM produit
-      WHERE nom LIKE ? OR code_barre LIKE ?
+      WHERE nom LIKE ? OR code_barre LIKE ? OR marque LIKE ? OR reference_fabricant LIKE ?
       ORDER BY nom COLLATE NOCASE
       LIMIT 8`,
-    [`%${terme}%`, `%${terme}%`],
+    [`%${terme}%`, `%${terme}%`, `%${terme}%`, `%${terme}%`],
   );
 }
 
@@ -303,6 +305,8 @@ type Phase = 'chargement' | 'erreur' | 'pret';
 
 export default function Mouvements() {
   const router = useRouter();
+  const { profilCommerce } = useSession();
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
   const parametres = useLocalSearchParams<{ produit?: string; nature?: string }>();
 
   // Les autres ecrans arrivent ici avec un filtre deja pose : la fiche produit
@@ -474,6 +478,7 @@ export default function Mouvements() {
         <PanneauFiltres
           filtres={filtres}
           nomProduit={nomProduitFiltre}
+          libelleProduit={profilUI.libelles.produit}
           onChange={setFiltres}
           onFermer={() => setPanneauOuvert(false)}
         />
@@ -562,6 +567,7 @@ function Etiquette(p: { texte: string; onRetirer: () => void }) {
 function PanneauFiltres(p: {
   filtres: Filtres;
   nomProduit: string;
+  libelleProduit: string;
   onChange: (filtres: Filtres) => void;
   onFermer: () => void;
 }) {
@@ -620,11 +626,11 @@ function PanneauFiltres(p: {
   return (
     <ScrollView style={sl.panneau} keyboardShouldPersistTaps="handled">
       <View style={sl.bloc}>
-        <Text style={s.libelle}>Produit</Text>
+        <Text style={s.libelle}>{p.libelleProduit}</Text>
         {p.filtres.produitId !== null ? (
           <View style={sl.produitChoisi}>
             <Text style={sl.produitChoisiNom} numberOfLines={1}>
-              {p.nomProduit || 'Produit selectionne'}
+              {p.nomProduit || `${p.libelleProduit} sélectionné(e)`}
             </Text>
             <Pressable
               onPress={() => {
@@ -642,7 +648,7 @@ function PanneauFiltres(p: {
                 style={s.saisie}
                 value={saisieProduit}
                 onChangeText={setSaisieProduit}
-                placeholder="Tapez les premieres lettres"
+                placeholder={`Nom, marque, référence ou code`}
                 placeholderTextColor={C.texteFaible}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -663,7 +669,7 @@ function PanneauFiltres(p: {
               </Pressable>
             ))}
             {saisieProduit.trim().length >= 2 && suggestions.length === 0 ? (
-              <Text style={s.explication}>Aucun produit ne porte ce nom.</Text>
+              <Text style={s.explication}>Aucun(e) {p.libelleProduit.toLocaleLowerCase('fr')} ne correspond.</Text>
             ) : null}
           </>
         )}
