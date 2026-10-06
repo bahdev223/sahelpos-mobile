@@ -14,6 +14,7 @@ test('login mobile exposes explicit local profiles and requires the selected pro
   assert.match(ecran, /selectionner/);
   assert.match(ecran, /connecter\(compte\.login, pin\)/);
   assert.match(ecran, /authenticateAsync/);
-  assert.match(ecran, /biometrieUtilisateurId === compte\.id/);
+  assert.match(ecran, /biometrieUtilisateurId\s*!==\s*compte\.id/);
+  assert.match(ecran, /promptMessage:\s*`Ouvrir le profil \$\{compte\.nom \|\| compte\.login\}`/);
   assert.doesNotMatch(ecran, /connecter automatiquement/i);
 });
