@@ -55,7 +55,7 @@ export { C };
 // --------------------------------------------------------------------------
 
 /** Unites de base proposees. La saisie libre reste possible via "Autre". */
-export const UNITES_BASE = ['Unite', 'Kg', 'Litre', 'Boite', 'Carton', 'Sac'] as const;
+export const UNITES_BASE = ['Unite', 'Piece', 'Metre', 'Kg', 'Litre', 'Rouleau', 'Boite', 'Carton', 'Sac'] as const;
 
 const TYPES_CODE_BARRE = [
   'ean13',
