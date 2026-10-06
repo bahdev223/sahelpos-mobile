@@ -65,3 +65,9 @@ test('deux lignes détail et gros de la même variante ne fusionnent pas', () =>
   assert.notEqual(cle(article), cle({ ...article, variante: { id: 3 } }));
   assert.equal(cle(article), cle({ ...article }));
 });
+
+test('les libellés de caractéristiques sont spécialisés par métier', () => {
+  assert.match(p().libelleCaracteristiquesTechniques(profil('ELECTRICITE')), /Section/);
+  assert.match(p().libelleCaracteristiquesTechniques(profil('ELECTRICITE')), /calibre/);
+  assert.match(p().libelleCaracteristiquesTechniques(profil('QUINCAILLERIE')), /Diamètre/);
+});
