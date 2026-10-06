@@ -22,7 +22,9 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      # Keep the committed dependency tree. Normal npm ci tries to add new
+      # peer packages absent from this lock; do not update SDK versions in CI.
+      - run: npm ci --legacy-peer-deps
       - name: Run JavaScript domain tests
         run: node --test tests/*.test.cjs
   types:
@@ -36,6 +38,6 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      - run: npm ci --legacy-peer-deps
       - name: Type checking only — no native build
         run: npx --no-install tsc --noEmit
