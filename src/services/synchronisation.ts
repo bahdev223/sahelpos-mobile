@@ -24,7 +24,7 @@ const CLE_CURSOR = 'sync.cursor';
 const CLE_BOUTIQUE = 'sync.boutique';
 const CLE_BOOTSTRAP = 'sync.bootstrap_effectue';
 const CLE_PROTOCOLE = 'sync.protocole';
-const VERSION_PROTOCOLE = '6';
+const VERSION_PROTOCOLE = '7';
 const CLE_DERNIERE_TENTATIVE = 'sync.derniere_tentative';
 const CLE_DERNIER_SUCCES = 'sync.dernier_succes';
 const CLE_DERNIERE_ERREUR = 'sync.derniere_erreur';
@@ -35,7 +35,7 @@ const CLE_DERNIER_NOMBRE_PULL = 'sync.dernier_nombre_pull';
 const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
 const TAILLE_IMAGE_SYNC_MAX = 4 * 1024 * 1024;
 
-type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'echange' | 'commande_client' | 'mouvement' | 'achat' | 'boutique' | 'utilisateur';
+type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'echange' | 'commande_client' | 'mouvement' | 'achat' | 'arrivage' | 'boutique' | 'utilisateur';
 
 const TYPE_ECRITURE_PAR_OBJET: Record<TypeObjet, TypeEcritureCommerce> = {
   produit: 'produits',
@@ -47,6 +47,7 @@ const TYPE_ECRITURE_PAR_OBJET: Record<TypeObjet, TypeEcritureCommerce> = {
   commande_client: 'ventes',
   mouvement: 'mouvements',
   achat: 'achats',
+  arrivage: 'achats',
   boutique: 'boutique',
   utilisateur: 'utilisateurs',
 };
@@ -220,6 +221,7 @@ interface PaiementAchatSync {
 
 interface AchatSync {
   id_local: string;
+  serveur_id?: number | null;
   numero: string;
   fournisseur_id_local?: string | null;
   reference?: string | null;
@@ -233,6 +235,65 @@ interface AchatSync {
   supprime_le?: string | null;
   lignes: LigneAchatSync[];
   paiements: PaiementAchatSync[];
+}
+
+
+interface LigneArrivageSync {
+  id_local: string;
+  serveur_id?: number | null;
+  produit_id_local: string;
+  variante_id_local?: string | null;
+  ligne_achat_serveur_id?: number | null;
+  comptee: boolean | number;
+  quantite_prevue: number | string;
+  quantite_recue: number | string;
+  quantite_rejetee: number | string;
+  motif_ecart?: string | null;
+  prix_achat_unitaire: number | string;
+  poids_unitaire_kg?: number | string;
+  volume_unitaire_m3?: number | string;
+  frais_approche_alloues?: number | string;
+  cout_revient_unitaire?: number | string;
+  lot_serveur_id?: number | null;
+  numero_lot?: string | null;
+  date_peremption?: string | null;
+  produit_nom_snapshot?: string | null;
+  variante_sku_snapshot?: string | null;
+  variante_nom_snapshot?: string | null;
+  date_modification?: string | null;
+  supprime_le?: string | null;
+}
+
+interface FraisArrivageSync {
+  id_local: string;
+  serveur_id?: number | null;
+  type_frais: string;
+  libelle?: string | null;
+  montant: number | string;
+  mode_repartition: string;
+  date_frais: string;
+  date_modification?: string | null;
+  supprime_le?: string | null;
+}
+
+interface ArrivageSync {
+  id_local: string;
+  serveur_id?: number | null;
+  numero: string;
+  titre: string;
+  statut: string;
+  transporteur?: string | null;
+  tracking_number?: string | null;
+  date_creation: string;
+  date_expedition?: string | null;
+  date_reception_estimee?: string | null;
+  date_reception_reelle?: string | null;
+  notes?: string | null;
+  date_modification?: string | null;
+  supprime_le?: string | null;
+  achats_serveur_ids?: number[];
+  lignes: LigneArrivageSync[];
+  frais: FraisArrivageSync[];
 }
 
 interface LigneCommandeClientSync {
@@ -311,6 +372,7 @@ interface PullSync {
   ventes: VenteSync[];
   mouvements?: MouvementSync[];
   achats?: AchatSync[];
+  arrivages?: ArrivageSync[];
   commandes_clients?: CommandeClientSync[];
   utilisateurs?: UtilisateurSync[];
   boutique?: BoutiqueSync;
@@ -605,6 +667,7 @@ async function construirePayload(pending: LigneOutbox[]) {
     echanges: await lireEchanges(ids('echange')),
     mouvements: await lireMouvements(ids('mouvement')),
     achats: await lireAchats(ids('achat')),
+    arrivages: await lireArrivages(ids('arrivage')),
     commandes_clients: await lireCommandesClients(ids('commande_client')),
     utilisateurs: await lireUtilisateurs(ids('utilisateur')),
     boutique: ids('boutique').length > 0 ? await lireBoutique() : undefined,
@@ -851,7 +914,7 @@ async function lireMouvements(ids: string[]): Promise<MouvementSync[]> {
 async function lireAchats(ids: string[]): Promise<AchatSync[]> {
   if (ids.length === 0) return [];
   const achats = await lireTout<AchatSync & { id: number }>(
-    `SELECT a.id, a.id_local, a.numero, f.id_local AS fournisseur_id_local,
+    `SELECT a.id, a.id_local, a.serveur_id, a.numero, f.id_local AS fournisseur_id_local,
             a.reference, a.date_achat, a.total, a.montant_paye, a.statut,
             a.date_reception, a.motif, a.date_modification
        FROM achat a
@@ -933,6 +996,9 @@ async function appliquerPull(pull: PullSync): Promise<number> {
     for (const achat of pull.achats ?? []) {
       await appliquerAchat(achat);
       recus++;
+    }
+    for (const arrivage of pull.arrivages ?? []) {
+      if (await appliquerArrivage(arrivage)) recus++;
     }
     for (const commande of pull.commandes_clients ?? []) {
       await appliquerCommandeClient(commande);
