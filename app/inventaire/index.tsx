@@ -17,7 +17,7 @@
  * une information (on a compte, puis renonce), il est donc liste ici, grise.
  */
 import type * as SQLite from 'expo-sqlite';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { Redirect, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -234,6 +234,16 @@ type Etat =
 export default function ListeInventaires() {
   const router = useRouter();
   const session = useSession();
+
+  if (session.profilCommerce?.secteur === 'HABILLEMENT') {
+    return <Redirect href="/habillement/inventaire" />;
+  }
+  if (session.profilCommerce?.secteur === 'ELECTRICITE') {
+    return <Redirect href="/electricite/inventaire" />;
+  }
+  if (session.profilCommerce?.secteur === 'QUINCAILLERIE') {
+    return <Redirect href="/quincaillerie/inventaire" />;
+  }
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [filtre, setFiltre] = useState<Filtre>('tous');
   const [recherche, setRecherche] = useState('');
