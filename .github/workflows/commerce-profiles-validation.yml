@@ -1,0 +1,25 @@
+name: Commerce profiles validation (no native build)
+on:
+  push:
+    branches: [feat/electricite-commerce-general]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: commerce-profiles-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Export tracked code for isolated review
+        run: git archive --format=zip HEAD app src tests package.json package-lock.json tsconfig.json AGENTS.md > commerce-source.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: commerce-source-mobile-${{ github.sha }}
+          path: commerce-source.zip
+          retention-days: 1
