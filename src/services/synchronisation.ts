@@ -292,6 +292,7 @@ interface ArrivageSync {
   date_modification?: string | null;
   supprime_le?: string | null;
   achats_serveur_ids?: number[];
+  achats_id_local?: string[];
   lignes: LigneArrivageSync[];
   frais: FraisArrivageSync[];
 }
@@ -923,6 +924,25 @@ async function lireAchats(ids: string[]): Promise<AchatSync[]> {
     ...ids,
   );
   for (const achat of achats) {
+    // Si le même bon est réceptionné par un arrivage encore en attente de
+    // synchronisation, le serveur doit recevoir le bon comme COMMANDE, pas
+    // comme réception autonome. L'arrivage sera l'unique entrée physique.
+    const receptionParArrivage = await lirePremier<{ id: number }>(
+      `SELECT a.id
+         FROM arrivage a
+         JOIN arrivage_achat aa ON aa.arrivage_id = a.id
+         JOIN sync_outbox so ON so.type_objet = 'arrivage' AND so.id_local = a.id_local
+        WHERE aa.achat_id = ?
+          AND a.statut = 'RECEPTIONNE'
+          AND so.statut IN ('PENDING', 'SENDING', 'FAILED')
+        LIMIT 1`,
+      achat.id,
+    );
+    if (receptionParArrivage) {
+      achat.statut = 'BROUILLON';
+      achat.date_reception = null;
+    }
+
     achat.lignes = await lireTout<LigneAchatSync>(
       `SELECT l.serveur_id, p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
               l.libelle, l.unite, l.facteur, l.quantite, l.quantite_recue, l.quantite_base,
@@ -991,6 +1011,16 @@ async function lireArrivages(ids: string[]): Promise<ArrivageSync[]> {
         arrivage.id,
       )
     ).map(x => x.serveur_id).filter((x): x is number => x != null);
+    arrivage.achats_id_local = (
+      await lireTout<{ id_local: string }>(
+        `SELECT a.id_local
+           FROM arrivage_achat aa
+           JOIN achat a ON a.id = aa.achat_id
+          WHERE aa.arrivage_id = ?
+          ORDER BY a.id`,
+        arrivage.id,
+      )
+    ).map(x => x.id_local);
   }
   return arrivages;
 }
