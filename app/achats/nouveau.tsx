@@ -133,7 +133,12 @@ export default function EcranNouvelAchat() {
       return;
     }
     if (variantes.length > 0 && !varianteChoisie) {
-      Alert.alert('Variante requise', 'Choisissez la taille et la couleur à approvisionner.');
+      Alert.alert(
+        'Variante requise',
+        referenceTechnique
+          ? 'Choisissez les caractéristiques techniques exactes à approvisionner.'
+          : 'Choisissez la taille et la couleur à approvisionner.',
+      );
       return;
     }
     setArticles((liste) => [...liste, {
@@ -152,7 +157,7 @@ export default function EcranNouvelAchat() {
     setVariantes([]);
     setRecherche('');
     setChoixOuvert(false);
-  }, [prix, produitChoisi, quantite, uniteChoisie, varianteChoisie, variantes.length]);
+  }, [prix, produitChoisi, quantite, referenceTechnique, uniteChoisie, varianteChoisie, variantes.length]);
 
   const suivant = useCallback(async () => {
     if (etape === 1) {
