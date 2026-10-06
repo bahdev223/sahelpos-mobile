@@ -558,15 +558,26 @@ async function repartirFraisLocal(arrivageId: number, receptionne: boolean): Pro
     ) {
       bases = lignes.map(l => qte(l));
     }
+
     const total = bases.reduce((a, b) => a + b, 0);
+    const parts = new Array<number>(lignes.length).fill(0);
     if (total <= 0) {
-      const part = f.montant / lignes.length;
-      lignes.forEach(l => alloues.set(l.id, (alloues.get(l.id) ?? 0) + part));
+      const part = arrondir2(f.montant / lignes.length);
+      parts.fill(part);
+      const diff = arrondir2(f.montant - parts.reduce((a, b) => a + b, 0));
+      parts[0] = arrondir2(parts[0] + diff);
     } else {
-      lignes.forEach((l, i) => {
-        alloues.set(l.id, (alloues.get(l.id) ?? 0) + f.montant * (bases[i] / total));
-      });
+      let maxIndex = 0;
+      for (let i = 0; i < bases.length; i++) {
+        if (bases[i] > bases[maxIndex]) maxIndex = i;
+        parts[i] = arrondir2(f.montant * (bases[i] / total));
+      }
+      const diff = arrondir2(f.montant - parts.reduce((a, b) => a + b, 0));
+      parts[maxIndex] = arrondir2(parts[maxIndex] + diff);
     }
+    lignes.forEach((l, i) => {
+      alloues.set(l.id, arrondir2((alloues.get(l.id) ?? 0) + parts[i]));
+    });
   }
 
   for (const ligne of lignes) {
@@ -633,12 +644,35 @@ export async function validerReceptionArrivage(arrivageId: number): Promise<void
         );
       }
     }
+    const dateReception = maintenant();
     await executer(
       `UPDATE arrivage
           SET statut = 'RECEPTIONNE', date_reception_reelle = ?, date_modification = ?
         WHERE id = ?`,
-      maintenant(), maintenant(), arrivageId,
+      dateReception, dateReception, arrivageId,
     );
+
+    // Le serveur clôture également les bons fournisseurs liés. Le faire
+    // immédiatement en local empêche une double réception pendant une coupure.
+    const achatsLies = await lireTout<{ achat_id: number }>(
+      'SELECT achat_id FROM arrivage_achat WHERE arrivage_id = ?',
+      arrivageId,
+    );
+    for (const { achat_id } of achatsLies) {
+      await executer(
+        `UPDATE achat
+            SET statut = 'RECU', date_reception = ?, date_modification = ?
+          WHERE id = ? AND statut = 'BROUILLON'`,
+        dateReception, dateReception, achat_id,
+      );
+      await executer(
+        `UPDATE ligne_achat
+            SET quantite_recue = quantite
+          WHERE achat_id = ?`,
+        achat_id,
+      );
+    }
+
     await repartirFraisLocal(arrivageId, true);
     await marquerChangement('arrivage', arrivage.id_local);
   });
