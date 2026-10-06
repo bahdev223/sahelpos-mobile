@@ -23,6 +23,15 @@ import type { Produit, SousUnite } from '../../src/domain/types';
 type Etape = 1 | 2 | 3;
 interface Unite { nom: string; facteur: number; prixIndicatif: number }
 
+function coutAchatPour(
+  produit: Produit,
+  facteur: number,
+  variante?: VarianteMobile | null,
+): number {
+  const coutBase = variante?.prixAchat ?? produit.prixAchat;
+  return Math.round(coutBase * facteur);
+}
+
 const dateAujourdhui = () => new Intl.DateTimeFormat('fr-FR', {
   day: '2-digit', month: '2-digit', year: 'numeric',
 }).format(new Date());
@@ -108,9 +117,11 @@ export default function EcranNouvelAchat() {
   const ouvrirProduit = useCallback(async (produit: Produit) => {
     const sousUnites: SousUnite[] = await listerSousUnites(produit.id);
     const liste = [
-      { nom: produit.uniteBase, facteur: 1, prixIndicatif: produit.prixAchat },
+      { nom: produit.uniteBase, facteur: 1, prixIndicatif: coutAchatPour(produit, 1) },
       ...sousUnites.map((item) => ({
-        nom: item.nom, facteur: item.facteur, prixIndicatif: Math.round(produit.prixAchat * item.facteur),
+        nom: item.nom,
+        facteur: item.facteur,
+        prixIndicatif: coutAchatPour(produit, item.facteur),
       })),
     ];
     const declinaisons = variantesActives
@@ -254,14 +265,19 @@ export default function EcranNouvelAchat() {
       onProduit={(produit) => void ouvrirProduit(produit)}
       onVariante={(variante) => {
         setVarianteChoisie(variante);
-        const cout = variante.prixAchat ?? produitChoisi?.prixAchat ?? 0;
+        const facteur = uniteChoisie?.facteur ?? 1;
+        const cout = produitChoisi ? coutAchatPour(produitChoisi, facteur, variante) : 0;
         setPrix(String(cout || ''));
       }}
       onUnite={() => {
         if (!unites.length) return;
         const index = unites.findIndex((item) => item.nom === uniteChoisie?.nom);
         const prochaine = unites[(index + 1) % unites.length];
-        setUniteChoisie(prochaine ?? null); setPrix(String(prochaine?.prixIndicatif || ''));
+        setUniteChoisie(prochaine ?? null);
+        const cout = produitChoisi && prochaine
+          ? coutAchatPour(produitChoisi, prochaine.facteur, varianteChoisie)
+          : 0;
+        setPrix(String(cout || ''));
       }}
       onQuantite={setQuantite} onPrix={setPrix} onAjouter={ajouterArticle}
     />
