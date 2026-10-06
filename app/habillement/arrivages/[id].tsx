@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
@@ -223,7 +223,7 @@ export default function DetailArrivageHabillement() {
   </View>;
 }
 
-function Section({titre,children,action}:{titre:string;children:React.ReactNode;action?:{label:string;onPress:()=>void}}){
+function Section({titre,children,action}:{titre:string;children:ReactNode;action?:{label:string;onPress:()=>void}}){
   return <View style={s.section}><View style={s.sectionEntete}><Text style={s.sectionTitre}>{titre}</Text>{action?<Pressable onPress={action.onPress}><Text style={s.lien}>{action.label}</Text></Pressable>:null}</View>{children}</View>;
 }
 function LigneInfo({label,value}:{label:string;value:string}){return <View style={s.infoLigne}><Text style={s.infoLabel}>{label}</Text><Text style={s.infoValeur}>{value}</Text></View>;}
