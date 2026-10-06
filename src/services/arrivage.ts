@@ -313,10 +313,6 @@ export async function rattacherAchatArrivage(
   );
   if (!achat) throw new Error('Achat introuvable.');
   if (achat.statut !== 'BROUILLON') throw new Error('Seul un achat non reçu peut être rattaché.');
-  if (!achat.serveur_id) {
-    throw new Error('Synchronisez d’abord ce bon fournisseur pour pouvoir le rattacher à un arrivage.');
-  }
-
   await dansTransaction(async () => {
     await executer(
       'INSERT OR IGNORE INTO arrivage_achat (arrivage_id, achat_id) VALUES (?, ?)',
