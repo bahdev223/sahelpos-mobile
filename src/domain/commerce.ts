@@ -41,6 +41,7 @@ const ECRITURES_SOCLE_SURES: TypeEcritureCommerce[] = [
 const CAPABILITIES_MOBILE = new Set([
   'STOCK_SIMPLE', 'MULTI_UNIT', 'BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT',
   'PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION', 'PURCHASE_MATRIX', 'VARIANT_EXCHANGE',
+  'ARRIVAL_MANAGEMENT', 'ARRIVALS', 'LOT_TRACKING', 'LANDED_COST',
   'TECHNICAL_DIMENSIONS', 'WHOLESALE',
 ]);
 
@@ -90,7 +91,6 @@ export function lireProfilCommerce(value: unknown): ProfilCommerceMobile | null 
   // compatible reste un indicateur de parite COMPLETE. Il ne sert plus de
   // coupe-circuit global pour les mutations compatibles.
   const compatible = profil.compatible
-    && profil.mode_catalogue === 'SIMPLE'
     && profil.capabilities_non_supportees.length === 0
     && profil.capabilities_effectives.every(code => CAPABILITIES_MOBILE.has(code));
 
@@ -167,7 +167,11 @@ const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'c
       inventaire: 'Inventaire',
       categories: 'Collections',
     },
-    capabilities: ['PRODUCT_IMAGES', 'BARCODE', 'INVENTORY', 'LOW_STOCK_ALERT'],
+    capabilities: [
+      'PRODUCT_IMAGES', 'BARCODE', 'INVENTORY', 'LOW_STOCK_ALERT',
+      'PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION', 'PURCHASE_MATRIX',
+      'VARIANT_EXCHANGE', 'ARRIVAL_MANAGEMENT', 'ARRIVALS', 'LOT_TRACKING', 'LANDED_COST',
+    ],
   },
   FRIPERIE: {
     nom: 'Friperie',
