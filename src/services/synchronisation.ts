@@ -1633,20 +1633,20 @@ async function appliquerAchat(a: AchatSync): Promise<void> {
     ? await lirePremier<{ id: number }>('SELECT id FROM fournisseur WHERE id_local = ?', a.fournisseur_id_local)
     : null;
   const achatId = existant?.id ?? (await executer(
-    `INSERT INTO achat (id_local, numero, fournisseur_id, reference, date_achat, total,
+    `INSERT INTO achat (id_local, serveur_id, numero, fournisseur_id, reference, date_achat, total,
                         montant_paye, statut, date_reception, motif, date_modification)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    a.id_local, a.numero, fournisseur?.id ?? null, a.reference ?? null, a.date_achat,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    a.id_local, a.serveur_id ?? null, a.numero, fournisseur?.id ?? null, a.reference ?? null, a.date_achat,
     nombre(a.total), nombre(a.montant_paye), a.statut, a.date_reception ?? null,
     a.motif ?? null, a.date_modification ?? maintenant(),
   )).lastInsertRowId;
 
   if (existant) {
     await executer(
-      `UPDATE achat SET numero = ?, fournisseur_id = ?, reference = ?, date_achat = ?,
+      `UPDATE achat SET serveur_id = ?, numero = ?, fournisseur_id = ?, reference = ?, date_achat = ?,
                         total = ?, montant_paye = ?, statut = ?, date_reception = ?,
                         motif = ?, date_modification = ? WHERE id = ?`,
-      a.numero, fournisseur?.id ?? null, a.reference ?? null, a.date_achat,
+      a.serveur_id ?? null, a.numero, fournisseur?.id ?? null, a.reference ?? null, a.date_achat,
       nombre(a.total), nombre(a.montant_paye), a.statut, a.date_reception ?? null,
       a.motif ?? null, a.date_modification ?? maintenant(), achatId,
     );
@@ -1689,6 +1689,144 @@ async function appliquerAchat(a: AchatSync): Promise<void> {
       paiement.date_paiement, paiement.note ?? null,
     );
   }
+}
+
+async function appliquerArrivage(a: ArrivageSync): Promise<boolean> {
+  const pending = await lirePremier<{ id: number }>(
+    `SELECT id FROM sync_outbox
+      WHERE type_objet = 'arrivage' AND id_local = ?
+        AND statut IN ('PENDING', 'SENDING', 'FAILED')`,
+    a.id_local,
+  );
+  if (pending) return false;
+
+  const produits = new Map<string, number>();
+  const variantes = new Map<string, number>();
+  for (const ligne of a.lignes ?? []) {
+    if (!produits.has(ligne.produit_id_local)) {
+      const produit = await lirePremier<{ id: number }>(
+        'SELECT id FROM produit WHERE id_local = ?',
+        ligne.produit_id_local,
+      );
+      if (!produit) return false;
+      produits.set(ligne.produit_id_local, produit.id);
+    }
+    if (ligne.variante_id_local && !variantes.has(ligne.variante_id_local)) {
+      const variante = await lirePremier<{ id: number }>(
+        'SELECT id FROM variante_produit WHERE id_local = ?',
+        ligne.variante_id_local,
+      );
+      if (!variante) return false;
+      variantes.set(ligne.variante_id_local, variante.id);
+    }
+  }
+
+  const existant = await lirePremier<{ id: number }>(
+    'SELECT id FROM arrivage WHERE id_local = ?',
+    a.id_local,
+  );
+  if (a.supprime_le) {
+    if (existant) await executer('DELETE FROM arrivage WHERE id = ?', existant.id);
+    return true;
+  }
+
+  const arrivageId = existant?.id ?? (await executer(
+    `INSERT INTO arrivage
+      (id_local, serveur_id, numero, titre, statut, transporteur, tracking_number,
+       date_creation, date_expedition, date_reception_estimee, date_reception_reelle,
+       notes, date_modification, supprime_le)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    a.id_local, a.serveur_id ?? null, a.numero, a.titre, a.statut,
+    a.transporteur ?? '', a.tracking_number ?? '', a.date_creation,
+    a.date_expedition ?? null, a.date_reception_estimee ?? null,
+    a.date_reception_reelle ?? null, a.notes ?? '',
+    a.date_modification ?? maintenant(), a.supprime_le ?? null,
+  )).lastInsertRowId;
+
+  if (existant) {
+    await executer(
+      `UPDATE arrivage
+          SET serveur_id = ?, numero = ?, titre = ?, statut = ?, transporteur = ?,
+              tracking_number = ?, date_creation = ?, date_expedition = ?,
+              date_reception_estimee = ?, date_reception_reelle = ?, notes = ?,
+              date_modification = ?, supprime_le = ?
+        WHERE id = ?`,
+      a.serveur_id ?? null, a.numero, a.titre, a.statut,
+      a.transporteur ?? '', a.tracking_number ?? '', a.date_creation,
+      a.date_expedition ?? null, a.date_reception_estimee ?? null,
+      a.date_reception_reelle ?? null, a.notes ?? '',
+      a.date_modification ?? maintenant(), a.supprime_le ?? null, arrivageId,
+    );
+  }
+
+  await executer('DELETE FROM ligne_arrivage WHERE arrivage_id = ?', arrivageId);
+  await executer('DELETE FROM frais_arrivage WHERE arrivage_id = ?', arrivageId);
+  await executer('DELETE FROM arrivage_achat WHERE arrivage_id = ?', arrivageId);
+
+  for (const ligne of a.lignes ?? []) {
+    await executer(
+      `INSERT INTO ligne_arrivage
+       (id_local, serveur_id, arrivage_id, produit_id, variante_id,
+        ligne_achat_serveur_id, comptee, quantite_prevue, quantite_recue,
+        quantite_rejetee, motif_ecart, prix_achat_unitaire, poids_unitaire_kg,
+        volume_unitaire_m3, frais_approche_alloues, cout_revient_unitaire,
+        lot_serveur_id, numero_lot, date_peremption, produit_nom_snapshot,
+        variante_sku_snapshot, variante_nom_snapshot, date_modification, supprime_le)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ligne.id_local,
+      ligne.serveur_id ?? null,
+      arrivageId,
+      produits.get(ligne.produit_id_local),
+      ligne.variante_id_local ? variantes.get(ligne.variante_id_local) ?? null : null,
+      ligne.ligne_achat_serveur_id ?? null,
+      ligne.comptee ? 1 : 0,
+      nombre(ligne.quantite_prevue),
+      nombre(ligne.quantite_recue),
+      nombre(ligne.quantite_rejetee),
+      ligne.motif_ecart ?? '',
+      nombre(ligne.prix_achat_unitaire),
+      nombre(ligne.poids_unitaire_kg),
+      nombre(ligne.volume_unitaire_m3),
+      nombre(ligne.frais_approche_alloues),
+      nombre(ligne.cout_revient_unitaire),
+      ligne.lot_serveur_id ?? null,
+      ligne.numero_lot ?? '',
+      ligne.date_peremption ?? null,
+      ligne.produit_nom_snapshot ?? '',
+      ligne.variante_sku_snapshot ?? '',
+      ligne.variante_nom_snapshot ?? '',
+      ligne.date_modification ?? a.date_modification ?? maintenant(),
+      ligne.supprime_le ?? null,
+    );
+  }
+
+  for (const frais of a.frais ?? []) {
+    await executer(
+      `INSERT INTO frais_arrivage
+       (id_local, serveur_id, arrivage_id, type_frais, libelle, montant,
+        mode_repartition, date_frais, date_modification, supprime_le)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      frais.id_local, frais.serveur_id ?? null, arrivageId,
+      frais.type_frais, frais.libelle ?? '', nombre(frais.montant),
+      frais.mode_repartition, frais.date_frais,
+      frais.date_modification ?? a.date_modification ?? maintenant(),
+      frais.supprime_le ?? null,
+    );
+  }
+
+  for (const serveurId of a.achats_serveur_ids ?? []) {
+    const achat = await lirePremier<{ id: number }>(
+      'SELECT id FROM achat WHERE serveur_id = ?',
+      serveurId,
+    );
+    if (achat) {
+      await executer(
+        'INSERT OR IGNORE INTO arrivage_achat (arrivage_id, achat_id) VALUES (?, ?)',
+        arrivageId, achat.id,
+      );
+    }
+  }
+  return true;
 }
 
 async function appliquerBoutique(boutique: BoutiqueSync): Promise<void> {
