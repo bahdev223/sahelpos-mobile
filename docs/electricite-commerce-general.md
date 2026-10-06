@@ -45,3 +45,6 @@ Validation finale relancée après unités électriques, libellés d'approvision
 
 
 Validation consolidée après mise à jour des harness historiques et du header achats par profil.
+
+
+Validation consolidée V2 après correction des tests historiques, du schéma sync et des libellés d'approvisionnement.
