@@ -3,6 +3,7 @@ export const SECTEURS_COMMERCE = [
   { code: 'HABILLEMENT', titre: 'Habillement', icone: 'etiquette' },
   { code: 'FRIPERIE', titre: 'Friperie', icone: 'achats' },
   { code: 'ELECTRONIQUE', titre: 'Electronique', icone: 'reseau' },
+  { code: 'ELECTRICITE', titre: 'Électricité', icone: 'stock' },
   { code: 'QUINCAILLERIE', titre: 'Quincaillerie', icone: 'stock' },
   { code: 'COSMETIQUE', titre: 'Cosmetique', icone: 'image' },
   { code: 'PIECES_DETACHEES', titre: 'Pieces detachees', icone: 'mouvements' },
@@ -154,6 +155,31 @@ const LIBELLES_STANDARD: LibellesProfilMobile = {
 };
 
 const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'code'>>> = {
+  COMMERCE_GENERAL: {
+    nom: 'Commerce général',
+    libelles: { ...LIBELLES_STANDARD, categories: 'Catégories' },
+    capabilities: [
+      'STOCK_SIMPLE', 'INVENTORY', 'LOW_STOCK_ALERT', 'BARCODE',
+      'PRODUCT_IMAGES', 'MULTI_UNIT', 'WHOLESALE',
+    ],
+  },
+  ELECTRICITE: {
+    nom: 'Électricité',
+    libelles: {
+      ...LIBELLES_STANDARD,
+      catalogue: 'Références',
+      achats: 'Appro.',
+      produits: 'Références',
+      produit: 'Référence',
+      nouveauProduit: 'Nouvelle référence',
+      categories: 'Rayons',
+    },
+    capabilities: [
+      'STOCK_SIMPLE', 'INVENTORY', 'LOW_STOCK_ALERT', 'MULTI_UNIT',
+      'PRODUCT_VARIANTS', 'TECHNICAL_DIMENSIONS', 'BARCODE',
+      'PRODUCT_IMAGES', 'WHOLESALE',
+    ],
+  },
   HABILLEMENT: {
     nom: 'Pret-a-porter & Habillement',
     libelles: {
@@ -219,6 +245,15 @@ export function resoudreProfilUIMobile(
   const code = profil?.secteur ?? 'COMMERCE_GENERAL';
   const specifique = PROFILS_UI_MOBILE[code];
   if (specifique) {
+    // Le vocabulaire d'un profil ne crée jamais de droits : seules les
+    // capacités accordées par le contrat signé deviennent effectives.
+    if (code === 'ELECTRICITE' || code === 'COMMERCE_GENERAL') {
+      return {
+        code, ...specifique,
+        capabilities: specifique.capabilities.filter((capability) =>
+          profil?.capabilities_effectives.includes(capability)),
+      };
+    }
     return { code, ...specifique };
   }
   return {
