@@ -281,9 +281,9 @@ export async function activer(code: string, libelle = ''): Promise<EtatAbonnemen
   const reponse = (await appeler('/api/public/activation/', {
     method: 'POST',
     body: JSON.stringify({ code: saisie, empreinte, libelle }),
-  })) as { licence?: string; jeton_appareil?: string };
+  })) as { licence?: string; jeton_appareil?: string; membre_id_local?: string };
 
-  if (!reponse.licence || !reponse.jeton_appareil) {
+  if (!reponse.licence || !reponse.jeton_appareil || !reponse.membre_id_local) {
     throw new Error("Le serveur n'a pas renvoye de droit d acces.");
   }
 
@@ -329,7 +329,7 @@ export function invitationDepuisQr(valeur: string): string | null {
 }
 
 export type RetourSahelTech =
-  | { type: 'active'; etat: EtatAbonnement }
+  | { type: 'active'; etat: EtatAbonnement; membreIdLocal: string }
   | { type: 'setup'; setup: string };
 
 export async function traiterRetourSahelTech(
@@ -350,8 +350,11 @@ export async function traiterRetourSahelTech(
   if (setup) return { type: 'setup', setup };
 
   const code = url.searchParams.get('code') ?? '';
-  if (!code) throw new Error("Le serveur n'a pas renvoye de code d'activation.");
-  return { type: 'active', etat: await activer(code, libelle) };
+  const membreIdLocal = url.searchParams.get('member') ?? '';
+  if (!code || !membreIdLocal) {
+    throw new Error("Le serveur n'a pas renvoye l'identite locale complete.");
+  }
+  return { type: 'active', etat: await activer(code, libelle), membreIdLocal };
 }
 
 export interface ConfigurationBoutiqueSahelTech {
@@ -368,7 +371,7 @@ export async function creerBoutiqueDepuisSahelTech(
   setup: string,
   saisie: ConfigurationBoutiqueSahelTech,
   libelle = 'Telephone principal',
-): Promise<EtatAbonnement> {
+): Promise<{ etat: EtatAbonnement; membreIdLocal: string }> {
   if (await lireCle(CLE_BOUTIQUE_LOCALE)) {
     throw new Error(MESSAGE_BOUTIQUE_DIFFERENTE);
   }
@@ -397,7 +400,10 @@ export async function creerBoutiqueDepuisSahelTech(
   await ecrireCle(CLE_LICENCE, reponse.licence);
   await ecrireCle(CLE_APPAREIL, reponse.jeton_appareil);
   await ecrireCle(CLE_DERNIER_CONTACT, new Date().toISOString());
-  return etatCourant();
+  return {
+    etat: await etatCourant(),
+    membreIdLocal: reponse.membre_id_local,
+  };
 }
 
 export async function connecterCompteMobile(
