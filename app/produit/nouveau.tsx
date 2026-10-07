@@ -1724,6 +1724,8 @@ function PastilleMobile({
 
 export default function NouveauProduit() {
   const router = useRouter();
+  const { profilCommerce } = useSession();
+  const vrac = estVrac(profilCommerce);
   const [demandeScan, setDemandeScan] = useState(0);
 
   const valider = useCallback(
@@ -1742,7 +1744,7 @@ export default function NouveauProduit() {
           <Icone nom="retour" taille={23} couleur={couleurs.texte} />
           </Pressable>
           <View style={m.titresNouveauProduit}>
-          <Text style={m.titreNouveauProduit}>Nouveau produit</Text>
+          <Text style={m.titreNouveauProduit}>{vrac ? 'Nouvelle denrée' : 'Nouveau produit'}</Text>
           </View>
         <Pressable
           style={m.scanEntete}
@@ -1753,10 +1755,10 @@ export default function NouveauProduit() {
         </Pressable>
       </View>
       <FormulaireProduit
-        saisieInitiale={saisieVide()}
+        saisieInitiale={vrac ? saisieVideVrac() : saisieVide()}
         creation
         demandeScan={demandeScan}
-        libelleValider="Créer le produit"
+        libelleValider={vrac ? 'Créer la denrée' : 'Créer le produit'}
         onValider={valider}
         onAnnuler={() => router.back()}
       />
