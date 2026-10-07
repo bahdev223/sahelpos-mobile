@@ -1,7 +1,7 @@
 name: Commerce profiles validation (no native build)
 on:
   push:
-    branches: [feat/electricite-commerce-general]
+    branches: [feat/electricite-commerce-general, feat/cereales-vrac]
   pull_request:
     branches: [master]
   workflow_dispatch:
