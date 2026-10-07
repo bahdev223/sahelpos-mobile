@@ -9,7 +9,10 @@ export function estReferenceTechnique(profil: ProfilSecteur): boolean {
 }
 
 export function tarifGrosDisponible(profil: ProfilTarif): boolean {
-  if (!profil || !['QUINCAILLERIE', 'ELECTRICITE', 'COMMERCE_GENERAL'].includes(profil.secteur)) return false;
+  if (!profil || !['QUINCAILLERIE', 'ELECTRICITE', 'COMMERCE_GENERAL', 'CEREALES_VRAC'].includes(profil.secteur)) return false;
+  if (profil.secteur === 'CEREALES_VRAC') {
+    return profil.capabilities_effectives.includes('WHOLESALE');
+  }
   return profil.capabilities_effectives.includes('WHOLESALE') && ['GROS', 'MIXTE'].includes(profil.mode_vente);
 }
 
@@ -40,4 +43,9 @@ export function routeCaracteristiquesTechniques(profil: ProfilSecteur, id: numbe
   if (profil?.secteur === 'ELECTRICITE') return { pathname: '/electricite/caracteristiques/[id]' as const, params };
   if (profil?.secteur === 'QUINCAILLERIE') return { pathname: '/quincaillerie/caracteristiques/[id]' as const, params };
   throw new Error('Les caractéristiques techniques ne sont pas proposées pour ce secteur.');
+}
+
+
+export function estVrac(profil: ProfilSecteur): boolean {
+  return profil?.secteur === 'CEREALES_VRAC';
 }
