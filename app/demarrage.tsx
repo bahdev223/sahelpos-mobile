@@ -369,7 +369,7 @@ export function EcranDemarrage() {
             <Icone nom="chevron" taille={22} couleur={couleurs.texteInverse} />
           </Pressable>
           <Pressable style={styles.boutonBlanc} onPress={() => setScannerQr(true)}>
-            <Icone nom="barcode" taille={24} couleur={couleurs.texte} />
+            <Icone nom="codeBarres" taille={24} couleur={couleurs.texte} />
             <Text style={styles.boutonBlancTexte}>Scanner un QR code</Text>
           </Pressable>
           <Pressable style={styles.boutonBlanc} onPress={() => afficherFormulaire('connexion')}>
