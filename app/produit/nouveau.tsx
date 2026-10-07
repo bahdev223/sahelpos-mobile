@@ -1376,8 +1376,10 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
         <View style={m.carteRangee}>
           <PastilleMobile nom="catalogue" />
           <View style={m.rangeeTexte}>
-            <Text style={m.titreRangee}>Sous-unités</Text>
-            <Text style={m.sousTitreRangee}>Ex : 1 carton = 50 pièces</Text>
+            <Text style={m.titreRangee}>{props.vrac ? 'Conditionnements' : 'Sous-unités'}</Text>
+            <Text style={m.sousTitreRangee}>
+              {props.vrac ? '5 kg, demi-sac, sac 50 kg, tonne…' : 'Ex : 1 carton = 50 pièces'}
+            </Text>
           </View>
           <Pressable style={m.boutonAjouter} onPress={props.ajouterSousUnite}>
             <Icone nom="plus" taille={22} couleur={couleurs.primaire} />
@@ -1458,8 +1460,10 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
           <View style={m.stockEntete}>
             <PastilleMobile nom="stock" fond={couleurs.surfaceDouce} couleur={couleurs.texte} />
             <View style={m.rangeeTexte}>
-              <Text style={m.titreRangee}>Gestion du stock</Text>
-              <Text style={m.sousTitreRangee}>Suivre les quantités et être alerté.</Text>
+              <Text style={m.titreRangee}>{props.vrac ? 'Stock en kilogrammes' : 'Gestion du stock'}</Text>
+              <Text style={m.sousTitreRangee}>
+                {props.vrac ? 'Le stock consolidé reste en kg, quel que soit le conditionnement vendu.' : 'Suivre les quantités et être alerté.'}
+              </Text>
             </View>
             <Switch
               value={props.saisie.gestionStock}
@@ -1472,7 +1476,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
             <View style={m.ligneChamps}>
               <View style={m.champDemi}>
                 <ChampMobile
-                  libelle="Stock minimum (alerte)"
+                  libelle={props.vrac ? 'Seuil minimum (kg)' : 'Stock minimum (alerte)'}
                   valeur={props.saisie.stockMin}
                   onChangeText={(valeur) => props.modifier('stockMin', valeur)}
                   indication="0"
@@ -1483,7 +1487,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
               {props.p.creation ? (
                 <View style={m.champDemi}>
                   <ChampMobile
-                    libelle="Stock initial"
+                    libelle={props.vrac ? 'Stock initial (kg)' : 'Stock initial'}
                     valeur={props.saisie.stockInitial}
                     onChangeText={(valeur) => props.modifier('stockInitial', valeur)}
                     indication="0"
@@ -1538,7 +1542,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
       >
         <Pressable style={m.voileMenu} onPress={() => setMenuCategorieOuvert(false)}>
           <View style={m.menuCategorie} onStartShouldSetResponder={() => true}>
-            <Text style={m.menuTitre}>Choisir une catégorie</Text>
+            <Text style={m.menuTitre}>{props.vrac ? 'Choisir une famille' : 'Choisir une catégorie'}</Text>
             <ScrollView style={m.menuListe} keyboardShouldPersistTaps="handled">
               {props.categories.map((categorie) => (
                 <Pressable
@@ -1558,7 +1562,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
                 style={m.saisieSansBord}
                 value={nouvelleCategorie}
                 onChangeText={setNouvelleCategorie}
-                placeholder="Nouvelle catégorie"
+                placeholder={props.vrac ? 'Nouvelle famille' : 'Nouvelle catégorie'}
                 placeholderTextColor={couleurs.texteEteint}
               />
               <Pressable style={m.boutonAjouterCategorie} onPress={ajouterCategorieLibre}>
