@@ -328,10 +328,14 @@ export function invitationDepuisQr(valeur: string): string | null {
   }
 }
 
-export async function activerDepuisLienSahelTech(
+export type RetourSahelTech =
+  | { type: 'active'; etat: EtatAbonnement }
+  | { type: 'setup'; setup: string };
+
+export async function traiterRetourSahelTech(
   valeur: string,
   libelle = 'Telephone principal',
-): Promise<EtatAbonnement> {
+): Promise<RetourSahelTech> {
   const url = new URL(valeur);
   if (url.protocol !== 'sahelpos:' || url.hostname !== 'sso') {
     throw new Error("Retour SahelTech invalide.");
@@ -339,12 +343,61 @@ export async function activerDepuisLienSahelTech(
   const erreur = url.searchParams.get('error');
   if (erreur === 'boutique-required') {
     throw new Error(
-      "Ce compte SahelTech a plusieurs boutiques ou aucune boutique. Choisissez d'abord l'espace depuis SahelPOS Web.",
+      "Ce compte SahelTech a plusieurs boutiques. Ouvrez l'espace voulu depuis SahelPOS Web ou scannez le QR de cette boutique.",
     );
   }
+  const setup = url.searchParams.get('setup') ?? '';
+  if (setup) return { type: 'setup', setup };
+
   const code = url.searchParams.get('code') ?? '';
   if (!code) throw new Error("Le serveur n'a pas renvoye de code d'activation.");
-  return activer(code, libelle);
+  return { type: 'active', etat: await activer(code, libelle) };
+}
+
+export interface ConfigurationBoutiqueSahelTech {
+  nomBoutique: string;
+  telephone?: string;
+  devise?: string;
+  ville?: string;
+  secteur?: SecteurCommerce;
+  modeVente?: ModeVenteCommerce;
+  modeApprovisionnement?: ModeApprovisionnementCommerce;
+}
+
+export async function creerBoutiqueDepuisSahelTech(
+  setup: string,
+  saisie: ConfigurationBoutiqueSahelTech,
+  libelle = 'Telephone principal',
+): Promise<EtatAbonnement> {
+  if (await lireCle(CLE_BOUTIQUE_LOCALE)) {
+    throw new Error(MESSAGE_BOUTIQUE_DIFFERENTE);
+  }
+  const empreinte = await empreinteAppareil();
+  const reponse = (await appeler('/api/public/sso/native-setup/', {
+    method: 'POST',
+    body: JSON.stringify({
+      setup,
+      nom: saisie.nomBoutique,
+      telephone: saisie.telephone ?? '',
+      ville: saisie.ville ?? '',
+      secteur: saisie.secteur ?? 'COMMERCE_GENERAL',
+      mode_vente: saisie.modeVente ?? 'DETAIL',
+      mode_approvisionnement: saisie.modeApprovisionnement ?? 'CLASSIQUE',
+      mode_catalogue: 'SIMPLE',
+      devise: saisie.devise ?? 'FCFA',
+      empreinte,
+      libelle,
+    }),
+  })) as { licence?: string; jeton_appareil?: string };
+
+  if (!reponse.licence || !reponse.jeton_appareil) {
+    throw new Error("Le serveur n'a pas renvoye de droit d acces.");
+  }
+  await verifierBoutiqueLocale(lireDroit(reponse.licence));
+  await ecrireCle(CLE_LICENCE, reponse.licence);
+  await ecrireCle(CLE_APPAREIL, reponse.jeton_appareil);
+  await ecrireCle(CLE_DERNIER_CONTACT, new Date().toISOString());
+  return etatCourant();
 }
 
 export async function connecterCompteMobile(
