@@ -5,10 +5,11 @@
  * l'autorite : au premier lancement, le commercant se connecte ou cree son
  * compte Web, puis le serveur remet un droit signe utilisable hors ligne.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -28,8 +29,11 @@ import {
   type SecteurCommerce, type ModeVenteCommerce, type ModeApprovisionnementCommerce,
 } from '../src/domain/commerce';
 import {
+  activerDepuisLienSahelTech,
   connecterCompteMobile,
   creerBoutiqueMobile,
+  invitationDepuisQr,
+  urlConnexionSahelTech,
   type Droit,
 } from '../src/services/abonnement';
 import {
@@ -47,6 +51,7 @@ import {
   rayons,
 } from '../src/ui/components';
 import { Icone } from '../src/ui/icones';
+import QrInvitationScanner from '../src/ui/QrInvitationScanner';
 
 import { CLES_PARAMETRES, ecrireParametres, lireParametres, useSession } from './_layout';
 
@@ -62,6 +67,7 @@ export function EcranDemarrage() {
   const [erreurGenerale, setErreurGenerale] = useState<string | null>(null);
   const [droit, setDroit] = useState<Droit | null>(null);
   const [mode, setMode] = useState<ModeConnexion>('connexion');
+  const [scannerQr, setScannerQr] = useState(false);
 
   const [nomBoutique, setNomBoutique] = useState('');
   const [nomAdmin, setNomAdmin] = useState('');
@@ -264,6 +270,57 @@ export function EcranDemarrage() {
     if (vueDepart === 'formulaire') setVueDepart('accueil');
   }, [etape, vueDepart]);
 
+  const appliquerRetourSahelTech = useCallback(async (url: string) => {
+    if (!url.startsWith('sahelpos://sso')) return;
+    setEnCours(true);
+    setErreurGenerale(null);
+    try {
+      const etat = await activerDepuisLienSahelTech(url, 'Telephone principal');
+      if (!etat.droit) throw new Error("Le serveur n'a pas renvoye l'espace SahelPOS.");
+      if (!etat.droit.peutEntrer) throw new Error(etat.droit.raison || "Cet espace n'est pas actif.");
+      await bootstrapInitial(etat.droit.boutique);
+      setDroit(etat.droit);
+      setNomAdmin((nom) => nom || etat.droit?.nom || 'Gerant');
+      setLogin((identifiant) => identifiant || normaliserLogin(etat.droit?.nom || 'gerant'));
+      setPin('');
+      setPinConfirme('');
+      setVueDepart('formulaire');
+      setEtape(1);
+    } catch (erreur) {
+      setErreurGenerale(
+        erreur instanceof Error ? erreur.message : 'Connexion SahelTech impossible.',
+      );
+    } finally {
+      setEnCours(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const abonnement = Linking.addEventListener('url', ({ url }) => {
+      void appliquerRetourSahelTech(url);
+    });
+    void Linking.getInitialURL().then((url) => {
+      if (url) void appliquerRetourSahelTech(url);
+    });
+    return () => abonnement.remove();
+  }, [appliquerRetourSahelTech]);
+
+  const continuerAvecGoogle = useCallback(async (invitation?: string) => {
+    setErreurGenerale(null);
+    await Linking.openURL(urlConnexionSahelTech(invitation));
+  }, []);
+
+  const traiterQr = useCallback((valeur: string) => {
+    const invitation = invitationDepuisQr(valeur);
+    if (!invitation) {
+      setScannerQr(false);
+      setErreurGenerale("Ce QR n'est pas une invitation SahelPOS valide.");
+      return;
+    }
+    setScannerQr(false);
+    void continuerAvecGoogle(invitation);
+  }, [continuerAvecGoogle]);
+
   const afficherFormulaire = useCallback((prochainMode: ModeConnexion) => {
     setMode(prochainMode);
     setVueDepart('formulaire');
@@ -303,9 +360,21 @@ export function EcranDemarrage() {
             <Text style={styles.noteManuscrite}>Mon commerce{'\n'}en main !</Text>
           </View>
 
-          <Pressable style={styles.boutonPrimaire} onPress={() => afficherFormulaire('connexion')}>
-            <Text style={styles.boutonPrimaireTexte}>Se connecter</Text>
+          <Pressable
+            style={styles.boutonPrimaire}
+            onPress={() => void continuerAvecGoogle()}
+            disabled={enCours}
+          >
+            <Text style={styles.boutonPrimaireTexte}>G  Continuer avec Google</Text>
             <Icone nom="chevron" taille={22} couleur={couleurs.texteInverse} />
+          </Pressable>
+          <Pressable style={styles.boutonBlanc} onPress={() => setScannerQr(true)}>
+            <Icone nom="barcode" taille={24} couleur={couleurs.texte} />
+            <Text style={styles.boutonBlancTexte}>Scanner un QR code</Text>
+          </Pressable>
+          <Pressable style={styles.boutonBlanc} onPress={() => afficherFormulaire('connexion')}>
+            <Icone nom="clients" taille={24} couleur={couleurs.texte} />
+            <Text style={styles.boutonBlancTexte}>Identifiant et mot de passe</Text>
           </Pressable>
           <Pressable style={styles.boutonBlanc} onPress={() => afficherFormulaire('creation')}>
             <Icone nom="boutique" taille={24} couleur={couleurs.texte} />
@@ -315,6 +384,11 @@ export function EcranDemarrage() {
             <Text style={styles.essai}>Essayer gratuitement pendant 14 jours</Text>
           </Pressable>
         </ScrollView>
+        <QrInvitationScanner
+          visible={scannerQr}
+          onClose={() => setScannerQr(false)}
+          onValue={traiterQr}
+        />
       </SafeAreaView>
     );
   }
