@@ -952,7 +952,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
           />
           {tarifsGros ? (
             <Champ
-              libelle={props.vrac ? 'Prix gros / kg' : 'Prix gros'}
+              libelle={vrac ? 'Prix gros / kg' : 'Prix gros'}
               valeur={saisie.prixGros}
               onChange={(v) => modifier('prixGros', v)}
               erreur={erreurs.champs.prixGros}
