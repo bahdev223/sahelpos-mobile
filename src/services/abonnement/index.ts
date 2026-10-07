@@ -311,6 +311,42 @@ export interface InscriptionMobile {
   modeApprovisionnement?: ModeApprovisionnementCommerce;
 }
 
+export function urlConnexionSahelTech(invitation?: string): string {
+  const parametres = new URLSearchParams({ native: '1' });
+  if (invitation) parametres.set('invitation', invitation);
+  return `${SERVEUR}/api/public/sso/start/?${parametres.toString()}`;
+}
+
+export function invitationDepuisQr(valeur: string): string | null {
+  try {
+    const url = new URL(valeur);
+    if (url.origin !== SERVEUR) return null;
+    const resultat = url.pathname.match(/^\/rejoindre\/([0-9a-f-]{36})\/?$/i);
+    return resultat?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function activerDepuisLienSahelTech(
+  valeur: string,
+  libelle = 'Telephone principal',
+): Promise<EtatAbonnement> {
+  const url = new URL(valeur);
+  if (url.protocol !== 'sahelpos:' || url.hostname !== 'sso') {
+    throw new Error("Retour SahelTech invalide.");
+  }
+  const erreur = url.searchParams.get('error');
+  if (erreur === 'boutique-required') {
+    throw new Error(
+      "Ce compte SahelTech a plusieurs boutiques ou aucune boutique. Choisissez d'abord l'espace depuis SahelPOS Web.",
+    );
+  }
+  const code = url.searchParams.get('code') ?? '';
+  if (!code) throw new Error("Le serveur n'a pas renvoye de code d'activation.");
+  return activer(code, libelle);
+}
+
 export async function connecterCompteMobile(
   login: string,
   motDePasse: string,
