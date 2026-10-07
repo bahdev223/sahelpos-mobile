@@ -47,7 +47,7 @@ import { BandeauEtat, formaterMontant, uriImage } from '../../src/ui/components'
 import { couleurs } from '../../src/ui/theme';
 import { Icone } from '../../src/ui/icones';
 import { useSession } from '../_layout';
-import { estReferenceTechnique, tarifGrosDisponible } from '../../src/domain/presentation-commerce';
+import { estReferenceTechnique, estVrac, tarifGrosDisponible } from '../../src/domain/presentation-commerce';
 export { C };
 
 // --------------------------------------------------------------------------
@@ -157,6 +157,20 @@ export function saisieVide(): SaisieProduit {
     actif: true,
     cheminImage: null,
     sousUnites: [],
+  };
+}
+
+export function saisieVideVrac(): SaisieProduit {
+  return {
+    ...saisieVide(),
+    uniteBase: 'Kg',
+    stockMin: '50',
+    sousUnites: [
+      { cle: nouvelleCle(), nom: '5 kg', facteur: '5', prix: '', prixGros: '' },
+      { cle: nouvelleCle(), nom: 'Demi-sac 25 kg', facteur: '25', prix: '', prixGros: '' },
+      { cle: nouvelleCle(), nom: 'Sac 50 kg', facteur: '50', prix: '', prixGros: '' },
+      { cle: nouvelleCle(), nom: 'Tonne', facteur: '1000', prix: '', prixGros: '' },
+    ],
   };
 }
 
@@ -622,6 +636,7 @@ export interface ProprietesFormulaire {
 export function FormulaireProduit(p: ProprietesFormulaire) {
   const { boutique, profilCommerce } = useSession();
   const referenceTechnique = estReferenceTechnique(profilCommerce);
+  const vrac = estVrac(profilCommerce);
   const tarifsGros = tarifGrosDisponible(profilCommerce);
   const [saisie, setSaisie] = useState<SaisieProduit>(p.saisieInitiale);
   const [erreurs, setErreurs] = useState<Erreurs>({ champs: {}, sousUnites: {} });
@@ -787,6 +802,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
       erreurGlobale={erreurGlobale}
       devise={boutique.devise}
       referenceTechnique={referenceTechnique}
+      vrac={vrac}
       tarifsGros={tarifsGros}
       modifier={modifier}
       modifierSousUnite={modifierSousUnite}
@@ -936,7 +952,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
           />
           {tarifsGros ? (
             <Champ
-              libelle="Prix gros"
+              libelle={props.vrac ? 'Prix gros / kg' : 'Prix gros'}
               valeur={saisie.prixGros}
               onChange={(v) => modifier('prixGros', v)}
               erreur={erreurs.champs.prixGros}
@@ -1169,6 +1185,7 @@ interface ProprietesFormulaireMobile {
   erreurGlobale: string | null;
   devise: string;
   referenceTechnique: boolean;
+  vrac: boolean;
   tarifsGros: boolean;
   modifier: <K extends keyof SaisieProduit>(cle: K, valeur: SaisieProduit[K]) => void;
   modifierSousUnite: (index: number, cle: keyof SaisieSousUnite, valeur: string) => void;
@@ -1239,7 +1256,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
 
           <View style={m.identiteChamps}>
             <ChampMobile
-              libelle="Nom du produit"
+              libelle={props.vrac ? 'Nom de la denrée' : props.referenceTechnique ? 'Nom de la référence' : 'Nom du produit'}
               obligatoire
               valeur={props.saisie.nom}
               onChangeText={(valeur) => props.modifier('nom', valeur)}
@@ -1247,7 +1264,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
               erreur={props.erreurs.champs.nom}
             />
             <View style={m.champMobile}>
-              <LibelleMobile texte="Catégorie" obligatoire />
+              <LibelleMobile texte={props.vrac ? 'Famille' : props.referenceTechnique ? 'Rayon' : 'Catégorie'} obligatoire />
               <Pressable
                 style={[m.selecteur, props.erreurs.champs.categorie ? m.selecteurErreur : null]}
                 onPress={() => setMenuCategorieOuvert(true)}
@@ -1257,7 +1274,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
                   style={[m.selecteurTexte, !props.saisie.categorie && m.selecteurIndication]}
                   numberOfLines={1}
                 >
-                  {props.saisie.categorie || 'Choisir une catégorie'}
+                  {props.saisie.categorie || (props.vrac ? 'Choisir une famille' : 'Choisir une catégorie')}
                 </Text>
                 <Icone nom="chevron" taille={18} couleur={couleurs.texte} />
               </Pressable>
@@ -1291,13 +1308,13 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
             <PastilleMobile nom="argent" fond={couleurs.succesDouce} couleur={couleurs.succesFonce} />
             <Text style={m.titreCarteTexte}>Prix ({props.devise})</Text>
             <View style={m.puceExplication}>
-              <Text style={m.puceExplicationTexte} numberOfLines={1}>Prix/unité</Text>
+              <Text style={m.puceExplicationTexte} numberOfLines={1}>{props.vrac ? 'Prix/kg' : 'Prix/unité'}</Text>
             </View>
           </View>
           <View style={m.ligneChamps}>
             <View style={m.champDemi}>
               <ChampMobile
-                libelle="Prix d’achat"
+                libelle={props.vrac ? 'Prix d’achat / kg' : 'Prix d’achat'}
                 valeur={props.saisie.prixAchat}
                 onChangeText={(valeur) => props.modifier('prixAchat', valeur)}
                 indication="0"
@@ -1307,7 +1324,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
             </View>
             <View style={m.champDemi}>
               <ChampMobile
-                libelle={props.referenceTechnique ? "Prix détail" : "Prix de vente"}
+                libelle={props.vrac ? 'Prix détail / kg' : props.referenceTechnique ? "Prix détail" : "Prix de vente"}
                 obligatoire
                 valeur={props.saisie.prixUnitaire}
                 onChangeText={(valeur) => props.modifier('prixUnitaire', valeur)}
@@ -1334,7 +1351,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
           <LibelleMobile texte="Unité de base" obligatoire style={m.libelleRangee} />
           <Pressable
             style={[m.selecteur, m.selecteurUnite, props.erreurs.champs.uniteBase ? m.selecteurErreur : null]}
-            onPress={() => props.setUniteMenuOuvert(true)}
+            onPress={() => { if (!props.vrac) props.setUniteMenuOuvert(true); }}
           >
             <Text style={m.selecteurTexte} numberOfLines={1}>
               {props.uniteLibre ? 'Autre unité' : props.saisie.uniteBase || 'Choisir'}
