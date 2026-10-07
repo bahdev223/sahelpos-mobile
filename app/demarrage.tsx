@@ -593,7 +593,7 @@ export function EcranDemarrage() {
                   <ChampMaquette icone="caisse" label="Mot de passe" valeur={motDePasseWeb} onChangeText={setMotDePasseWeb} placeholder="Minimum 6 caracteres" secret erreur={erreurs.motDePasseWeb} />
                   <ChampMaquette icone="caisse" label="Confirmez le mot de passe" valeur={motDePasseWebConfirme} onChangeText={setMotDePasseWebConfirme} placeholder="Minimum 6 caracteres" secret erreur={erreurs.motDePasseWebConfirme} />
                     </>
-                  ) : null
+                  ) : null}
 
                   <View style={styles.creationBasSecurise}>
                     <Icone nom="coche" taille={24} couleur={couleurs.primaire} />
@@ -634,8 +634,22 @@ export function EcranDemarrage() {
                   <Text style={styles.infoCreationTexte}>{droit.commerce.raison}</Text>
                 </View>
               ) : null}
-              <Champ label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Aminata Diarra" autoFocus />
-              <Champ label="Identifiant local" valeur={login} onChangeText={setLogin} placeholder="aminata" erreur={erreurs.login} />
+              {utilisateurProvisionne ? (
+                <View style={styles.infoCreation}>
+                  <View style={styles.infoPastille}><Text style={styles.infoPastilleTexte}>✓</Text></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.creationCompteTitre}>{utilisateurProvisionne.nom || utilisateurProvisionne.login}</Text>
+                    <Text style={styles.infoCreationTexte}>
+                      Profil {utilisateurProvisionne.role} synchronisé depuis SahelPOS. Définissez seulement le PIN de ce téléphone.
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <Champ label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Aminata Diarra" autoFocus />
+                  <Champ label="Identifiant local" valeur={login} onChangeText={setLogin} placeholder="aminata" erreur={erreurs.login} />
+                </>
+              )}
               <Champ label={`Code d'acces (${LONGUEUR_PIN_MIN} a ${LONGUEUR_PIN_MAX} chiffres)`} valeur={pin} onChangeText={(valeur) => setPin(chiffresSeuls(valeur))} placeholder="0000" clavier="number-pad" secret erreur={erreurs.pin} />
               <Champ label="Confirmez le code" valeur={pinConfirme} onChangeText={(valeur) => setPinConfirme(chiffresSeuls(valeur))} placeholder="0000" clavier="number-pad" secret erreur={erreurs.pinConfirme} />
               {erreurGenerale ? <BandeauErreur message={erreurGenerale} /> : null}
