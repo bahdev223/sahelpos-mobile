@@ -14,7 +14,11 @@ function chargerAbonnement(options = {}) {
   ]);
   const moduleCharge = new Module(chemin, module);
   moduleCharge.paths = Module._nodeModulePaths(resolve(__dirname, '..'));
+  const domainFile = resolve(__dirname, '../src/domain/accounts.ts');
+  const domainModule = new Module(domainFile, module);
+  domainModule._compile(ts.transpileModule(readFileSync(domainFile, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS}}).outputText, domainFile);
   const imports = {
+    '../../domain/accounts': domainModule.exports,
     '../../db/repositories/base': {
       lireTout: async (_sql, cle) => [{ valeur: parametres.get(cle) ?? null }],
       executer: async (_sql, cle, valeur) => { parametres.set(cle, valeur); },
