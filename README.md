@@ -80,8 +80,12 @@ n'est pas requis à chaque démarrage.
 
 ## Profils locaux
 
-Plusieurs membres d'une même boutique peuvent utiliser le même terminal. Chaque
-profil possède son rôle et son PIN ; la biométrie est liée au profil local choisi.
+Les profils d'une même boutique restent conservés sur le terminal, avec leurs
+PIN et écritures en attente. Avec une licence liée à un Membre, seul ce Membre
+et son rôle signés peuvent ouvrir la caisse hors ligne. Pour activer un autre
+profil, sa propre connexion SahelTech en ligne renouvelle le droit de l'appareil.
+Les anciennes licences non liées conservent leur fonctionnement historique.
+La biométrie reste liée au profil choisi ; un PIN existant n'est pas remplacé.
 
 Une synchronisation de rôle ou une désactivation serveur réévalue la session
 locale. Un vendeur ne devient jamais administrateur simplement parce qu'il a

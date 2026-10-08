@@ -1,3 +1,4 @@
+import AccesAccounts from '../src/ui/AccesAccounts';
 /**
  * Premier demarrage mobile.
  *
@@ -5,11 +6,10 @@
  * l'autorite : au premier lancement, le commercant se connecte ou cree son
  * compte Web, puis le serveur remet un droit signe utilisable hors ligne.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -23,25 +23,17 @@ import type { KeyboardTypeOptions, ReturnKeyTypeOptions } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { Utilisateur } from '../src/domain/types';
 import {
   SECTEURS_COMMERCE, MODES_VENTE, MODES_APPROVISIONNEMENT,
   type SecteurCommerce, type ModeVenteCommerce, type ModeApprovisionnementCommerce,
 } from '../src/domain/commerce';
 import {
   connecterCompteMobile,
-  creerBoutiqueDepuisSahelTech,
   creerBoutiqueMobile,
-  invitationDepuisQr,
-  traiterRetourSahelTech,
-  urlConnexionSahelTech,
   type Droit,
 } from '../src/services/abonnement';
 import {
-  initialiserCompteAdministrateur,
-  modifierUtilisateur,
-  obtenirUtilisateurParId,
-  obtenirUtilisateurParIdLocal,
+  finaliserConnexionMobile,
   LONGUEUR_PIN_MAX,
   LONGUEUR_PIN_MIN,
 } from '../src/services/auth';
@@ -55,11 +47,10 @@ import {
   rayons,
 } from '../src/ui/components';
 import { Icone } from '../src/ui/icones';
-import QrInvitationScanner from '../src/ui/QrInvitationScanner';
 
 import { CLES_PARAMETRES, ecrireParametres, lireParametres, useSession } from './_layout';
 
-type ModeConnexion = 'connexion' | 'creation' | 'creation_sso';
+type ModeConnexion = 'connexion' | 'creation';
 type VueDepart = 'accueil' | 'formulaire';
 
 export function EcranDemarrage() {
@@ -71,9 +62,6 @@ export function EcranDemarrage() {
   const [erreurGenerale, setErreurGenerale] = useState<string | null>(null);
   const [droit, setDroit] = useState<Droit | null>(null);
   const [mode, setMode] = useState<ModeConnexion>('connexion');
-  const [scannerQr, setScannerQr] = useState(false);
-  const [setupSahelTech, setSetupSahelTech] = useState<string | null>(null);
-  const [utilisateurProvisionne, setUtilisateurProvisionne] = useState<Utilisateur | null>(null);
 
   const [nomBoutique, setNomBoutique] = useState('');
   const [nomAdmin, setNomAdmin] = useState('');
@@ -93,19 +81,15 @@ export function EcranDemarrage() {
   const [erreurs, setErreurs] = useState<Record<string, string>>({});
 
   const titreEtape = useMemo(() => {
-    if (etape === 0) {
-      if (mode === 'connexion') return 'Connexion';
-      if (mode === 'creation_sso') return 'Configurer mon commerce';
-      return 'Creer mon espace';
-    }
+    if (etape === 0) return mode === 'connexion' ? 'Connexion' : 'Creer mon espace';
     return 'Code local';
   }, [etape, mode]);
 
   const sousTitreEtape = useMemo(() => {
     if (etape === 0) {
-      if (mode === 'connexion') return 'Accedez a votre espace SahelPOS';
-      if (mode === 'creation_sso') return 'Votre compte SahelTech est deja pret.';
-      return 'Configurez votre espace SahelPOS';
+      return mode === 'connexion'
+        ? 'Accedez a votre espace SahelPOS'
+        : 'Configurez votre espace SahelPOS';
     }
     return 'Protegez la caisse sur ce telephone.';
   }, [etape, mode]);
@@ -116,12 +100,6 @@ export function EcranDemarrage() {
     if (etape === 0 && mode === 'connexion') {
       if (login.trim().length === 0) trouvees.login = "L'identifiant Web est obligatoire.";
       if (motDePasseWeb.length === 0) trouvees.motDePasseWeb = 'Le mot de passe est obligatoire.';
-    }
-
-    if (etape === 0 && mode === 'creation_sso') {
-      if (nomBoutique.trim().length === 0) {
-        trouvees.nomBoutique = "Le nom de l'entreprise est obligatoire.";
-      }
     }
 
     if (etape === 0 && mode === 'creation') {
@@ -169,65 +147,32 @@ export function EcranDemarrage() {
     setEnCours(true);
     setErreurGenerale(null);
     try {
-      let etat: Awaited<ReturnType<typeof connecterCompteMobile>>;
-      let membreIdLocal = '';
-
-      if (mode === 'creation_sso') {
-        if (!setupSahelTech) throw new Error('La session SahelTech a expire.');
-        const resultat = await creerBoutiqueDepuisSahelTech(
-          setupSahelTech,
-          {
-            nomBoutique,
-            telephone,
-            ville,
-            secteur: typeCommerce,
-            modeVente,
-            modeApprovisionnement,
-            devise,
-          },
-          'Telephone principal',
-        );
-        etat = resultat.etat;
-        membreIdLocal = resultat.membreIdLocal;
-      } else if (mode === 'connexion') {
-        etat = await connecterCompteMobile(login, motDePasseWeb, 'Telephone principal');
-      } else {
-        etat = await creerBoutiqueMobile(
-          {
-            nomBoutique,
-            nomPatron: nomAdmin,
-            login,
-            motDePasse: motDePasseWeb,
-            telephone,
-            ville,
-            secteur: typeCommerce,
-            modeVente,
-            modeApprovisionnement,
-            devise,
-            plan: 'START',
-          },
-          'Telephone principal',
-        );
-      }
-
+      const etat =
+        mode === 'connexion'
+          ? await connecterCompteMobile(login, motDePasseWeb, 'Telephone principal')
+          : await creerBoutiqueMobile(
+              {
+                nomBoutique,
+                nomPatron: nomAdmin,
+                login,
+                motDePasse: motDePasseWeb,
+                telephone,
+                ville,
+                secteur: typeCommerce,
+                modeVente,
+                modeApprovisionnement,
+                devise,
+                plan: 'START',
+              },
+              'Telephone principal',
+            );
       if (!etat.droit) throw new Error("Le serveur n'a pas renvoye l'espace SahelPOS.");
       if (!etat.droit.peutEntrer) throw new Error(etat.droit.raison || "Cet espace SahelPOS n'est pas actif.");
       await bootstrapInitial(etat.droit.boutique);
       setDroit(etat.droit);
-
-      if (membreIdLocal) {
-        const membre = await obtenirUtilisateurParIdLocal(membreIdLocal);
-        if (!membre) throw new Error("Le profil SahelTech n'a pas ete synchronise sur ce telephone.");
-        setUtilisateurProvisionne(membre);
-        setNomAdmin(membre.nom || membre.login);
-        setLogin(membre.login);
-      } else {
-        setUtilisateurProvisionne(null);
-        setNomAdmin((valeur) => valeur || (mode === 'creation' ? nomAdmin : login) || 'Gerant');
-        setLogin((valeur) => valeur || normaliserLogin(etat.droit?.nom || 'gerant'));
-      }
-
-      if (mode !== 'connexion') {
+      setNomAdmin((valeur) => valeur || (mode === 'creation' ? nomAdmin : login) || 'Gerant');
+      setLogin((valeur) => valeur || normaliserLogin(etat.droit?.nom || 'gerant'));
+      if (mode === 'creation') {
         setPin('');
         setPinConfirme('');
       }
@@ -243,7 +188,7 @@ export function EcranDemarrage() {
       setEnCours(false);
     }
   }, [devise, login, mode, motDePasseWeb, nomAdmin, nomBoutique, telephone, ville,
-    typeCommerce, modeVente, modeApprovisionnement, setupSahelTech, validerEtape]);
+    typeCommerce, modeVente, modeApprovisionnement, validerEtape]);
 
   const terminer = useCallback(async () => {
     if (!droit) {
@@ -256,18 +201,12 @@ export function EcranDemarrage() {
     try {
       const identifiant = login.trim();
       const nomCompte = nomAdmin.trim() || identifiant;
-      let utilisateurId: number;
-      if (utilisateurProvisionne) {
-        utilisateurId = utilisateurProvisionne.id;
-        await modifierUtilisateur(utilisateurId, { pin });
-      } else {
-        utilisateurId = await initialiserCompteAdministrateur({
-          login: identifiant,
-          nom: nomCompte,
-          pin: pin,
-          role: 'admin',
-        });
-      }
+      const compte = await finaliserConnexionMobile(droit, {
+        login: identifiant,
+        nom: nomCompte,
+        pin: pin,
+        role: 'admin',
+      });
       const parametresSynchronises = await lireParametres();
 
       await ecrireParametres({
@@ -280,10 +219,7 @@ export function EcranDemarrage() {
         [CLES_PARAMETRES.installation]: '1',
       });
 
-      await proposerBiometrieSysteme(utilisateurId);
-
-      const compte = await obtenirUtilisateurParId(utilisateurId);
-      if (!compte) throw new Error("Le profil local n'a pas pu etre relu apres creation du PIN.");
+      await proposerBiometrieSysteme(compte.id);
 
       await recharger();
       ouvrirSession(compte);
@@ -296,7 +232,7 @@ export function EcranDemarrage() {
       }
       setEnCours(false);
     }
-  }, [droit, login, nomAdmin, ouvrirSession, pin, recharger, utilisateurProvisionne, validerEtape]);
+  }, [droit, login, nomAdmin, ouvrirSession, pin, recharger, validerEtape]);
 
   const suivant = useCallback(() => {
     if (etape === 0) {
@@ -316,71 +252,6 @@ export function EcranDemarrage() {
     }
     if (vueDepart === 'formulaire') setVueDepart('accueil');
   }, [etape, vueDepart]);
-
-  const appliquerRetourSahelTech = useCallback(async (url: string) => {
-    if (!url.startsWith('sahelpos://sso')) return;
-    setEnCours(true);
-    setErreurGenerale(null);
-    try {
-      const retour = await traiterRetourSahelTech(url, 'Telephone principal');
-      if (retour.type === 'setup') {
-        setSetupSahelTech(retour.setup);
-        setUtilisateurProvisionne(null);
-        setMode('creation_sso');
-        setVueDepart('formulaire');
-        setEtape(0);
-        return;
-      }
-
-      const etat = retour.etat;
-      if (!etat.droit) throw new Error("Le serveur n'a pas renvoye l'espace SahelPOS.");
-      if (!etat.droit.peutEntrer) throw new Error(etat.droit.raison || "Cet espace n'est pas actif.");
-      await bootstrapInitial(etat.droit.boutique);
-      const membre = await obtenirUtilisateurParIdLocal(retour.membreIdLocal);
-      if (!membre) throw new Error("Le profil SahelTech n'a pas ete synchronise sur ce telephone.");
-
-      setDroit(etat.droit);
-      setUtilisateurProvisionne(membre);
-      setNomAdmin(membre.nom || membre.login);
-      setLogin(membre.login);
-      setPin('');
-      setPinConfirme('');
-      setVueDepart('formulaire');
-      setEtape(1);
-    } catch (erreur) {
-      setErreurGenerale(
-        erreur instanceof Error ? erreur.message : 'Connexion SahelTech impossible.',
-      );
-    } finally {
-      setEnCours(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    const abonnement = Linking.addEventListener('url', ({ url }) => {
-      void appliquerRetourSahelTech(url);
-    });
-    void Linking.getInitialURL().then((url) => {
-      if (url) void appliquerRetourSahelTech(url);
-    });
-    return () => abonnement.remove();
-  }, [appliquerRetourSahelTech]);
-
-  const continuerAvecGoogle = useCallback(async (invitation?: string) => {
-    setErreurGenerale(null);
-    await Linking.openURL(urlConnexionSahelTech(invitation));
-  }, []);
-
-  const traiterQr = useCallback((valeur: string) => {
-    const invitation = invitationDepuisQr(valeur);
-    if (!invitation) {
-      setScannerQr(false);
-      setErreurGenerale("Ce QR n'est pas une invitation SahelPOS valide.");
-      return;
-    }
-    setScannerQr(false);
-    void continuerAvecGoogle(invitation);
-  }, [continuerAvecGoogle]);
 
   const afficherFormulaire = useCallback((prochainMode: ModeConnexion) => {
     setMode(prochainMode);
@@ -408,6 +279,7 @@ export function EcranDemarrage() {
           </Text>
           <Text style={styles.heroTexte}>Gerez votre caisse, votre stock et vos ventes, ou que vous soyez.</Text>
 
+          <AccesAccounts />
           <View style={styles.fonctions}>
             <MiniFonction icone="boutique" titre="Vente" sousTitre="simple et rapide" fond="#dcfce7" couleur="#16a34a" />
             <MiniFonction icone="stock" titre="Stock" sousTitre="en temps reel" fond="#ffedd5" couleur="#f97316" />
@@ -421,21 +293,9 @@ export function EcranDemarrage() {
             <Text style={styles.noteManuscrite}>Mon commerce{'\n'}en main !</Text>
           </View>
 
-          <Pressable
-            style={styles.boutonPrimaire}
-            onPress={() => void continuerAvecGoogle()}
-            disabled={enCours}
-          >
-            <Text style={styles.boutonPrimaireTexte}>G  Continuer avec Google</Text>
+          <Pressable style={styles.boutonPrimaire} onPress={() => afficherFormulaire('connexion')}>
+            <Text style={styles.boutonPrimaireTexte}>Se connecter</Text>
             <Icone nom="chevron" taille={22} couleur={couleurs.texteInverse} />
-          </Pressable>
-          <Pressable style={styles.boutonBlanc} onPress={() => setScannerQr(true)}>
-            <Icone nom="codeBarres" taille={24} couleur={couleurs.texte} />
-            <Text style={styles.boutonBlancTexte}>Scanner un QR code</Text>
-          </Pressable>
-          <Pressable style={styles.boutonBlanc} onPress={() => afficherFormulaire('connexion')}>
-            <Icone nom="clients" taille={24} couleur={couleurs.texte} />
-            <Text style={styles.boutonBlancTexte}>Identifiant et mot de passe</Text>
           </Pressable>
           <Pressable style={styles.boutonBlanc} onPress={() => afficherFormulaire('creation')}>
             <Icone nom="boutique" taille={24} couleur={couleurs.texte} />
@@ -445,11 +305,6 @@ export function EcranDemarrage() {
             <Text style={styles.essai}>Essayer gratuitement pendant 14 jours</Text>
           </Pressable>
         </ScrollView>
-        <QrInvitationScanner
-          visible={scannerQr}
-          onClose={() => setScannerQr(false)}
-          onValue={traiterQr}
-        />
       </SafeAreaView>
     );
   }
@@ -502,7 +357,7 @@ export function EcranDemarrage() {
                     <View style={styles.trait} />
                   </View>
 
-                  <Pressable style={styles.googleBouton} onPress={() => void continuerAvecGoogle()}>
+                  <Pressable style={styles.googleBouton}>
                     <Text style={styles.googleG}>G</Text>
                     <Text style={styles.googleTexte}>Continuer avec Google</Text>
                   </Pressable>
@@ -521,15 +376,11 @@ export function EcranDemarrage() {
                 </View>
               ) : (
                 <View style={styles.creationCarte}>
-                  {mode === 'creation' ? <EtapesCreation /> : null}
+                  <EtapesCreation />
 
-                  <Text style={styles.creationTitre}>
-                    {mode === 'creation_sso' ? 'Votre commerce' : 'Votre entreprise'}
-                  </Text>
+                  <Text style={styles.creationTitre}>Votre entreprise</Text>
                   <Text style={styles.creationSousTitre}>
-                    {mode === 'creation_sso'
-                      ? 'Votre identité SahelTech est déjà créée. Il ne reste que les informations métier.'
-                      : 'Configurez votre espace de vente en quelques minutes.'}
+                    Configurez votre espace de vente en quelques minutes.
                   </Text>
 
                   <ChampMaquette icone="boutique" label="Nom de l'entreprise" valeur={nomBoutique} onChangeText={setNomBoutique} placeholder="Diarra Commerce" erreur={erreurs.nomBoutique} autoFocus />
@@ -543,17 +394,6 @@ export function EcranDemarrage() {
                       <ChampMaquette icone="argent" label="Devise" valeur={devise} onChangeText={setDevise} placeholder="FCFA" />
                     </View>
                   </View>
-
-                  {mode === 'creation_sso' ? (
-                    <ChampMaquette
-                      icone="reseau"
-                      label="Téléphone professionnel"
-                      valeur={telephone}
-                      onChangeText={setTelephone}
-                      placeholder="76 00 00 00"
-                      clavier="phone-pad"
-                    />
-                  ) : null}
 
                   <View style={styles.infoCreation}>
                     <View style={styles.infoPastille}>
@@ -579,10 +419,8 @@ export function EcranDemarrage() {
                   <ChoixCommerce titre="Approvisionnement" valeur={modeApprovisionnement} choix={MODES_APPROVISIONNEMENT} onChange={setModeApprovisionnement} />
                   <Text style={styles.pointVenteAide}>Catalogue simple sur mobile. Les variantes, lots, numeros de serie et fonctions avancees restent disponibles sur le Web uniquement.</Text>
 
-                  {mode === 'creation' ? (
-                    <>
-                      <View style={styles.creationSeparateur} />
-                      <Text style={styles.creationCompteTitre}>Compte administrateur</Text>
+                  <View style={styles.creationSeparateur} />
+                  <Text style={styles.creationCompteTitre}>Compte administrateur</Text>
                   <Text style={styles.creationCompteTexte}>
                     Ce compte servira a gerer l'entreprise, les points de vente et les vendeurs.
                   </Text>
@@ -592,8 +430,6 @@ export function EcranDemarrage() {
                   <ChampMaquette icone="document" label="Identifiant" valeur={login} onChangeText={setLogin} placeholder="fatoumata" erreur={erreurs.login} />
                   <ChampMaquette icone="caisse" label="Mot de passe" valeur={motDePasseWeb} onChangeText={setMotDePasseWeb} placeholder="Minimum 6 caracteres" secret erreur={erreurs.motDePasseWeb} />
                   <ChampMaquette icone="caisse" label="Confirmez le mot de passe" valeur={motDePasseWebConfirme} onChangeText={setMotDePasseWebConfirme} placeholder="Minimum 6 caracteres" secret erreur={erreurs.motDePasseWebConfirme} />
-                    </>
-                  ) : null}
 
                   <View style={styles.creationBasSecurise}>
                     <Icone nom="coche" taille={24} couleur={couleurs.primaire} />
@@ -603,17 +439,8 @@ export function EcranDemarrage() {
                     <Text style={styles.boutonPrimaireTexte}>{enCours ? 'Creation...' : 'Continuer'}</Text>
                     <Icone nom="chevron" taille={22} couleur={couleurs.texteInverse} />
                   </Pressable>
-                  <Pressable onPress={() => {
-                    setSetupSahelTech(null);
-                    afficherFormulaire('connexion');
-                  }}>
-                    {mode === 'creation_sso' ? (
-                      <Text style={styles.creerBas}>Changer de méthode</Text>
-                    ) : (
-                      <Text style={styles.creerBas}>
-                        Deja un compte ? <Text style={styles.creerBasLien}>Se connecter</Text>
-                      </Text>
-                    )}
+                  <Pressable onPress={() => afficherFormulaire('connexion')}>
+                    <Text style={styles.creerBas}>Deja un compte ? <Text style={styles.creerBasLien}>Se connecter</Text></Text>
                   </Pressable>
                 </View>
               )}
@@ -638,22 +465,8 @@ export function EcranDemarrage() {
                   <Text style={styles.infoCreationTexte}>{droit.commerce.raison}</Text>
                 </View>
               ) : null}
-              {utilisateurProvisionne ? (
-                <View style={styles.infoCreation}>
-                  <View style={styles.infoPastille}><Text style={styles.infoPastilleTexte}>✓</Text></View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.creationCompteTitre}>{utilisateurProvisionne.nom || utilisateurProvisionne.login}</Text>
-                    <Text style={styles.infoCreationTexte}>
-                      Profil {utilisateurProvisionne.role} synchronisé depuis SahelPOS. Définissez seulement le PIN de ce téléphone.
-                    </Text>
-                  </View>
-                </View>
-              ) : (
-                <>
-                  <Champ label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Aminata Diarra" autoFocus />
-                  <Champ label="Identifiant local" valeur={login} onChangeText={setLogin} placeholder="aminata" erreur={erreurs.login} />
-                </>
-              )}
+              <Champ label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Aminata Diarra" autoFocus />
+              <Champ label="Identifiant local" valeur={login} onChangeText={setLogin} placeholder="aminata" erreur={erreurs.login} />
               <Champ label={`Code d'acces (${LONGUEUR_PIN_MIN} a ${LONGUEUR_PIN_MAX} chiffres)`} valeur={pin} onChangeText={(valeur) => setPin(chiffresSeuls(valeur))} placeholder="0000" clavier="number-pad" secret erreur={erreurs.pin} />
               <Champ label="Confirmez le code" valeur={pinConfirme} onChangeText={(valeur) => setPinConfirme(chiffresSeuls(valeur))} placeholder="0000" clavier="number-pad" secret erreur={erreurs.pinConfirme} />
               {erreurGenerale ? <BandeauErreur message={erreurGenerale} /> : null}

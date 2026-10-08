@@ -21,6 +21,7 @@
  * PRO n'a donc pas besoin d'un nouveau code : son prochain rafraichissement
  * suffit.
  */
+import { writeAllowed } from '../../domain/accounts';
 import { executer, lireTout } from '../../db/repositories/base';
 import { Droit, LicenceInvalide, droitPerime, lireDroit } from './licence';
 import { ecritureCommerceAutorisee, type SecteurCommerce, type ModeVenteCommerce, type ModeApprovisionnementCommerce, type TypeEcritureCommerce } from '../../domain/commerce';
@@ -203,6 +204,7 @@ export function ecritureMobileAutorisee(
 ): boolean {
   return Boolean(
     etat.droit?.peutEcrire
+    && writeAllowed(etat.droit.membre?.role, type)
     && ecritureCommerceAutorisee(etat.droit.commerce, type),
   );
 }
@@ -281,9 +283,9 @@ export async function activer(code: string, libelle = ''): Promise<EtatAbonnemen
   const reponse = (await appeler('/api/public/activation/', {
     method: 'POST',
     body: JSON.stringify({ code: saisie, empreinte, libelle }),
-  })) as { licence?: string; jeton_appareil?: string; membre_id_local?: string };
+  })) as { licence?: string; jeton_appareil?: string };
 
-  if (!reponse.licence || !reponse.jeton_appareil || !reponse.membre_id_local) {
+  if (!reponse.licence || !reponse.jeton_appareil) {
     throw new Error("Le serveur n'a pas renvoye de droit d acces.");
   }
 
@@ -309,101 +311,6 @@ export interface InscriptionMobile {
   secteur?: SecteurCommerce;
   modeVente?: ModeVenteCommerce;
   modeApprovisionnement?: ModeApprovisionnementCommerce;
-}
-
-export function urlConnexionSahelTech(invitation?: string): string {
-  const parametres = new URLSearchParams({ native: '1' });
-  if (invitation) parametres.set('invitation', invitation);
-  return `${SERVEUR}/api/public/sso/start/?${parametres.toString()}`;
-}
-
-export function invitationDepuisQr(valeur: string): string | null {
-  try {
-    const url = new URL(valeur);
-    if (url.origin !== SERVEUR) return null;
-    const resultat = url.pathname.match(/^\/rejoindre\/([0-9a-f-]{36})\/?$/i);
-    return resultat?.[1] ?? null;
-  } catch {
-    return null;
-  }
-}
-
-export type RetourSahelTech =
-  | { type: 'active'; etat: EtatAbonnement; membreIdLocal: string }
-  | { type: 'setup'; setup: string };
-
-export async function traiterRetourSahelTech(
-  valeur: string,
-  libelle = 'Telephone principal',
-): Promise<RetourSahelTech> {
-  const url = new URL(valeur);
-  if (url.protocol !== 'sahelpos:' || url.hostname !== 'sso') {
-    throw new Error("Retour SahelTech invalide.");
-  }
-  const erreur = url.searchParams.get('error');
-  if (erreur === 'boutique-required') {
-    throw new Error(
-      "Ce compte SahelTech a plusieurs boutiques. Ouvrez l'espace voulu depuis SahelPOS Web ou scannez le QR de cette boutique.",
-    );
-  }
-  const setup = url.searchParams.get('setup') ?? '';
-  if (setup) return { type: 'setup', setup };
-
-  const code = url.searchParams.get('code') ?? '';
-  const membreIdLocal = url.searchParams.get('member') ?? '';
-  if (!code || !membreIdLocal) {
-    throw new Error("Le serveur n'a pas renvoye l'identite locale complete.");
-  }
-  return { type: 'active', etat: await activer(code, libelle), membreIdLocal };
-}
-
-export interface ConfigurationBoutiqueSahelTech {
-  nomBoutique: string;
-  telephone?: string;
-  devise?: string;
-  ville?: string;
-  secteur?: SecteurCommerce;
-  modeVente?: ModeVenteCommerce;
-  modeApprovisionnement?: ModeApprovisionnementCommerce;
-}
-
-export async function creerBoutiqueDepuisSahelTech(
-  setup: string,
-  saisie: ConfigurationBoutiqueSahelTech,
-  libelle = 'Telephone principal',
-): Promise<{ etat: EtatAbonnement; membreIdLocal: string }> {
-  if (await lireCle(CLE_BOUTIQUE_LOCALE)) {
-    throw new Error(MESSAGE_BOUTIQUE_DIFFERENTE);
-  }
-  const empreinte = await empreinteAppareil();
-  const reponse = (await appeler('/api/public/sso/native-setup/', {
-    method: 'POST',
-    body: JSON.stringify({
-      setup,
-      nom: saisie.nomBoutique,
-      telephone: saisie.telephone ?? '',
-      ville: saisie.ville ?? '',
-      secteur: saisie.secteur ?? 'COMMERCE_GENERAL',
-      mode_vente: saisie.modeVente ?? 'DETAIL',
-      mode_approvisionnement: saisie.modeApprovisionnement ?? 'CLASSIQUE',
-      mode_catalogue: 'SIMPLE',
-      devise: saisie.devise ?? 'FCFA',
-      empreinte,
-      libelle,
-    }),
-  })) as { licence?: string; jeton_appareil?: string };
-
-  if (!reponse.licence || !reponse.jeton_appareil) {
-    throw new Error("Le serveur n'a pas renvoye de droit d acces.");
-  }
-  await verifierBoutiqueLocale(lireDroit(reponse.licence));
-  await ecrireCle(CLE_LICENCE, reponse.licence);
-  await ecrireCle(CLE_APPAREIL, reponse.jeton_appareil);
-  await ecrireCle(CLE_DERNIER_CONTACT, new Date().toISOString());
-  return {
-    etat: await etatCourant(),
-    membreIdLocal: reponse.membre_id_local,
-  };
 }
 
 export async function connecterCompteMobile(
@@ -603,4 +510,15 @@ export async function exigerEcriture(type?: TypeEcritureCommerce): Promise<void>
       "Votre abonnement ne permet plus d enregistrer d operations. " +
         'Contactez SahelPOS.',
   );
+}
+
+/** Verify the signed identity and existing shop binding before touching local state. */
+export async function installerDroitAccounts(licence: string, device: string, memberId: string, boutiqueId: number): Promise<Droit> {
+  const droit = lireDroit(licence);
+  if (!droit.membre || droit.membre.id_local !== memberId || droit.boutique !== String(boutiqueId) || !droit.peutEntrer) throw new LicenceInvalide('Le droit signé ne correspond pas au profil choisi.');
+  await verifierBoutiqueLocale(droit);
+  await ecrireCle(CLE_LICENCE, licence);
+  await ecrireCle(CLE_APPAREIL, device);
+  await ecrireCle(CLE_DERNIER_CONTACT, new Date().toISOString());
+  return droit;
 }

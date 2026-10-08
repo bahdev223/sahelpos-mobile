@@ -11,6 +11,7 @@ function chargerAuth() {
   const mutationsSync = [];
   const compte = { id: 7, id_local: 'web-owner', login: 'patron', nom: 'Patron', role: 'admin', actif: 1 };
   const imports = {
+    './abonnement': { etatCourant: async () => ({ droit: null }) },
     'expo-crypto': {
       CryptoDigestAlgorithm: { SHA256: 'SHA256' },
       digestStringAsync: async (_algo, valeur) => `hash:${valeur}`,

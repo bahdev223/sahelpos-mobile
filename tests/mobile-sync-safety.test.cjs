@@ -201,3 +201,25 @@ test('a second product movement sharing a sale reference is not discarded', asyn
     global.fetch = precedent;
   }
 });
+
+test('membership changes and licence-refresh role promotion pull hidden history again while retaining the outbox', async () => {
+  const abonnement = { peutEcrire: true, droit: { boutique: 'boutique-A', membre: { id_local: 'member-a', role: 'vendeur' }, commerce: { ecritures_autorisees: [] } } };
+  const { synchroniser, parametres, mutations } = chargerSynchronisation({ jeton: 'device', abonnement });
+  parametres.set('sync.protocole', '6');
+  parametres.set('sync.cursor', 'legacy-cursor');
+  const previous = global.fetch, paths = [];
+  global.fetch = async (url) => {
+    paths.push(new URL(url).searchParams.get('cursor'));
+    return { ok: true, json: async () => ({ cursor: 'new-cursor' }) };
+  };
+  try {
+    await synchroniser(); // A formerly unscoped phone must fully fetch this seller's scope.
+    await synchroniser(); // Same member/role remains incremental.
+    abonnement.droit.membre.role = 'gerant';
+    await synchroniser(); // Unchanged old costs and purchases were invisible to the seller.
+    abonnement.droit.membre.id_local = 'member-b';
+    await synchroniser(); // A different member has a different visible sales history.
+    assert.deepEqual(paths, [null, 'new-cursor', null, null]);
+    assert.equal(mutations.some(({ sql }) => /DELETE FROM (sync_outbox|vente|utilisateur|produit)/i.test(sql)), false);
+  } finally { global.fetch = previous; }
+});
