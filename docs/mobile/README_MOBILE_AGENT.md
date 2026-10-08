@@ -474,3 +474,8 @@ Ce build incluait :
 - prix unitaire modifiable dans le dialogue d'ajout panier
 - headers achats/utilisateurs corriges
 - branding SahelPOS mobile
+
+<!-- saheltech-consolidation-2026-10-08 -->
+## Mise à jour des directives — 8 octobre 2026
+
+Lire les [directives actuelles de consolidation](../agents/CONSOLIDATION_2026-10-08.md) avant la reprise. Elles complètent ce guide sans retirer ses règles métier. Les versions, chemins locaux et résultats historiques doivent être rapprochés de la source actuelle et des artefacts distribués. Les commandes de build mentionnées dans un ancien guide ne constituent pas une autorisation de compiler ici avant stabilisation.
