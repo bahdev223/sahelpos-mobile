@@ -147,3 +147,12 @@ Le build APK/AAB ne doit être lancé qu'après ce gate.
 Les agents qui reprennent ce dépôt doivent lire les [directives de consolidation](docs/agents/CONSOLIDATION_2026-10-08.md) et `AGENTS.md` avant le travail. Le lot prioritaire couvre **SahelPOS, Fournea et École**, avec prospection visée le **9 octobre 2026**. Les directives précisent le travail, les guides à produire, les preuves de recette et la préparation du déplacement futur.
 
 Cette mise à jour concerne la documentation ; elle ne certifie pas le déploiement ni un binaire mobile.
+
+### Dossier de recette du 8 octobre
+
+- [État et versions vérifiées](docs/agents/ETAT_CONSOLIDATION.md)
+- [Prise en main](docs/agents/PRISE_EN_MAIN.md)
+- [Mobile et synchronisation](docs/agents/MOBILE_ET_SYNCHRONISATION.md)
+- [Recette et démonstration](docs/agents/RECETTE_ET_DEMONSTRATION.md)
+- [Fiche service](docs/agents/FICHE_SERVICE.md)
+- [Exploitation et déplacement futur](docs/agents/EXPLOITATION_ET_DEPLACEMENT.md)
