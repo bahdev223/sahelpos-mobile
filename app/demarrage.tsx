@@ -1,3 +1,4 @@
+import AccesAccounts from '../src/ui/AccesAccounts';
 /**
  * Premier demarrage mobile.
  *
@@ -22,7 +23,6 @@ import type { KeyboardTypeOptions, ReturnKeyTypeOptions } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { Utilisateur } from '../src/domain/types';
 import {
   SECTEURS_COMMERCE, MODES_VENTE, MODES_APPROVISIONNEMENT,
   type SecteurCommerce, type ModeVenteCommerce, type ModeApprovisionnementCommerce,
@@ -33,7 +33,7 @@ import {
   type Droit,
 } from '../src/services/abonnement';
 import {
-  initialiserCompteAdministrateur,
+  finaliserConnexionMobile,
   LONGUEUR_PIN_MAX,
   LONGUEUR_PIN_MIN,
 } from '../src/services/auth';
@@ -201,7 +201,7 @@ export function EcranDemarrage() {
     try {
       const identifiant = login.trim();
       const nomCompte = nomAdmin.trim() || identifiant;
-      const utilisateurId = await initialiserCompteAdministrateur({
+      const compte = await finaliserConnexionMobile(droit, {
         login: identifiant,
         nom: nomCompte,
         pin: pin,
@@ -219,18 +219,7 @@ export function EcranDemarrage() {
         [CLES_PARAMETRES.installation]: '1',
       });
 
-      await proposerBiometrieSysteme(utilisateurId);
-
-      const compte: Utilisateur = {
-        id: utilisateurId,
-        idLocal: '',
-        login: identifiant,
-        nom: nomCompte,
-        role: 'admin',
-        actif: true,
-        caisseOuvreA: null,
-        caisseFermeA: null,
-      };
+      await proposerBiometrieSysteme(compte.id);
 
       await recharger();
       ouvrirSession(compte);
@@ -290,6 +279,7 @@ export function EcranDemarrage() {
           </Text>
           <Text style={styles.heroTexte}>Gerez votre caisse, votre stock et vos ventes, ou que vous soyez.</Text>
 
+          <AccesAccounts />
           <View style={styles.fonctions}>
             <MiniFonction icone="boutique" titre="Vente" sousTitre="simple et rapide" fond="#dcfce7" couleur="#16a34a" />
             <MiniFonction icone="stock" titre="Stock" sousTitre="en temps reel" fond="#ffedd5" couleur="#f97316" />

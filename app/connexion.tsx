@@ -1,3 +1,4 @@
+import AccesAccounts from '../src/ui/AccesAccounts';
 /**
  * Connexion multi-profils.
  *
@@ -13,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   connecter,
   listerComptesConnexion,
+  obtenirUtilisateurParId,
+  verifierProfilAppareil,
   LONGUEUR_PIN_MAX,
   LONGUEUR_PIN_MIN,
   type CompteConnexion,
@@ -138,10 +141,13 @@ export function EcranConnexion() {
         setRefus('Saisissez le code PIN de ce profil.');
         return;
       }
+      const actuel = await obtenirUtilisateurParId(compte.id);
+      if (!actuel?.actif) throw new Error('Ce profil est inactif.');
+      await verifierProfilAppareil(actuel);
       await ecrireParametres({
         [CLES_PARAMETRES.dernierUtilisateur]: String(compte.id),
       }).catch(() => {});
-      ouvrirSession(compte);
+      ouvrirSession(actuel);
     } catch (erreur) {
       setRefus(
         erreur instanceof Error
@@ -228,6 +234,7 @@ export function EcranConnexion() {
   if (!comptes.length || !compte) {
     return (
       <SafeAreaView style={styles.ecran} edges={['top', 'bottom']}>
+        <AccesAccounts />
         <ListeVide
           titre="Aucun profil actif"
           message="Cet espace SahelPOS ne contient aucun compte local actif."
@@ -253,6 +260,7 @@ export function EcranConnexion() {
           <Text style={styles.nomBoutique} numberOfLines={1}>{boutique.nom}</Text>
         </View>
 
+        <AccesAccounts />
         <Text style={styles.profilsTitre}>Choisir un profil</Text>
         <ScrollView
           horizontal
