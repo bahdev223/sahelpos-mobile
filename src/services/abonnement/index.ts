@@ -21,6 +21,7 @@
  * PRO n'a donc pas besoin d'un nouveau code : son prochain rafraichissement
  * suffit.
  */
+import { writeAllowed } from '../../domain/accounts';
 import { executer, lireTout } from '../../db/repositories/base';
 import { Droit, LicenceInvalide, droitPerime, lireDroit } from './licence';
 import { ecritureCommerceAutorisee, type SecteurCommerce, type ModeVenteCommerce, type ModeApprovisionnementCommerce, type TypeEcritureCommerce } from '../../domain/commerce';
@@ -203,6 +204,7 @@ export function ecritureMobileAutorisee(
 ): boolean {
   return Boolean(
     etat.droit?.peutEcrire
+    && writeAllowed(etat.droit.membre?.role, type)
     && ecritureCommerceAutorisee(etat.droit.commerce, type),
   );
 }
@@ -508,4 +510,15 @@ export async function exigerEcriture(type?: TypeEcritureCommerce): Promise<void>
       "Votre abonnement ne permet plus d enregistrer d operations. " +
         'Contactez SahelPOS.',
   );
+}
+
+/** Verify the signed identity and existing shop binding before touching local state. */
+export async function installerDroitAccounts(licence: string, device: string, memberId: string, boutiqueId: number): Promise<Droit> {
+  const droit = lireDroit(licence);
+  if (!droit.membre || droit.membre.id_local !== memberId || droit.boutique !== String(boutiqueId) || !droit.peutEntrer) throw new LicenceInvalide('Le droit signé ne correspond pas au profil choisi.');
+  await verifierBoutiqueLocale(droit);
+  await ecrireCle(CLE_LICENCE, licence);
+  await ecrireCle(CLE_APPAREIL, device);
+  await ecrireCle(CLE_DERNIER_CONTACT, new Date().toISOString());
+  return droit;
 }

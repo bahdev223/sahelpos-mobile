@@ -21,6 +21,7 @@ import type { TypeEcritureCommerce } from '../domain/commerce';
 const SERVEUR = 'https://sahelpos.saheltech.tech';
 const DELAI_RESEAU = 20000;
 const CLE_CURSOR = 'sync.cursor';
+const CLE_PERIMETRE = 'sync.perimetre_membre';
 const CLE_BOUTIQUE = 'sync.boutique';
 const CLE_BOOTSTRAP = 'sync.bootstrap_effectue';
 const CLE_PROTOCOLE = 'sync.protocole';
@@ -198,6 +199,8 @@ interface MouvementSync {
 }
 
 interface LigneAchatSync {
+  /** Cumul reçu dans l'unité de la ligne (absent sur l'ancien protocole). */
+  quantite_recue?: number | string;
   serveur_id?: number | null;
   produit_id_local: string;
   variante_id_local?: string | null;
@@ -431,15 +434,32 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
   await ecrireParam(CLE_DERNIERE_TENTATIVE, maintenant());
   try {
     const abonnement = await rafraichir();
+    // Visibility changed: old hidden rows will never appear after an old cursor.
+    // Keep local rows and pending writes; replay only the remote read history.
+    const membre = abonnement.droit?.membre;
+    const perimetre = JSON.stringify([abonnement.droit?.boutique ?? await lireParam(CLE_BOUTIQUE), membre?.id_local ?? null, membre?.role ?? null]);
+    const precedent = await lireParam(CLE_PERIMETRE);
+    if (precedent !== perimetre) {
+      if (precedent || membre) await ecrireParam(CLE_CURSOR, '');
+      await ecrireParam(CLE_PERIMETRE, perimetre);
+    }
     // Un arret brutal peut laisser des lignes marquees SENDING. Sans accuse
     // local elles doivent etre rejouees; Django les deduplique par id_local.
     await executer("UPDATE sync_outbox SET statut = 'PENDING' WHERE statut = 'SENDING'");
     const pendingTous = await lireTout<LigneOutbox>(
       "SELECT type_objet, id_local, statut FROM sync_outbox WHERE statut IN ('PENDING', 'FAILED') ORDER BY date_creation, id",
     );
-    const pending = pendingTous.filter((item) =>
-      ecritureMobileAutorisee(abonnement, TYPE_ECRITURE_PAR_OBJET[item.type_objet]),
-    );
+    const pending: LigneOutbox[] = [];
+    for (const item of pendingTous) {
+      if (!ecritureMobileAutorisee(abonnement, TYPE_ECRITURE_PAR_OBJET[item.type_objet])) continue;
+      if (abonnement.droit?.membre && item.type_objet === 'vente') {
+        const sale = await lirePremier<{vendeur_id_local: string}>(
+          'SELECT u.id_local AS vendeur_id_local FROM vente v LEFT JOIN utilisateur u ON u.id = v.utilisateur_id WHERE v.id_local = ?', item.id_local,
+        );
+        if (sale?.vendeur_id_local !== abonnement.droit.membre.id_local) continue;
+      }
+      pending.push(item);
+    }
     const bloquees = pendingTous.length - pending.length;
     let pousses = 0;
     if (pending.length > 0) {
@@ -919,7 +939,7 @@ async function appliquerPull(pull: PullSync): Promise<number> {
       recus++;
     }
     for (const utilisateur of pull.utilisateurs ?? []) {
-      await appliquerUtilisateur(utilisateur);
+      await actualiserProfilAccounts(utilisateur);
       recus++;
     }
     for (const vente of pull.ventes ?? []) {
@@ -994,7 +1014,7 @@ async function appliquerReferentielVariantes(
   }
 }
 
-async function appliquerUtilisateur(u: UtilisateurSync): Promise<void> {
+export async function actualiserProfilAccounts(u: UtilisateurSync): Promise<void> {
   const role = u.role === 'patron' || u.role === 'admin'
     ? 'admin'
     : u.role === 'gerant' ? 'gerant' : 'vendeur';

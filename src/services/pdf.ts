@@ -171,7 +171,8 @@ function page(corps: string): string {
 
 export interface DonneesBonCommande {
   achat: AchatResume;
-  lignes: LigneAchat[];
+  // Une liste à commander n'a pas encore d'identité SQLite ni de réception.
+  lignes: Array<Pick<LigneAchat, 'libelle' | 'unite' | 'quantite' | 'prixUnitaire' | 'total'>>;
   fournisseur: Fournisseur | null;
   parametres: Parametres;
 }
@@ -347,6 +348,8 @@ export function factureVenteHtml(d: DonneesFactureVente): string {
 export interface ArticleCatalogue {
   nom: string;
   categorie: string | null;
+  marque?: string | null;
+  referenceFabricant?: string | null;
   codeBarre: string | null;
   uniteBase: string;
   quantiteBase: number;
@@ -357,6 +360,8 @@ export interface ArticleCatalogue {
 export interface DonneesCatalogue {
   produits: ArticleCatalogue[];
   parametres: Parametres;
+  libelleProduit?: string;
+  libelleProduits?: string;
   /** Ce qui etait filtre a l'ecran, rappele sur le document. */
   filtre?: string;
 }
@@ -369,6 +374,8 @@ export interface DonneesCatalogue {
  */
 export function catalogueHtml(d: DonneesCatalogue): string {
   const devise = d.parametres.devise;
+  const produitSingulier = d.libelleProduit || 'Produit';
+  const produitsPluriel = d.libelleProduits || 'Produits';
 
   // Regroupe par rayon : un catalogue a plat ne se lit pas au-dela de vingt
   // lignes, alors qu'une boutique en a couramment deux cents.
@@ -387,7 +394,12 @@ export function catalogueHtml(d: DonneesCatalogue): string {
           const rangs = (parCategorie.get(cat) ?? [])
             .map(
               (p) => `<tr>
-                <td>${echapper(p.nom)}</td>
+                <td>
+                  ${echapper(p.nom)}
+                  ${(p.marque || p.referenceFabricant)
+                    ? `<div style="font-size:9px;color:#64748b">${echapper([p.marque, p.referenceFabricant].filter(Boolean).join(' · '))}</div>`
+                    : ''}
+                </td>
                 <td>${echapper(p.codeBarre)}</td>
                 <td>${echapper(p.uniteBase)}</td>
                 <td class="num">${p.gestionStock ? quantite(p.quantiteBase) : '-'}</td>
@@ -400,19 +412,19 @@ export function catalogueHtml(d: DonneesCatalogue): string {
                   </td></tr>${rangs}`;
         })
         .join('')
-    : `<tr><td colspan="5" class="vide">Aucun produit a lister.</td></tr>`;
+    : `<tr><td colspan="5" class="vide">Aucun ${echapper(produitSingulier.toLowerCase())} à lister.</td></tr>`;
 
   const corps = `
     ${enteteHtml(
       d.parametres,
-      'CATALOGUE DES PRODUITS',
-      `${d.produits.length} produit(s)${d.filtre ? ` - ${d.filtre}` : ''}`,
+      `CATALOGUE DES ${produitsPluriel.toUpperCase()}`,
+      `${d.produits.length} ${produitsPluriel.toLowerCase()}${d.filtre ? ` - ${d.filtre}` : ''}`,
     )}
 
     <table>
       <thead>
         <tr>
-          <th>Produit</th><th>Code-barres</th><th>Unite</th>
+          <th>${echapper(produitSingulier)}</th><th>Code-barres</th><th>Unite</th>
           <th class="num">Stock</th><th class="num">Prix de vente</th>
         </tr>
       </thead>

@@ -21,9 +21,12 @@ import { C, formaterFrancs, formaterQuantite, s } from '../produit/nouveau';
 import { BandeauEtat, couleurs, Vignette } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { ActionsDocument } from '../../src/ui/ActionsDocument';
-import { bonDeCommandeHtml } from '../../src/services/pdf';
+import { bonDeCommandeHtml, type DonneesBonCommande } from '../../src/services/pdf';
 import { lireParametres } from '../../src/services/parametres';
-import type { AchatResume, LigneAchat } from '../../src/services/achat';
+import type { AchatResume } from '../../src/services/achat';
+import { useSession } from '../_layout';
+import { estReferenceTechnique } from '../../src/domain/presentation-commerce';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
 
 interface LigneCommande {
   produit: ProduitStock;
@@ -32,6 +35,9 @@ interface LigneCommande {
 
 export default function ListeCommande() {
   const router = useRouter();
+  const { profilCommerce } = useSession();
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
+  const referenceTechnique = estReferenceTechnique(profilCommerce);
   const [lignes, setLignes] = useState<LigneCommande[]>([]);
   const [chargement, setChargement] = useState(true);
   const [rafraichissement, setRafraichissement] = useState(false);
@@ -90,7 +96,7 @@ export default function ListeCommande() {
       dateAchat: new Date().toISOString(), total, montantPaye: 0,
       statut: 'BROUILLON', dateReception: null,
     };
-    const articles: LigneAchat[] = lignes.map((ligne) => ({
+    const articles: DonneesBonCommande['lignes'] = lignes.map((ligne) => ({
       produitId: ligne.produit.id, libelle: ligne.produit.nom, unite: ligne.produit.unite_base,
       facteur: 1, quantite: ligne.quantite, quantiteBase: ligne.quantite,
       prixUnitaire: ligne.produit.prix_achat, total: ligne.quantite * ligne.produit.prix_achat,
@@ -99,9 +105,20 @@ export default function ListeCommande() {
   }, [lignes, total]);
 
   const ouvrirNouvelAchat = useCallback(() => {
+    if (referenceTechnique) {
+      Alert.alert(
+        'Approvisionnement technique',
+        'Choisissez chaque référence puis sa variante exacte dans l’approvisionnement. La liste de réassort reste une aide de planification et ne doit pas créer une entrée de stock agrégée.',
+        [
+          { text: 'Continuer', onPress: () => router.push('/achats/nouveau') },
+          { text: 'Annuler', style: 'cancel' },
+        ],
+      );
+      return;
+    }
     const produits = lignes.map(({ produit, quantite }) => ({ produitId: produit.id, quantite }));
     router.push({ pathname: '/achats/nouveau', params: { commande: JSON.stringify(produits) } });
-  }, [lignes, router]);
+  }, [lignes, referenceTechnique, router]);
 
   return (
     <View style={s.plein}>
@@ -110,7 +127,7 @@ export default function ListeCommande() {
         <Pressable onPress={() => router.back()} style={s.retour} hitSlop={8}>
           <Icone nom="retour" taille={20} couleur={couleurs.primaire} />
         </Pressable>
-        <Text style={s.titre} numberOfLines={1}>Liste a commander</Text>
+        <Text style={s.titre} numberOfLines={1}>Liste à commander</Text>
         <Pressable style={sl.menu} onPress={() => Alert.alert('Liste a commander', 'La liste est calculee depuis les alertes de stock.') }>
           <Text style={sl.menuTexte}>...</Text>
         </Pressable>
@@ -134,13 +151,13 @@ export default function ListeCommande() {
                   <Icone nom="achats" taille={28} couleur={C.accent} />
                 </View>
                 <View style={sl.introTextes}>
-                  <Text style={sl.introTitre}>Produits a commander</Text>
+                  <Text style={sl.introTitre}>{profilUI.libelles.produits} à commander</Text>
                   <Text style={sl.introAide}>Preparez votre prochaine commande fournisseur.</Text>
                 </View>
               </View>
               <View style={sl.stats}>
                 <View style={sl.stat}>
-                  <Text style={sl.statLabel}>Nombre de produits</Text>
+                  <Text style={sl.statLabel}>Nombre de {profilUI.libelles.produits.toLocaleLowerCase('fr')}</Text>
                   <Text style={sl.statValue}>{lignes.length}</Text>
                 </View>
                 <View style={sl.stat}>
@@ -149,7 +166,7 @@ export default function ListeCommande() {
                 </View>
               </View>
               <View style={sl.colonnes}>
-                <Text style={sl.colonneProduit}>Produit</Text>
+                <Text style={sl.colonneProduit}>{profilUI.libelles.produit}</Text>
                 <Text style={sl.colonneQuantite}>Qte</Text>
                 <Text style={sl.colonnePrix}>Sous-total</Text>
               </View>
@@ -158,7 +175,7 @@ export default function ListeCommande() {
           ListEmptyComponent={
             <View style={sl.vide}>
               <Icone nom="coche" taille={32} couleur={C.vert} />
-              <Text style={sl.videTitre}>Aucun produit a commander</Text>
+              <Text style={sl.videTitre}>Aucun {profilUI.libelles.produit.toLocaleLowerCase('fr')} à commander</Text>
               <Text style={sl.centreTexte}>Tous les stocks sont au-dessus de leur seuil.</Text>
             </View>
           }
@@ -212,7 +229,7 @@ export default function ListeCommande() {
         <View style={sl.actionDocument}><ActionsDocument preparer={preparerPdf} desactive={!lignes.length} /></View>
         <Pressable style={sl.actionPrincipale} onPress={ouvrirNouvelAchat} disabled={!lignes.length}>
           <Icone nom="achats" taille={19} couleur="#FFFFFF" />
-          <Text style={sl.actionPrincipalTexte}>Creer l&apos;achat</Text>
+          <Text style={sl.actionPrincipalTexte}>{referenceTechnique ? 'Créer l’appro.' : 'Créer l’achat'}</Text>
         </Pressable>
       </View>
     </View>

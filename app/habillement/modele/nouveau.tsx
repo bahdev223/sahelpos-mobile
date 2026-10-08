@@ -134,6 +134,9 @@ export default function NouveauModeleHabillement() {
           saisieInitiale={{
             nom: '',
             categorie: '',
+            marque: '',
+            referenceFabricant: '',
+            prixGros: '',
             codeBarre: '',
             prixAchat: '',
             prixUnitaire: '',

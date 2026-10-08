@@ -21,11 +21,11 @@ const contrat = {
   compatible: true, raison: '',
 };
 
-test('mobile exposes the nine actual server commerce sectors', () => {
+test('mobile exposes the eleven actual server commerce sectors', () => {
   const { SECTEURS_COMMERCE } = charger();
   assert.deepEqual(SECTEURS_COMMERCE.map(s => s.code), [
-    'ALIMENTATION', 'HABILLEMENT', 'FRIPERIE', 'ELECTRONIQUE', 'QUINCAILLERIE',
-    'COSMETIQUE', 'PIECES_DETACHEES', 'COMMERCE_GENERAL', 'AUTRE',
+    'ALIMENTATION', 'HABILLEMENT', 'FRIPERIE', 'ELECTRONIQUE', 'ELECTRICITE', 'QUINCAILLERIE',
+    'COSMETIQUE', 'PIECES_DETACHEES', 'CEREALES_VRAC', 'COMMERCE_GENERAL', 'AUTRE',
   ]);
 });
 

@@ -21,6 +21,9 @@ function chargerVente() {
   const imports = {
     '../db/database': { obtenirBase: async () => db },
     '../db/repositories/base': { genererIdLocal: () => 'vente-1' },
+    '../db/repositories/variante': {
+      libelleVariante: (variante) => variante?.sku || 'Variante',
+    },
     './abonnement': { exigerEcriture: async () => {} },
     './auth': { verifierAccesCaisse: async () => {} },
     './notifications': { verifierStock: async () => {} },

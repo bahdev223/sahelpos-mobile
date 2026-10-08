@@ -33,6 +33,8 @@ import { BandeauEtat, BARRE_HORIZONTALE, couleurs } from '../../src/ui/component
 import { Icone } from '../../src/ui/icones';
 import { BoutonMenu } from '../../src/ui/tiroir';
 import { useSession } from '../_layout';
+import { estReferenceTechnique, routeReferenceTechnique } from '../../src/domain/presentation-commerce';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
 import { CatalogueHabillement } from '../../src/profile-ui/habillement/CatalogueHabillement';
 
 // --------------------------------------------------------------------------
@@ -126,7 +128,8 @@ export default function Catalogue() {
 function CatalogueStandard() {
   const router = useRouter();
   const { revisionSynchronisation, synchroniserMaintenant, profilCommerce } = useSession();
-  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
+  const referenceTechnique = estReferenceTechnique(profilCommerce);
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [recherche, setRecherche] = useState('');
   const [categorie, setCategorie] = useState<string | null>(null);
@@ -210,10 +213,14 @@ function CatalogueStandard() {
       const parametres = await lireParametres();
       const html = catalogueHtml({
         parametres,
+        libelleProduit: profilUI.libelles.produit,
+        libelleProduits: profilUI.libelles.produits,
         filtre: categorie ?? (recherche.trim() ? `Recherche : ${recherche.trim()}` : undefined),
         produits: filtres.map((p) => ({
           nom: p.nom,
           categorie: p.categorie,
+          marque: p.marque,
+          referenceFabricant: p.reference_fabricant,
           codeBarre: p.code_barre,
           uniteBase: p.unite_base,
           quantiteBase: p.quantite_base,
@@ -223,8 +230,8 @@ function CatalogueStandard() {
       });
       const partage = await genererEtPartager(
         html,
-        'Catalogue-produits',
-        'Envoyer le catalogue',
+        referenceTechnique ? 'Catalogue-references' : 'Catalogue-produits',
+        referenceTechnique ? 'Envoyer le catalogue des références' : 'Envoyer le catalogue',
       );
       if (!partage) {
         Alert.alert(
@@ -240,7 +247,7 @@ function CatalogueStandard() {
     } finally {
       setExportEnCours(false);
     }
-  }, [categorie, filtres, recherche]);
+  }, [categorie, filtres, profilUI.libelles.produit, profilUI.libelles.produits, recherche, referenceTechnique]);
 
   const nbInactifs = useMemo(() => produits.filter((p) => p.actif === 0).length, [produits]);
 
@@ -249,7 +256,7 @@ function CatalogueStandard() {
       <BandeauEtat />
       <View style={sl.entete}>
         <BoutonMenu />
-        <Text style={sl.titreEcran}>Catalogue</Text>
+        <Text style={sl.titreEcran}>{profilUI.libelles.catalogue}</Text>
         <View style={sl.enteteActions}>
           <Pressable
             style={sl.actionEntete}
@@ -286,7 +293,7 @@ function CatalogueStandard() {
             style={s.saisie}
             value={recherche}
             onChangeText={setRecherche}
-            placeholder={quincaillerie ? "Nom, marque, référence ou code-barres" : "Nom, categorie ou code-barres"}
+            placeholder={referenceTechnique ? "Nom, marque, référence ou code-barres" : "Nom, categorie ou code-barres"}
             placeholderTextColor={C.texteFaible}
             autoCapitalize="none"
             autoCorrect={false}
@@ -399,9 +406,7 @@ function CatalogueStandard() {
             <CarteProduit
               produit={item}
               onPress={() =>
-                router.push(quincaillerie
-                  ? { pathname: '/quincaillerie/reference/[id]', params: { id: String(item.id) } }
-                  : { pathname: '/produit/[id]', params: { id: String(item.id) } })
+                router.push(routeReferenceTechnique(profilCommerce, item.id))
               }
             />
           )}

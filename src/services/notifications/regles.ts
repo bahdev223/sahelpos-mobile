@@ -33,9 +33,24 @@ interface LigneStock {
   unite_base: string;
 }
 
+interface LigneVarianteStock {
+  id: number;
+  produit_id: number;
+  produit_nom: string;
+  sku: string;
+  libelle: string | null;
+  stock_actuel: number;
+  stock_min: number;
+  unite_base: string;
+}
+
 /** `rupture:produit:42` — l'evenement, pas l'instant ou on l'a vu. */
 function cleRupture(produitId: number): string {
   return `rupture:produit:${produitId}`;
+}
+
+function cleRuptureVariante(varianteId: number): string {
+  return `rupture:variante:${varianteId}`;
 }
 
 const CLE_SEUIL_GROUPE = 'seuil:groupe';
@@ -61,78 +76,158 @@ function quantiteLisible(valeur: number): string {
 export async function evaluerStock(produitsTouches?: number[]): Promise<number> {
   let neuves = 0;
 
-  // --- ruptures franches, produit par produit ------------------------------
-  const cible = produitsTouches?.length
-    ? `AND id IN (${produitsTouches.map(() => '?').join(',')})`
+  const filtreProduits = produitsTouches?.length
+    ? `AND p.id IN (${produitsTouches.map(() => '?').join(',')})`
     : '';
   const params = produitsTouches?.length ? produitsTouches : [];
 
-  const suivis = await lireTout<LigneStock>(
-    `SELECT id, nom, quantite_base, stock_min, unite_base
-       FROM produit
-      WHERE actif = 1 AND gestion_stock = 1 ${cible}`,
+  // Une référence possédant des variantes actives est surveillée variante par
+  // variante. Son total agrégé ne doit jamais masquer une rupture locale.
+  const variantes = await lireTout<LigneVarianteStock>(
+    `SELECT vp.id, vp.produit_id, p.nom AS produit_nom, vp.sku,
+            vp.stock_actuel, p.stock_min, p.unite_base,
+            (SELECT GROUP_CONCAT(valeur_nom, ' / ') FROM (
+              SELECT valeur_nom
+                FROM variante_valeur
+               WHERE variante_id = vp.id
+               ORDER BY dimension_ordre, valeur_ordre, valeur_nom
+            )) AS libelle
+       FROM variante_produit vp
+       JOIN produit p ON p.id = vp.produit_id
+      WHERE vp.actif = 1 AND p.actif = 1 AND p.gestion_stock = 1 ${filtreProduits}
+      ORDER BY p.nom, vp.sku`,
     ...params,
   );
+  const produitsAvecVariantes = new Set(variantes.map((v) => v.produit_id));
 
-  for (const p of suivis) {
+  // Produits simples uniquement. Les modèles à variantes sont traités au-dessus.
+  const simplesTous = await lireTout<LigneStock>(
+    `SELECT id, nom, quantite_base, stock_min, unite_base
+       FROM produit p
+      WHERE actif = 1 AND gestion_stock = 1 ${filtreProduits}`,
+    ...params,
+  );
+  const simples = simplesTous.filter((p) => !produitsAvecVariantes.has(p.id));
+
+  // Ruptures franches : une notification par produit simple ou variante.
+  for (const p of simples) {
     if (p.quantite_base <= 0) {
       const nouveau = await deposer({
         cle: cleRupture(p.id),
         genre: 'rupture',
         gravite: 'urgent',
-        titre: `${p.nom} est epuise`,
-        corps: "Il n'en reste plus en stock. Pensez a le commander.",
+        titre: `${p.nom} est épuisé`,
+        corps: "Il n'en reste plus en stock. Pensez à le réapprovisionner.",
         chemin: '/stock/alertes',
         produitId: p.id,
       });
       if (nouveau) neuves += 1;
     } else {
-      // Reapprovisionne : garder « epuise » alors que le produit est revenu
-      // ferait douter de toutes les autres notifications.
       await retirer(cleRupture(p.id));
     }
   }
 
-  // --- stock bas, regroupe -------------------------------------------------
-  //
-  // Toujours calcule sur la boutique entiere, meme quand un seul produit a
-  // bouge : le message annonce un TOTAL, il serait faux s'il ne comptait que
-  // les produits scannes a l'instant.
-  const bas = await lireTout<LigneStock>(
+  for (const v of variantes) {
+    // Nettoie une ancienne alerte agrégée éventuelle après migration vers les
+    // variantes, sinon le commerçant verrait deux vérités contradictoires.
+    await retirer(cleRupture(v.produit_id));
+    const nomVariante = v.libelle || v.sku;
+    if (v.stock_actuel <= 0) {
+      const nouveau = await deposer({
+        cle: cleRuptureVariante(v.id),
+        genre: 'rupture',
+        gravite: 'urgent',
+        titre: `${v.produit_nom} — ${nomVariante} est épuisé`,
+        corps: `La variante ${v.sku} est à zéro. Réapprovisionnez cette combinaison exacte.`,
+        chemin: '/stock/alertes',
+        produitId: v.produit_id,
+      });
+      if (nouveau) neuves += 1;
+    } else {
+      await retirer(cleRuptureVariante(v.id));
+    }
+  }
+
+  // Stock bas groupé sur toute la boutique : produits simples + variantes.
+  const simplesBoutique = await lireTout<LigneStock>(
     `SELECT id, nom, quantite_base, stock_min, unite_base
        FROM produit
-      WHERE actif = 1 AND gestion_stock = 1
-        AND quantite_base > 0
+      WHERE actif = 1 AND gestion_stock = 1 AND quantite_base > 0
       ORDER BY nom`,
   );
-  const produitsBas = bas
-    .filter((p) => p.quantite_base <= seuilAlerteStock(p.stock_min))
-    .sort(
-      (a, b) =>
-        a.quantite_base / seuilAlerteStock(a.stock_min) -
-          b.quantite_base / seuilAlerteStock(b.stock_min) ||
-        a.nom.localeCompare(b.nom, 'fr'),
-    );
+  const idsVariantesBoutique = new Set(
+    (await lireTout<{ produit_id: number }>(
+      `SELECT DISTINCT produit_id FROM variante_produit WHERE actif = 1`,
+    )).map((v) => v.produit_id),
+  );
 
-  if (produitsBas.length === 0) {
+  const articlesBas: Array<{
+    nom: string;
+    quantite: number;
+    stockMin: number;
+    unite: string;
+  }> = simplesBoutique
+    .filter((p) => !idsVariantesBoutique.has(p.id))
+    .filter((p) => p.quantite_base <= seuilAlerteStock(p.stock_min))
+    .map((p) => ({
+      nom: p.nom,
+      quantite: p.quantite_base,
+      stockMin: p.stock_min,
+      unite: p.unite_base,
+    }));
+
+  const variantesBoutique = produitsTouches?.length
+    ? await lireTout<LigneVarianteStock>(
+        `SELECT vp.id, vp.produit_id, p.nom AS produit_nom, vp.sku,
+                vp.stock_actuel, p.stock_min, p.unite_base,
+                (SELECT GROUP_CONCAT(valeur_nom, ' / ') FROM (
+                  SELECT valeur_nom FROM variante_valeur
+                  WHERE variante_id = vp.id
+                  ORDER BY dimension_ordre, valeur_ordre, valeur_nom
+                )) AS libelle
+           FROM variante_produit vp JOIN produit p ON p.id = vp.produit_id
+          WHERE vp.actif = 1 AND p.actif = 1 AND p.gestion_stock = 1
+          ORDER BY p.nom, vp.sku`,
+      )
+    : variantes;
+
+  for (const v of variantesBoutique) {
+    if (v.stock_actuel > 0 && v.stock_actuel <= seuilAlerteStock(v.stock_min)) {
+      articlesBas.push({
+        nom: `${v.produit_nom} — ${v.libelle || v.sku}`,
+        quantite: v.stock_actuel,
+        stockMin: v.stock_min,
+        unite: v.unite_base,
+      });
+    }
+  }
+
+  articlesBas.sort(
+    (a, b) =>
+      a.quantite / seuilAlerteStock(a.stockMin)
+      - b.quantite / seuilAlerteStock(b.stockMin)
+      || a.nom.localeCompare(b.nom, 'fr'),
+  );
+
+  if (articlesBas.length === 0) {
     await retirer(CLE_SEUIL_GROUPE);
     return neuves;
   }
 
-  const exemples = produitsBas
+  const exemples = articlesBas
     .slice(0, 3)
-    .map((p) => `${p.nom} (${quantiteLisible(p.quantite_base)} ${p.unite_base})`)
+    .map((p) => `${p.nom} (${quantiteLisible(p.quantite)} ${p.unite})`)
     .join(', ');
-  const reste = produitsBas.length > 3 ? ` et ${produitsBas.length - 3} autre(s)` : '';
+  const reste = articlesBas.length > 3 ? ` et ${articlesBas.length - 3} autre(s)` : '';
 
   const nouveau = await deposer({
     cle: CLE_SEUIL_GROUPE,
     genre: 'seuil_groupe',
     gravite: 'attention',
     titre:
-      produitsBas.length === 1
-        ? '1 produit est sous son seuil'
-        : `${produitsBas.length} produits sont sous leur seuil`,
+      articlesBas.length === 1
+        ? '1 article est sous son seuil'
+        : `${articlesBas.length} articles sont sous leur seuil`,
     corps: `${exemples}${reste}.`,
     chemin: '/stock/alertes',
   });

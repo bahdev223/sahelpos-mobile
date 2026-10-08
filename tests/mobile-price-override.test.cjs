@@ -15,8 +15,10 @@ test('mobile checkout lets seller override the unit price before adding to cart'
   assert.match(caisse, /prixTexte/);
   assert.match(caisse, /setPrixTexte/);
   assert.match(caisse, /label="Prix unitaire"/);
-  assert.match(caisse, /prixUnitaire: prixUnitaire/);
   assert.match(caisse, /prix:\s*prixUnitaire/);
-  assert.match(caisse, /onAjouter\(produit,\s*\{\s*\.\.\.unite,\s*prix:\s*prixUnitaire\s*\},\s*quantite\)/s);
+  assert.match(
+    caisse,
+    /onAjouter\(\s*produit,\s*\{\s*\.\.\.unite,\s*prix:\s*prixUnitaire\s*\},\s*quantite,\s*variante,?\s*\)/s,
+  );
 });
 

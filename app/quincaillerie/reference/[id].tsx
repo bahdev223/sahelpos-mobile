@@ -3,6 +3,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useSession } from '../../_layout';
+import {
+  libelleCaracteristiquesTechniques,
+  libelleReferenceTechnique,
+  tarifGrosDisponible,
+} from '../../../src/domain/presentation-commerce';
 import { obtenirBase } from '../../../src/db/database';
 import {
   genererMatriceVariantesLocale,
@@ -70,7 +75,8 @@ export default function FicheReferenceQuincaillerie() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const identifiant = Number(id);
-  const { boutique, synchroniserMaintenant } = useSession();
+  const { boutique, profilCommerce, synchroniserMaintenant } = useSession();
+  const grosAutorise = tarifGrosDisponible(profilCommerce);
   const [fiche, setFiche] = useState<FicheReference | null>(null);
   const [etat, setEtat] = useState<'chargement'|'pret'|'absent'|'erreur'>('chargement');
   const [message, setMessage] = useState('');
@@ -130,7 +136,7 @@ export default function FicheReferenceQuincaillerie() {
     <BandeauEtat/>
     <View style={s.entete}>
       <Pressable style={s.icone} onPress={() => router.back()} accessibilityLabel="Retour"><Icone nom="retour" taille={22} couleur={couleurs.texte}/></Pressable>
-      <View style={s.flex}><Text style={s.titre} numberOfLines={1}>{p.nom}</Text><Text style={s.muted}>Référence Quincaillerie</Text></View>
+      <View style={s.flex}><Text style={s.titre} numberOfLines={1}>{p.nom}</Text><Text style={s.muted}>{libelleReferenceTechnique(profilCommerce)}</Text></View>
       <Pressable style={s.icone} onPress={() => router.push({pathname:'/produit/modifier/[id]',params:{id:String(p.id)}})} accessibilityLabel="Modifier la référence"><Icone nom="crayon" taille={21} couleur={couleurs.primaire}/></Pressable>
     </View>
 
@@ -150,7 +156,7 @@ export default function FicheReferenceQuincaillerie() {
 
       <View style={s.stats}>
         <Stat label="Prix détail" value={formaterMontant(p.prix_unitaire,boutique.devise)}/>
-        <Stat label="Prix gros" value={p.prix_gros > 0 ? formaterMontant(p.prix_gros,boutique.devise) : 'Non défini'}/>
+        {grosAutorise ? <Stat label="Prix gros" value={p.prix_gros > 0 ? formaterMontant(p.prix_gros,boutique.devise) : 'Non défini'}/> : null}
         <Stat label="Stock" value={p.gestion_stock ? `${formaterQuantite(stock)} ${p.unite_base}` : 'Non suivi'}/>
       </View>
 
@@ -161,11 +167,11 @@ export default function FicheReferenceQuincaillerie() {
 
       <View style={s.carte}>
         <Text style={s.sectionTitre}>Unités & conditionnements</Text>
-        <View style={s.ligne}><Text style={s.ligneLabel}>{p.unite_base}</Text><View style={s.prixBloc}><Text style={s.ligneValeur}>Détail {formaterMontant(p.prix_unitaire,boutique.devise)}</Text>{p.prix_gros > 0 ? <Text style={s.muted}>Gros {formaterMontant(p.prix_gros,boutique.devise)}</Text> : null}</View></View>
+        <View style={s.ligne}><Text style={s.ligneLabel}>{p.unite_base}</Text><View style={s.prixBloc}><Text style={s.ligneValeur}>Détail {formaterMontant(p.prix_unitaire,boutique.devise)}</Text>{grosAutorise && p.prix_gros > 0 ? <Text style={s.muted}>Gros {formaterMontant(p.prix_gros,boutique.devise)}</Text> : null}</View></View>
         {fiche.conditionnements.map((su) => {
           const detail = prixConditionnement(p.prix_unitaire, su.prix, su.facteur);
           const gros = prixGrosConditionnement(p.prix_gros, su.prix_gros, su.facteur);
-          return <View key={su.nom} style={s.ligne}><View style={s.flex}><Text style={s.ligneLabel}>{su.nom}</Text><Text style={s.muted}>1 {su.nom} = {formaterQuantite(su.facteur)} {p.unite_base}</Text></View><View style={s.prixBloc}><Text style={s.ligneValeur}>Détail {formaterMontant(detail,boutique.devise)}</Text>{gros > 0 ? <Text style={s.muted}>Gros {formaterMontant(gros,boutique.devise)}</Text> : null}</View></View>;
+          return <View key={su.nom} style={s.ligne}><View style={s.flex}><Text style={s.ligneLabel}>{su.nom}</Text><Text style={s.muted}>1 {su.nom} = {formaterQuantite(su.facteur)} {p.unite_base}</Text></View><View style={s.prixBloc}><Text style={s.ligneValeur}>Détail {formaterMontant(detail,boutique.devise)}</Text>{grosAutorise && gros > 0 ? <Text style={s.muted}>Gros {formaterMontant(gros,boutique.devise)}</Text> : null}</View></View>;
         })}
       </View>
 
@@ -186,8 +192,7 @@ export default function FicheReferenceQuincaillerie() {
 
       <View style={s.carte}>
         <Action label="Modifier la référence" detail="Marque, prix, unités et conditionnements" icon="crayon" onPress={() => router.push({pathname:'/produit/modifier/[id]',params:{id:String(p.id)}})}/>
-        <Action label="Gérer les caractéristiques" detail="Diamètre, section, capacité, tension, couleur…" icon="etiquette" onPress={() => router.push({pathname:'/quincaillerie/caracteristiques/[id]',params:{id:String(p.id)}})}/>
-        <Action label="Ajouter des caractéristiques" detail="Diamètre, section, capacité, tension, couleur…" icon="etiquette" onPress={() => setMatriceOuverte(true)}/>
+        <Action label="Gérer les caractéristiques" detail={libelleCaracteristiquesTechniques(profilCommerce)} icon="etiquette" onPress={() => setMatriceOuverte(true)}/>
         <Action label="Mouvements de stock" detail="Entrées, sorties et corrections" icon="mouvements" onPress={() => router.push({pathname:'/stock/mouvements',params:{produit:String(p.id)}})}/>
         <Action label="Ajuster le stock" detail="Enregistrer une entrée ou une sortie" icon="inventaire" onPress={() => router.push({pathname:'/stock/ajustement',params:{produit:String(p.id)}})}/>
       </View>
