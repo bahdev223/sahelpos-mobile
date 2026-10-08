@@ -607,9 +607,13 @@ export function EcranDemarrage() {
                     setSetupSahelTech(null);
                     afficherFormulaire('connexion');
                   }}>
-                    <Text style={styles.creerBas}>
-                      {mode === 'creation_sso' ? 'Changer de méthode' : <>Deja un compte ? <Text style={styles.creerBasLien}>Se connecter</Text></>}
-                    </Text>
+                    {mode === 'creation_sso' ? (
+                      <Text style={styles.creerBas}>Changer de méthode</Text>
+                    ) : (
+                      <Text style={styles.creerBas}>
+                        Deja un compte ? <Text style={styles.creerBasLien}>Se connecter</Text>
+                      </Text>
+                    )}
                   </Pressable>
                 </View>
               )}
