@@ -26,3 +26,8 @@ Relevé d'exploitation du coordonnateur le 8 octobre vers 22 h UTC : web
 `sahelpos.saheltech.tech` healthy, image `4dbb5b4c61dc873680f9de1bf15ee437c6aeb598`
 déployée à 10:35:56 UTC, sans configuration Accounts/client SahelPOS à ce relevé.
 Aucun droit Fournea/École n'est accordé par SahelPOS.
+
+La reprise [sécurité des dépendances](SECURITE_DEPENDANCES_2026-10-08.md) corrige
+quatre dépendances transitives compatibles, dont l'avis critique shell-quote.
+L'audit résiduel reste à 29 avis (aucun critique), principalement propagés depuis
+quatre chaînes amont ; cela n'autorise pas une distribution mobile.

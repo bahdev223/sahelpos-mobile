@@ -7,14 +7,15 @@ Windows, Node local, source `c9409c8`, dépendances du lockfile installées via
 | --- | --- |
 | `node --test tests/*.test.cjs` | 103 tests réussis, 0 échec |
 | `npx tsc --noEmit` | Exit 0 |
-| Installation dépendances | Réussie ; audit de dépendances signale 31 vulnérabilités (12 modérées, 18 hautes, 1 critique), triage requis |
+| Installation et reprise sécurité | Réussies ; audit JSON avant/après corrections compatibles : 33 → 29 avis, 0 critique après |
 | Téléphone et signature | Non exécuté |
 | API déployée / Accounts réel / paiement réel | Non exécuté |
 
-La tentative d'audit détaillé `npm audit --omit=dev --json` a échoué par DNS
-(`ENOTFOUND registry.npmjs.org`). Les nombres d'avis remontés à l'installation
-ne sont pas une preuve d'exploitabilité de l'APK ; ils restent à qualifier avant
-distribution. Aucun `npm audit fix --force` ni changement de SDK effectué.
+La première tentative détaillée a échoué par DNS. La reprise a produit les
+audits JSON et quatre mises à jour transitives compatibles, sans changement de
+SDK. Les 29 avis résiduels sont triés dans
+[le guide sécurité](SECURITE_DEPENDANCES_2026-10-08.md) ; leur nombre n'est pas
+une preuve d'exploitabilité de l'APK. Aucun `npm audit fix --force` effectué.
 
 Les tests utilisent du SQLite local et des simulations ciblées : ils couvrent
 PIN préservé, outbox, refus de profil étranger, refus d'une autre boutique,

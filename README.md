@@ -156,3 +156,4 @@ Cette mise à jour concerne la documentation ; elle ne certifie pas le déploiem
 - [Recette et démonstration](docs/agents/RECETTE_ET_DEMONSTRATION.md)
 - [Fiche service](docs/agents/FICHE_SERVICE.md)
 - [Exploitation et déplacement futur](docs/agents/EXPLOITATION_ET_DEPLACEMENT.md)
+- [Sécurité des dépendances](docs/agents/SECURITE_DEPENDANCES_2026-10-08.md)
