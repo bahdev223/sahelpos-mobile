@@ -2,7 +2,7 @@
   "expo": {
     "name": "SahelPOS",
     "slug": "sahelpos-mobile",
-    "version": "1.2.4",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -19,7 +19,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "tech.saheltech.sahelpos",
-      "versionCode": 8,
+      "versionCode": 9,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.BLUETOOTH",

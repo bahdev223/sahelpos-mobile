@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import {
   Modal,
+  Image,
   ScrollView,
   Text,
   TextInput,
@@ -187,7 +188,9 @@ export default function AccesAccounts() {
   return (
     <View style={styles.buttons}>
       <Bouton
-        titre="G  Continuer avec Google"
+        titre="Continuer avec Google"
+        icone={<Image source={require('../../assets/google-g.png')} style={{ width: 20, height: 20 }} accessible={false} />}
+        variante="secondaire"
         grand
         enCours={busy}
         onPress={() => void auth("google", true)}
@@ -265,7 +268,9 @@ export default function AccesAccounts() {
             {!session && !camera && (
               <>
                 <Bouton
-                  titre="G  Continuer avec Google"
+                  titre="Continuer avec Google"
+                  icone={<Image source={require('../../assets/google-g.png')} style={{ width: 20, height: 20 }} accessible={false} />}
+                  variante="secondaire"
                   enCours={busy}
                   onPress={() => void auth("google")}
                 />
