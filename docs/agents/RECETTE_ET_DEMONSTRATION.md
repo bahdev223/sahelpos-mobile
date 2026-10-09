@@ -1,5 +1,8 @@
 # Recette Android — 8 octobre 2026
 
+La [recette du 9 octobre](LIVRAISON_ANDROID_2026-10-09.md) complete ce releve
+avec les verifications de mise a jour et l'etat exact du telephone.
+
 Windows, Node local, source `c9409c8`, dépendances du lockfile installées via
 `npm ci --legacy-peer-deps`. Pas d'APK/AAB/prebuild/Gradle/Actions.
 

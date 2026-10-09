@@ -1,5 +1,9 @@
 # État Android — 8 octobre 2026
 
+Reprise du 9 octobre : voir [le compte rendu Android](LIVRAISON_ANDROID_2026-10-09.md)
+pour la signature, la compilation et l'installation. Les absences de tests
+materiels mentionnees ci-dessous decrivent le releve historique du 8 octobre.
+
 Source canonique : `bahdev223/sahelpos-mobile`, `master`,
 `c9409c8a39e1409e04ba5c72b86b1082c70b5ed1`. Candidate :
 `codex/sahelpos-consolidation-20261008`. Source 1.3.0, versionCode 9,
