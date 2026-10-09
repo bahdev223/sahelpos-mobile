@@ -18,7 +18,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Dimensions,
+  useWindowDimensions,
   Image,
   Modal,
   Pressable,
@@ -28,147 +28,18 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 
 import { listerAlertesStock } from '../db/repositories/produit';
 import { Icone, IconePastille, Pastille } from './icones';
 import type { NomIcone } from './icones';
 import { couleurs, espaces, rayons } from './theme';
-import { resoudreProfilUIMobile, type SecteurCommerce } from '../domain/commerce';
+import type { SecteurCommerce } from '../domain/commerce';
 import type { Role } from '../domain/types';
-import { peutAccederCheminMobile } from '../domain/permissions-mobile';
+import { construireNavigationMobile } from '../domain/navigation-mobile';
 import { HABILLEMENT_MOBILE_THEME as H } from '../profile-ui/habillement/theme';
 
-const LARGEUR = Math.min(320, Dimensions.get('window').width * 0.86);
 const DUREE = 220;
-
-interface Entree {
-  titre: string;
-  description: string;
-  chemin: string;
-  icone: NomIcone;
-}
-
-interface Groupe {
-  titre: string;
-  entrees: Entree[];
-}
-
-/**
- * Le contenu du tiroir.
- *
- * L'ordre suit la frequence d'usage reelle : on releve ses ventes tous les
- * soirs, on ouvre les reglages une fois a l'installation.
- */
-const GROUPES: Groupe[] = [
-  {
-    titre: 'Activite',
-    entrees: [
-      {
-        titre: 'Ventes',
-        description: 'Historique et tickets',
-        chemin: '/ventes',
-        icone: 'ventes',
-      },
-      {
-        titre: 'Factures',
-        description: 'PDF, recu et partage',
-        chemin: '/factures',
-        icone: 'document',
-      },
-      {
-        titre: 'Tableau de bord',
-        description: 'Chiffre d affaires et benefice',
-        chemin: '/tableau-de-bord',
-        icone: 'graphique',
-      },
-      {
-        titre: 'Alertes de stock',
-        description: 'Produits sous le seuil',
-        chemin: '/stock/alertes',
-        icone: 'alerte',
-      },
-      {
-        titre: 'Inventaire',
-        description: 'Comptage et ecarts',
-        chemin: '/inventaire',
-        icone: 'inventaire',
-      },
-      {
-        titre: 'Mouvements de stock',
-        description: 'Journal des entrees et sorties',
-        chemin: '/stock/mouvements',
-        icone: 'mouvements',
-      },
-    ],
-  },
-  {
-    titre: 'Gestion',
-    entrees: [
-      { titre: 'Achats', description: 'Commandes fournisseur', chemin: '/achats', icone: 'achats' },
-      {
-        titre: 'Fournisseurs',
-        description: 'Fiches et dettes',
-        chemin: '/fournisseurs',
-        icone: 'fournisseurs',
-      },
-      { titre: 'Clients', description: 'Fiches et soldes', chemin: '/clients', icone: 'clients' },
-      {
-        titre: 'Categories',
-        description: 'Rayons du catalogue',
-        chemin: '/categories',
-        icone: 'etiquette',
-      },
-    ],
-  },
-  {
-    titre: 'Reglages',
-    entrees: [
-      {
-        titre: 'Ma boutique',
-        description: 'Nom, adresse, recu',
-        chemin: '/parametres/boutique',
-        icone: 'boutique',
-      },
-      {
-        titre: 'Utilisateurs',
-        description: 'Comptes, codes et roles',
-        chemin: '/parametres/utilisateurs',
-        icone: 'utilisateurs',
-      },
-      {
-        titre: 'Imprimante',
-        description: 'Bluetooth et ticket de test',
-        chemin: '/parametres/imprimante',
-        icone: 'imprimante',
-      },
-      {
-        titre: 'Sauvegarde',
-        description: 'Exporter et restaurer',
-        chemin: '/parametres/sauvegarde',
-        icone: 'sauvegarde',
-      },
-      {
-        titre: 'Synchronisation',
-        description: 'Etat Web et donnees hors ligne',
-        chemin: '/parametres/synchronisation',
-        icone: 'reseau',
-      },
-      {
-        titre: 'Mon abonnement',
-        description: 'Activation et offre en cours',
-        chemin: '/abonnement',
-        icone: 'document',
-      },
-      {
-        titre: 'Notifications',
-        description: 'Ruptures, seuils et rappels',
-        chemin: '/notifications',
-        icone: 'cloche',
-      },
-    ],
-  },
-];
 
 interface ValeurTiroir {
   ouvrir: () => void;
@@ -204,11 +75,13 @@ export function FournisseurTiroir({
   children: React.ReactNode;
   infos: InfosTiroir;
 }) {
+  const { width } = useWindowDimensions();
+  const largeur = Math.min(320, width * 0.86);
   const [visible, setVisible] = useState(false);
   // `monte` reste vrai le temps de l'animation de fermeture : sans lui, la
   // Modal disparaitrait d'un coup au lieu de glisser.
   const [monte, setMonte] = useState(false);
-  const glissement = useRef(new Animated.Value(-LARGEUR)).current;
+  const glissement = useRef(new Animated.Value(-320)).current;
   const voile = useRef(new Animated.Value(0)).current;
 
   const ouvrir = useCallback(() => {
@@ -230,7 +103,7 @@ export function FournisseurTiroir({
     }
     if (!monte) return;
     Animated.parallel([
-      Animated.timing(glissement, { toValue: -LARGEUR, duration: DUREE, useNativeDriver: true }),
+      Animated.timing(glissement, { toValue: -320, duration: DUREE, useNativeDriver: true }),
       Animated.timing(voile, { toValue: 0, duration: DUREE, useNativeDriver: true }),
     ]).start(({ finished }) => {
       if (finished) setMonte(false);
@@ -251,6 +124,7 @@ export function FournisseurTiroir({
             style={[
               st.panneau,
               infos.secteur === 'HABILLEMENT' && { backgroundColor: H.surface },
+              { width: largeur },
               { transform: [{ translateX: glissement }] },
             ]}
           >
@@ -264,20 +138,8 @@ export function FournisseurTiroir({
 
 function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () => void }) {
   const router = useRouter();
-  const profilUI = resoudreProfilUIMobile({
-    version: 1,
-    secteur: infos.secteur,
-    secteur_libelle: infos.secteurLibelle,
-    mode_vente: 'DETAIL',
-    mode_approvisionnement: 'CLASSIQUE',
-    mode_catalogue: 'SIMPLE',
-    capabilities_effectives: infos.capabilitiesCommerce,
-    capabilities_non_supportees: [],
-    // Objet de présentation uniquement : il n'accorde aucun droit d'écriture.
-    ecritures_autorisees: [],
-    compatible: true,
-    raison: '',
-  });
+  const cheminActuel = usePathname();
+  const groupes = construireNavigationMobile(infos.secteur, infos.role, infos.capabilitiesCommerce);
   const marges = useSafeAreaInsets();
   const habillement = infos.secteur === 'HABILLEMENT';
   const accent = habillement ? H.primaire : couleurs.primaire;
@@ -305,9 +167,8 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
   const aller = useCallback(
     (chemin: string) => {
       onFermer();
-      // La fermeture est animee ; naviguer dans la foulee ferait sauter le
-      // panneau. Un court delai laisse le glissement se terminer.
-      setTimeout(() => router.push(chemin as never), DUREE);
+      // Aucun délai artificiel entre la sélection et le changement d'écran.
+      router.push(chemin as never);
     },
     [onFermer, router],
   );
@@ -344,128 +205,38 @@ function ContenuTiroir({ infos, onFermer }: { infos: InfosTiroir; onFermer: () =
             <Text style={st.compteNom} numberOfLines={1}>
               {infos.utilisateur}
             </Text>
-            <Text style={st.compteRole}>{infos.role} · {profilUI.nom}</Text>
+            <Text style={st.compteRole}>{infos.role} · {infos.secteurLibelle}</Text>
           </View>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={st.liste}>
-        {GROUPES.map((groupe) => {
-          const entrees = groupe.entrees.map((entree) => {
-            if (entree.chemin === '/categories') {
-              return {
-                ...entree,
-                titre: profilUI.libelles.categories,
-                description: infos.secteur === 'ELECTRICITE' || infos.secteur === 'QUINCAILLERIE'
-                  ? 'Rayons des références'
-                  : 'Catégories du catalogue',
-              };
-            }
-            if (entree.chemin === '/achats') {
-              return {
-                ...entree,
-                titre: profilUI.libelles.achats,
-                description: infos.secteur === 'ELECTRICITE' || infos.secteur === 'QUINCAILLERIE'
-                  ? 'Approvisionnements fournisseurs'
-                  : 'Commandes fournisseur',
-              };
-            }
-            if (entree.chemin === '/inventaire') {
-              if (infos.secteur === 'HABILLEMENT') {
-                return { ...entree, titre: 'Inventaire variantes', chemin: '/habillement/inventaire', description: 'Comptage tailles et couleurs' };
-              }
-              if (infos.secteur === 'ELECTRICITE') {
-                return { ...entree, titre: 'Inventaire technique', chemin: '/electricite/inventaire', description: 'Comptage par caractéristique' };
-              }
-              if (infos.secteur === 'QUINCAILLERIE') {
-                return { ...entree, titre: 'Inventaire technique', chemin: '/quincaillerie/inventaire', description: 'Comptage par variante' };
-              }
-              return { ...entree, titre: profilUI.libelles.inventaire };
-            }
-            if (entree.chemin === '/stock/alertes') {
-              return {
-                ...entree,
-                description: `${profilUI.libelles.produits} sous le seuil`,
-              };
-            }
-            return entree;
-          });
-          if (infos.secteur === 'HABILLEMENT' && groupe.titre === 'Gestion') {
-            entrees.unshift({
-              titre: 'Showroom',
-              description: 'Vue visuelle des modèles',
-              chemin: '/habillement/showroom',
-              icone: 'oeil',
-            });
-            entrees.splice(2, 0, {
-              titre: 'Tailles & couleurs',
-              description: 'Variantes, tailles et couleurs',
-              chemin: '/habillement/referentiel',
-              icone: 'etiquette',
-            });
-            if (infos.capabilitiesCommerce.includes('VARIANT_EXCHANGE')) {
-              entrees.splice(2, 0, {
-                titre: 'Échanges',
-                description: 'Changer taille ou couleur vendue',
-                chemin: '/habillement/echanges',
-                icone: 'mouvements',
-              });
-            }
-          }
-          if (infos.secteur === 'HABILLEMENT' && groupe.titre === 'Activite') {
-            entrees.splice(1, 0, {
-              titre: 'Commandes clients',
-              description: 'Réserver et préparer les vêtements',
-              chemin: '/habillement/commandes',
-              icone: 'achats',
-            });
-            entrees.push({
-              titre: 'Rapports Mode',
-              description: 'Ventes, modèles et variantes',
-              chemin: '/habillement/rapports',
-              icone: 'graphique',
-            });
-          }
-          return {
-            ...groupe,
-            entrees: entrees.filter((entree) =>
-              peutAccederCheminMobile(infos.role, entree.chemin),
-            ),
-          };
-        }).filter((groupe) => groupe.entrees.length > 0).map((groupe) => (
-          <View key={groupe.titre} style={st.groupe}>
-            <Text style={[st.groupeTitre, { color: texteFaible }]}>
-              {groupe.titre.toUpperCase()}
-            </Text>
-            {groupe.entrees.map((entree) => (
-              <Pressable
-                key={entree.chemin}
+        {groupes.map((groupe) => (
+          <View key={groupe.id} style={st.groupe}>
+            <Text style={[st.groupeTitre, { color: texteFaible }]}>{groupe.titre.toUpperCase()}</Text>
+            {groupe.entrees.map((entree) => {
+              const path = entree.chemin.replace('/(tabs)', '');
+              const actif = cheminActuel === path || cheminActuel.startsWith(path + '/');
+              return <Pressable
+                key={entree.id}
                 onPress={() => aller(entree.chemin)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: actif }}
                 style={({ pressed }) => [
                   st.entree,
-                  pressed && [st.entreePressee, { backgroundColor: fond }],
-                ]}
-              >
-                <IconePastille
-                  nom={entree.icone}
-                  couleur={accent}
-                  fond={accentClair}
-                />
+                  actif && { backgroundColor: accentClair, borderLeftWidth: 3, borderLeftColor: accent },
+                  pressed && { backgroundColor: fond },
+                ]}>
+                <IconePastille nom={entree.icone} couleur={accent} fond={accentClair} />
                 <View style={st.entreeTextes}>
-                  <Text style={[st.entreeTitre, { color: texte }]}>{entree.titre}</Text>
-                  <Text style={[st.entreeDescription, { color: texteFaible }]} numberOfLines={1}>
-                    {entree.description}
-                  </Text>
+                  <Text style={[st.entreeTitre, { color: actif ? accent : texte }]}>{entree.titre}</Text>
+                  <Text style={[st.entreeDescription, { color: texteFaible }]} numberOfLines={1}>{entree.description}</Text>
                 </View>
-                {entree.chemin === '/stock/alertes' && alertes > 0 ? (
-                  <View style={st.badge}>
-                    <Text style={st.badgeTexte}>{alertes}</Text>
-                  </View>
-                ) : (
-                  <Icone nom="chevron" taille={16} couleur={couleurs.texteEteint} />
-                )}
-              </Pressable>
-            ))}
+                {entree.id === 'alertes' && alertes > 0
+                  ? <View style={st.badge}><Text style={st.badgeTexte}>{alertes}</Text></View>
+                  : <Icone nom="chevron" taille={16} couleur={couleurs.texteEteint} />}
+              </Pressable>;
+            })}
           </View>
         ))}
 
@@ -533,7 +304,7 @@ const st = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    width: LARGEUR,
+    width: 320,
     backgroundColor: couleurs.surface,
   },
   contenu: { flex: 1 },

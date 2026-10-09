@@ -1,8 +1,8 @@
 import type { Role } from './types';
 
 const PREFIXES_VENDEUR = [
-  '/accueil', '/caisse', '/clients', '/notifications',
-  '/(tabs)/accueil', '/(tabs)/caisse',
+  '/accueil', '/caisse', '/clients', '/client', '/ventes', '/vente', '/notifications', '/menu',
+  '/(tabs)/accueil', '/(tabs)/caisse', '/(tabs)/menu', '/habillement/commandes',
 ];
 
 const PREFIXES_GERANT_INTERDITS = [
