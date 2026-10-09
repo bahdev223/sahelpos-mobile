@@ -37,6 +37,7 @@ import { serviceImpression } from '../../src/services/impression/imprimante';
 import { enteteRecu, lireParametres } from '../../src/services/parametres';
 import { preparerDocumentVente } from '../../src/services/document-vente';
 import { ActionsDocument } from '../../src/ui/ActionsDocument';
+import { useSession } from '../_layout';
 
 const LIBELLE_STATUT: Record<StatutVente, string> = {
   payee: 'Payee',
@@ -68,6 +69,8 @@ function dateLisible(iso: string): string {
 export default function EcranDetailVente() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { utilisateur } = useSession();
+  const gestionnaire = utilisateur?.role !== 'vendeur';
   const venteId = Number(id);
 
   const [vente, setVente] = useState<VenteResume | null>(null);
@@ -85,6 +88,12 @@ export default function EcranDetailVente() {
         setErreur('Cette vente est introuvable.');
         return;
       }
+      // Un vendeur ne peut consulter que ses propres ventes, même via URL.
+      if (utilisateur?.role === 'vendeur' && v.utilisateurId !== utilisateur.id) {
+        setVente(null);
+        setErreur("Cette vente n'est pas accessible avec votre rôle.");
+        return;
+      }
       setVente(v);
       setLignes(await listerLignes(venteId));
     } catch (e) {
@@ -92,7 +101,7 @@ export default function EcranDetailVente() {
     } finally {
       setChargement(false);
     }
-  }, [venteId]);
+  }, [venteId, utilisateur?.id, utilisateur?.role]);
 
   useFocusEffect(
     useCallback(() => {
@@ -123,7 +132,7 @@ export default function EcranDetailVente() {
   }, [vente, saisieEncaissement, charger]);
 
   const demanderAnnulation = useCallback(() => {
-    if (!vente) return;
+    if (!vente || !gestionnaire) return;
     Alert.alert(
       `Annuler ${vente.numero} ?`,
       'Les produits vendus retournent en stock. Cette operation ne peut pas etre defaite.',
@@ -149,7 +158,7 @@ export default function EcranDetailVente() {
         },
       ],
     );
-  }, [vente, charger]);
+  }, [vente, charger, gestionnaire]);
 
   const reimprimer = useCallback(async () => {
     if (!vente) return;
@@ -255,10 +264,12 @@ export default function EcranDetailVente() {
           ) : null}
           {/* Le benefice n'est pas imprime sur le recu du client : il ne
               regarde que le commercant. */}
-          <View style={styles.ligneReglement}>
-            <Text style={styles.reglementLibelle}>Benefice</Text>
-            <Text style={styles.reglementValeur}>{formaterMontant(vente.beneficeTotal)}</Text>
-          </View>
+          {gestionnaire ? (
+            <View style={styles.ligneReglement}>
+              <Text style={styles.reglementLibelle}>Bénéfice</Text>
+              <Text style={styles.reglementValeur}>{formaterMontant(vente.beneficeTotal)}</Text>
+            </View>
+          ) : null}
         </Carte>
 
         {reste > 0 && !annulee ? (
@@ -286,7 +297,7 @@ export default function EcranDetailVente() {
 
         <View style={styles.actions}>
           <Bouton titre="Reimprimer le recu" onPress={() => void reimprimer()} variante="secondaire" />
-          {!annulee ? (
+          {gestionnaire && !annulee ? (
             <Bouton
               titre="Annuler cette vente"
               sousTitre="Les produits retournent en stock"

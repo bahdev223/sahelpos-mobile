@@ -12,6 +12,7 @@ export interface VenteResume {
   id: number;
   numero: string;
   dateVente: string;
+  utilisateurId?: number | null;
   clientId: number | null;
   clientNom: string | null;
   total: number;
@@ -74,7 +75,7 @@ export async function listerVentes(filtre: FiltreVente = {}): Promise<VenteResum
 
   const ou = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
   return lireTout<VenteResume>(
-    `SELECT v.id, v.numero, v.date_vente AS dateVente, v.client_id AS clientId,
+    `SELECT v.id, v.numero, v.date_vente AS dateVente, v.utilisateur_id AS utilisateurId, v.client_id AS clientId,
             c.nom AS clientNom, v.total, v.montant_paye AS montantPaye,
             v.mode_paiement AS modePaiement, v.statut,
             v.benefice_total AS beneficeTotal
@@ -87,7 +88,7 @@ export async function listerVentes(filtre: FiltreVente = {}): Promise<VenteResum
 
 export async function obtenirVente(id: number): Promise<VenteResume | null> {
   return lirePremier<VenteResume>(
-    `SELECT v.id, v.numero, v.date_vente AS dateVente, v.client_id AS clientId,
+    `SELECT v.id, v.numero, v.date_vente AS dateVente, v.utilisateur_id AS utilisateurId, v.client_id AS clientId,
             c.nom AS clientNom, v.total, v.montant_paye AS montantPaye,
             v.mode_paiement AS modePaiement, v.statut,
             v.benefice_total AS beneficeTotal
