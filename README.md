@@ -139,7 +139,24 @@ La recette finale sur téléphone réel doit couvrir Google, QR, PIN/biométrie,
 vente offline, reprise réseau, deux appareils, variantes/conditionnements et
 imprimante thermique.
 
-Le build APK/AAB ne doit être lancé qu'après ce gate.
+La publication d'un APK/AAB stable reste conditionnée par cette recette.
+Un APK interne peut être préparé et installé à la demande explicite du
+propriétaire pour lui permettre de réaliser les essais, sans être présenté
+comme une release commerciale validée.
+
+## Livraison Android du 9 octobre 2026
+
+La version **1.3.0 / code 9** a été compilée avec la signature existante et
+installée en mise à jour sur le TECNO KL5, sans désinstallation. Les 107 tests
+et le contrôle TypeScript ont réussi ; les parcours Google, PIN, biométrie,
+synchronisation réelle et impression restent à recetter par l'utilisateur.
+
+Le [rapport de livraison](docs/agents/LIVRAISON_ANDROID_2026-10-09.md)
+décrit les sources, les modifications, les commandes reproductibles, les
+empreintes du binaire et du certificat, l'installation et les limites de
+validation. Le travail est poussé sur `codex/sahelpos-consolidation-20261008`
+dans la [PR 5](https://github.com/bahdev223/sahelpos-mobile/pull/5), encore
+brouillon. Il n'est ni fusionné dans master ni publié en téléchargement public.
 
 <!-- saheltech-consolidation-2026-10-08 -->
 ## Directives de consolidation — 8 octobre 2026

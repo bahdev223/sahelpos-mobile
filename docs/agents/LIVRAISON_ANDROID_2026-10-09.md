@@ -10,7 +10,12 @@ ne doit etre deduite de la compilation.
 
 - Branche : `codex/sahelpos-consolidation-20261008`.
 - Source initiale : `0ffb4575566d6217bd5953c2ee55c865439c275b`.
-- PR 5 ouverte et brouillon, deux commits devant master lors du fetch.
+- [PR 5](https://github.com/bahdev223/sahelpos-mobile/pull/5) ouverte et
+  brouillon ; deux commits devant master lors du fetch initial.
+- Tests et rapport de livraison pousses dans le commit
+  `1d575b2f8f665779f161c6895d40b6bab9ccd1a0`
+  (`test: verify Android upgrades and record signed installation [skip ci]`).
+  Ce commit ajoute des preuves, pas de modification du code applicatif compile.
 - Backend main releve : `31c217c551201719742ac3a1eb5eb5516d170861`.
 - API publique `/sante/` : HTTP 200, etat ok. Ce controle ne prouve pas le SHA deploye.
 - Telephone TECNO KL5 : version installee avant intervention 1.2.4, code 8.
@@ -59,10 +64,88 @@ Conserver la branche de consolidation et les identites existantes.
   minification et reduction des ressources, armeabi-v7a et arm64-v8a.
 - Contrat public live : Google natif HTTP 302 vers Accounts/Google ; login
   natif HTTP 302 vers Accounts/OAuth ; faux ticket d'echange refuse HTTP 400.
-  Aucun compte cree, aucun secret lu, aucune configuration serveur modifiee.
+  Aucun compte cree, aucun secret expose ou commite, aucune configuration
+  serveur modifiee. Les identifiants de signature ont ete lus uniquement
+  localement pour compiler et verifier la cle existante.
 
 Les logs et APK restent hors du depot source, dans le dossier local
 `C:\Users\hp\Documents\ChatGPT\sahelpos-android-release-20261009`.
+
+## Perimetre des modifications de cette reprise
+
+- `tests/mobile-upgrade.test.cjs` : quatre tests de migration SQLite reelle
+  sur fixtures synthetiques, dont conservation du PIN, licence, ventes,
+  stock, chemins d'images et outbox. Aucun correctif de production ajoute.
+- Ce rapport : preuves de compilation, signature, installation et controles.
+- `docs/agents/ETAT_CONSOLIDATION.md` et
+  `docs/agents/RECETTE_ET_DEMONSTRATION.md` : liens vers la livraison.
+- `docs/mobile/README_MOBILE_AGENT.md` : version courante et consigne de
+  ne jamais desinstaller pour contourner une signature incompatible.
+- `README.md` : acces au rapport et distinction entre APK interne de recette
+  et publication stable. Ce complement documentaire ne change pas l'APK.
+
+Le depot de travail est
+`C:\Users\hp\Documents\ChatGPT\sahelpos-consolidation-mobile`, copie isolee
+du remote `https://github.com/bahdev223/sahelpos-mobile.git`.
+`C:\sahelpos-mobile` fournit la cle existante ; son code n'a pas ete remplace.
+La jonction `C:\sp130` cible la copie isolee. Aucun changement dans les
+depots web, Nere ou desktop pendant cette livraison.
+
+## Reproduire la preparation et l'installation
+
+Ne pas regenerer une cle. Avant de compiler, conserver les fichiers ignores
+`credentials/keystore.properties` et le keystore auquel il fait reference.
+Le plugin `plugins/signature-release.js` peut utiliser une signature debug
+si ces fichiers manquent : un build reussi ne prouve donc pas la bonne signature.
+Ne jamais afficher les mots de passe ni ajouter ces fichiers dans Git.
+
+Depuis la copie isolee, avec le lockfile de la source indiquee :
+
+```powershell
+npm ci --legacy-peer-deps --no-audit
+node --test tests/*.test.cjs
+npx tsc --noEmit
+npx expo prebuild --platform android --no-install
+```
+
+La generation native a ete faite dans une copie sans dossier Android existant.
+Ne pas utiliser `--clean` ni ecraser un dossier natif adapte sans l'inspecter.
+Dans `C:\sp130\android`, avec la jonction deja preparee :
+
+```powershell
+$env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot'
+$env:ANDROID_HOME = 'C:\Android'
+$env:ANDROID_SDK_ROOT = 'C:\Android'
+$env:NODE_ENV = 'production'
+.\gradlew.bat assembleRelease --console=plain --max-workers=2
+```
+
+Verifier le binaire avant toute installation ; comparer son certificat avec
+celui de l'APK actuellement installee et les empreintes du tableau ci-dessous :
+
+```powershell
+$apk = 'C:\sp130\android\app\build\outputs\apk\release\app-release.apk'
+Get-FileHash -LiteralPath $apk -Algorithm SHA256
+& 'C:\Android\build-tools\36.0.0\apksigner.bat' verify --verbose --print-certs $apk
+& 'C:\Android\build-tools\36.0.0\aapt.exe' dump badging $apk
+& 'C:\Android\platform-tools\adb.exe' devices -l
+```
+
+Pour le telephone autorise de cette livraison, apres verification de sa
+presence et de la signature :
+
+```powershell
+$adb = 'C:\Android\platform-tools\adb.exe'
+$serial = '126801549A001223'
+& $adb -s $serial install -r $apk
+& $adb -s $serial shell dumpsys package tech.saheltech.sahelpos
+& $adb -s $serial shell am start -n tech.saheltech.sahelpos/.MainActivity
+```
+
+Un autre appareil requiert son propre numero de serie. En cas de refus pour
+signature incompatible, arreter et retrouver la cle d'origine : aucun
+`uninstall`, `pm clear` ou downgrade. La recette PIN/Google doit etre faite
+par l'utilisateur, sans communiquer ses identifiants a l'agent.
 
 ## Binaire et installation verifies
 
