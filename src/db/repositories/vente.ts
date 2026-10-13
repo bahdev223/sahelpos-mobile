@@ -202,8 +202,11 @@ export async function regrouperVentes(debut: string, fin: string, mensuel: boole
  * c'est la seule facon qu'il ne mente pas sur ce qui a reellement ete paye.
  */
 export async function encaisser(venteId: number, montant: number): Promise<void> {
-  const arrondi = Math.round(montant);
-  if (arrondi <= 0) throw new Error('Le montant encaisse doit etre positif.');
+  if (!Number.isSafeInteger(venteId) || venteId <= 0) throw new Error('Vente invalide.');
+  if (!Number.isSafeInteger(montant) || montant <= 0) {
+    throw new Error('Le montant encaisse doit etre un entier positif valide.');
+  }
+  const arrondi = montant;
 
   await dansTransaction(async () => {
     const v = await lirePremier<{ total: number; montant_paye: number; statut: string }>(
@@ -215,7 +218,15 @@ export async function encaisser(venteId: number, montant: number): Promise<void>
       throw new Error('Cette vente est annulee : elle ne peut plus etre encaissee.');
     }
 
-    const paye = Math.round(v.montant_paye) + arrondi;
+    if (!Number.isSafeInteger(v.total) || !Number.isSafeInteger(v.montant_paye)
+      || v.total < 0 || v.montant_paye < 0 || v.montant_paye > v.total) {
+      throw new Error('Les montants de cette vente sont incoherents. Verifiez son historique.');
+    }
+    const reste = v.total - v.montant_paye;
+    if (arrondi > reste) {
+      throw new Error(`Le reste a payer est de ${reste}. Le montant saisi le depasse.`);
+    }
+    const paye = v.montant_paye + arrondi;
     const statut: StatutVente =
       paye >= Math.round(v.total) ? 'payee' : paye > 0 ? 'partielle' : 'impayee';
 
@@ -246,11 +257,12 @@ export async function annulerVente(venteId: number, motif = ''): Promise<void> {
 
     const lignes = await lireTout<{
       produit_id: number;
+      variante_id: number | null;
       quantite: number;
       unite: string;
       quantite_base: number;
     }>(
-      'SELECT produit_id, quantite, unite, quantite_base FROM ligne_vente WHERE vente_id = ?',
+      'SELECT produit_id, variante_id, quantite, unite, quantite_base FROM ligne_vente WHERE vente_id = ?',
       venteId,
     );
 
@@ -260,9 +272,28 @@ export async function annulerVente(venteId: number, motif = ''): Promise<void> {
         'SELECT quantite_base, gestion_stock FROM produit WHERE id = ?',
         l.produit_id,
       );
-      if (!p || !p.gestion_stock) continue;
+      if (!p) throw new Error('Un produit de cette vente est introuvable. Annulation interrompue.');
+      if (!p.gestion_stock) continue;
+      if (!Number.isFinite(l.quantite_base) || l.quantite_base <= 0) {
+        throw new Error('La quantite retournee de cette vente est invalide.');
+      }
 
       const apres = p.quantite_base + l.quantite_base;
+      let stockAvant = p.quantite_base;
+      let stockApres = apres;
+      if (l.variante_id !== null) {
+        const variante = await lirePremier<{ stock_actuel: number }>(
+          'SELECT stock_actuel FROM variante_produit WHERE id = ? AND produit_id = ?',
+          l.variante_id, l.produit_id,
+        );
+        if (!variante) throw new Error('Une variante de cette vente est introuvable. Annulation interrompue.');
+        stockAvant = variante.stock_actuel;
+        stockApres = stockAvant + l.quantite_base;
+        await executer(
+          'UPDATE variante_produit SET stock_actuel = ?, date_modification = ? WHERE id = ?',
+          stockApres, date, l.variante_id,
+        );
+      }
       await executer(
         'UPDATE produit SET quantite_base = ?, date_modification = ? WHERE id = ?',
         apres,
@@ -270,16 +301,17 @@ export async function annulerVente(venteId: number, motif = ''): Promise<void> {
         l.produit_id,
       );
       await executer(
-        `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
+        `INSERT INTO mouvement_stock (id_local, produit_id, variante_id, nature, source_operation, quantite,
                                       unite, quantite_base, stock_avant, stock_apres,
                                       reference, motif, date_mouvement)
-         VALUES (lower(hex(randomblob(16))), ?, 'ENTREE', 'RETOUR', ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (lower(hex(randomblob(16))), ?, ?, 'ENTREE', 'RETOUR', ?, ?, ?, ?, ?, ?, ?, ?)`,
         l.produit_id,
+        l.variante_id,
         l.quantite,
         l.unite,
         l.quantite_base,
-        p.quantite_base,
-        apres,
+        stockAvant,
+        stockApres,
         v.numero,
         motif || 'Annulation de vente',
         date,
