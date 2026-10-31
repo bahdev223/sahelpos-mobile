@@ -38,6 +38,9 @@ import {
 import { BandeauEtat, couleurs, Vignette } from '../../src/ui/components';
 import { seuilAlerteStock } from '../../src/domain/stock';
 import { Icone } from '../../src/ui/icones';
+import { obtenirBase } from '../../src/db/database';
+import { useSession } from '../_layout';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
 
 type Etat =
   | { phase: 'chargement' }
@@ -51,20 +54,62 @@ interface Section {
   data: ProduitStock[];
 }
 
+interface VarianteAlerte {
+  id: number;
+  produitId: number;
+  produitNom: string;
+  libelle: string;
+  sku: string;
+  stock: number;
+  stockMin: number;
+  uniteBase: string;
+  prixAchat: number;
+  cheminImage: string | null;
+}
+
+async function chargerVariantesAlertes(): Promise<VarianteAlerte[]> {
+  const db = await obtenirBase();
+  return db.getAllAsync<VarianteAlerte>(
+    `SELECT vp.id, p.id AS produitId, p.nom AS produitNom, vp.sku,
+            vp.stock_actuel AS stock, p.stock_min AS stockMin,
+            p.unite_base AS uniteBase,
+            COALESCE(vp.prix_achat, p.prix_achat, 0) AS prixAchat,
+            p.chemin_image AS cheminImage,
+            COALESCE((SELECT GROUP_CONCAT(valeur_nom, ' / ') FROM (
+              SELECT valeur_nom FROM variante_valeur
+              WHERE variante_id = vp.id
+              ORDER BY dimension_ordre, valeur_ordre, valeur_nom
+            )), vp.sku) AS libelle
+       FROM variante_produit vp
+       JOIN produit p ON p.id = vp.produit_id
+      WHERE vp.actif = 1 AND p.actif = 1 AND p.gestion_stock = 1
+      ORDER BY p.nom COLLATE NOCASE, vp.sku COLLATE NOCASE`,
+  );
+}
+
 export default function Alertes() {
   const router = useRouter();
+  const { profilCommerce } = useSession();
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
+  const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
+  const [variantes, setVariantes] = useState<VarianteAlerte[]>([]);
   const [rafraichissement, setRafraichissement] = useState(false);
   const [filtre, setFiltre] = useState<'bas' | 'rupture' | 'tous'>('bas');
 
   const charger = useCallback(async (silencieux: boolean) => {
     if (!silencieux) setEtat({ phase: 'chargement' });
     try {
-      setEtat({ phase: 'pret', produits: await chargerProduitsStock() });
+      const [produits, declinaisons] = await Promise.all([
+        chargerProduitsStock(),
+        variantesActives ? chargerVariantesAlertes() : Promise.resolve([]),
+      ]);
+      setVariantes(declinaisons);
+      setEtat({ phase: 'pret', produits });
     } catch (erreur) {
       setEtat({ phase: 'erreur', message: messageDe(erreur) });
     }
-  }, []);
+  }, [variantesActives]);
 
   useFocusEffect(
     useCallback(() => {
@@ -79,13 +124,17 @@ export default function Alertes() {
 
   const produits = etat.phase === 'pret' ? etat.produits : [];
 
-  const { sections, sansSeuil, aRacheter, ruptures } = useMemo(() => {
+  const { sections, sansSeuil, aRacheter, ruptures, variantesRupture, variantesBas } = useMemo(() => {
     const ruptures: ProduitStock[] = [];
     const bas: ProduitStock[] = [];
+    const variantesRupture: VarianteAlerte[] = [];
+    const variantesBas: VarianteAlerte[] = [];
+    const produitsAvecVariantes = new Set(variantes.map((v) => v.produitId));
     let nbSansSeuil = 0;
     let cout = 0;
 
     for (const produit of produits) {
+      if (produitsAvecVariantes.has(produit.id)) continue;
       if (produit.gestion_stock === 0) continue;
       if (produit.stock_min <= 0) nbSansSeuil += 1;
       const cle = etatStock(produit).cle;
@@ -115,15 +164,32 @@ export default function Alertes() {
       });
     }
 
+    for (const variante of variantes) {
+      if (variante.stockMin <= 0) nbSansSeuil += 1;
+      const seuil = seuilAlerteStock(variante.stockMin);
+      if (variante.stock <= 0) variantesRupture.push(variante);
+      else if (variante.stock <= seuil) variantesBas.push(variante);
+      else continue;
+      cout += Math.max(0, seuil - variante.stock) * variante.prixAchat;
+    }
+
     return {
       sections: construites,
       sansSeuil: nbSansSeuil,
-      aRacheter: ruptures.length + bas.length,
+      aRacheter: ruptures.length + bas.length + variantesRupture.length + variantesBas.length,
       coutReassort: cout,
       ruptures,
       bas,
+      variantesRupture,
+      variantesBas,
     };
-  }, [produits]);
+  }, [produits, variantes]);
+
+  const variantesAffichees = filtre === 'rupture'
+    ? variantesRupture
+    : filtre === 'bas'
+      ? variantesBas
+      : [...variantesRupture, ...variantesBas];
 
   const sectionsAffichees = filtre === 'rupture'
     ? sections.filter((section) => section.titre.startsWith('Rupture'))
@@ -177,7 +243,7 @@ export default function Alertes() {
                   </Pressable>
                   <Pressable style={[sl.filtre, filtre === 'rupture' ? sl.filtreActifRouge : null]} onPress={() => setFiltre('rupture')}>
                     <Text style={[sl.filtreTexte, filtre === 'rupture' ? sl.filtreTexteRouge : null]}>Rupture</Text>
-                    <Text style={sl.filtreBadgeRouge}>{ruptures.length}</Text>
+                    <Text style={sl.filtreBadgeRouge}>{ruptures.length + variantesRupture.length}</Text>
                   </Pressable>
                   <Pressable style={[sl.filtre, filtre === 'tous' ? sl.filtreActif : null]} onPress={() => setFiltre('tous')}>
                     <Text style={[sl.filtreTexte, filtre === 'tous' ? sl.filtreTexteActif : null]}>Tous</Text>
@@ -187,10 +253,28 @@ export default function Alertes() {
                 <View style={sl.resume}>
                   <View style={sl.resumeIcone}><Icone nom="alerte" taille={26} couleur={C.rouge} /></View>
                   <View style={{ flex: 1 }}>
-                    <Text style={sl.resumeTitre}>Produits a surveiller</Text>
-                    <Text style={sl.resumeAide}>Ces produits sont en dessous du seuil d&apos;alerte.</Text>
+                    <Text style={sl.resumeTitre}>{profilUI.libelles.produits} à surveiller</Text>
+                    <Text style={sl.resumeAide}>Les références à variantes sont contrôlées combinaison par combinaison.</Text>
                   </View>
                 </View>
+                {variantesAffichees.length > 0 ? (
+                  <View style={{ gap: 8, marginTop: 10 }}>
+                    {variantesAffichees.map((variante) => (
+                      <LigneVarianteAlerte
+                        key={variante.id}
+                        variante={variante}
+                        onCommande={() => router.push('/achats/nouveau')}
+                        onJournal={() => router.push({
+                          pathname: '/stock/mouvements',
+                          params: {
+                            produit: String(variante.produitId),
+                            variante: String(variante.id),
+                          },
+                        })}
+                      />
+                    ))}
+                  </View>
+                ) : null}
               </View>
             ) : null
           }
@@ -200,8 +284,8 @@ export default function Alertes() {
               <Text style={sl.centreTitre}>Aucune alerte</Text>
               <Text style={sl.centreTexte}>
                 {produits.length === 0
-                  ? "Aucun produit actif n'est suivi en stock pour l'instant."
-                  : 'Tous les produits suivis sont au-dessus de leur seuil.'}
+                  ? `Aucun ${profilUI.libelles.produit.toLocaleLowerCase('fr')} actif n'est suivi en stock pour l'instant.`
+                  : `Toutes les ${profilUI.libelles.produits.toLocaleLowerCase('fr')} suivies sont au-dessus de leur seuil.`}
               </Text>
             </View>
           }
@@ -209,10 +293,10 @@ export default function Alertes() {
             sansSeuil > 0 ? (
               <View style={sl.note}>
                 <Text style={sl.noteTitre}>
-              {sansSeuil} produit(s) avec le seuil par defaut
+              {sansSeuil} article(s) avec le seuil par défaut
             </Text>
             <Text style={sl.noteTexte}>
-              Le seuil par defaut est 10. Renseignez un autre seuil sur la fiche du produit
+              Le seuil par défaut est 10. Renseignez un autre seuil sur la fiche de la référence
               quand son rythme de vente demande une surveillance differente.
             </Text>
               </View>
@@ -289,6 +373,47 @@ function LigneAlerte(p: {
         <Pressable style={sl.boutonEntree} onPress={p.onCommande}>
           <Icone nom="plus" taille={17} couleur="#FFFFFF" />
           <Text style={sl.boutonEntreeTexte}>Ajouter a la commande</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function LigneVarianteAlerte(p: {
+  variante: VarianteAlerte;
+  onCommande: () => void;
+  onJournal: () => void;
+}) {
+  const rupture = p.variante.stock <= 0;
+  const seuil = seuilAlerteStock(p.variante.stockMin);
+  const manque = arrondirQuantite(seuil - p.variante.stock);
+  return (
+    <View style={sl.carte}>
+      <View style={sl.carteHaut}>
+        <Vignette chemin={p.variante.cheminImage} nom={p.variante.produitNom} taille={72} />
+        <View style={sl.carteTextes}>
+          <Text style={sl.nom} numberOfLines={2}>{p.variante.produitNom}</Text>
+          <Text style={sl.meta}>{p.variante.libelle} · {p.variante.sku}</Text>
+          {manque > 0 ? (
+            <Text style={sl.manque}>
+              Il en manque {formaterQuantite(manque)} {p.variante.uniteBase} pour revenir au seuil
+            </Text>
+          ) : null}
+        </View>
+        <View style={sl.carteChiffres}>
+          <Text style={[sl.stock, { color: rupture ? C.rouge : C.orange }]}>
+            Stock : {rupture ? '0' : formaterQuantite(p.variante.stock)}
+          </Text>
+          <Text style={sl.seuil}>Seuil : {formaterQuantite(seuil)}</Text>
+        </View>
+      </View>
+      <View style={sl.carteBas}>
+        <Pressable style={sl.lien} onPress={p.onJournal} hitSlop={6}>
+          <Text style={sl.lienTexte}>Journal</Text>
+        </Pressable>
+        <Pressable style={sl.boutonEntree} onPress={p.onCommande}>
+          <Icone nom="plus" taille={17} couleur="#FFFFFF" />
+          <Text style={sl.boutonEntreeTexte}>Approvisionner</Text>
         </Pressable>
       </View>
     </View>

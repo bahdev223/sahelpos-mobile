@@ -82,7 +82,7 @@ export default function ReceptionArrivageHabillement() {
       if(c.quantiteRecue<0||(c.quantiteRejetee ?? 0)<0)return true;
       const ligne=arrivage.lignes.find(l=>l.id===c.ligneId);
       if(!ligne)return true;
-      return c.quantiteRecue+c.quantiteRejetee<0;
+      return c.quantiteRecue+(c.quantiteRejetee ?? 0)<0;
     });
   },[arrivage,comptages]);
 
@@ -90,7 +90,7 @@ export default function ReceptionArrivageHabillement() {
     if(!arrivage)return 0;
     return comptages.filter(c=>{
       const l=arrivage.lignes.find(x=>x.id===c.ligneId);
-      return !!l&&Math.abs(c.quantiteRecue+c.quantiteRejetee-l.quantitePrevue)>0.0001;
+      return !!l&&Math.abs(c.quantiteRecue+(c.quantiteRejetee ?? 0)-l.quantitePrevue)>0.0001;
     }).length;
   },[arrivage,comptages]);
 

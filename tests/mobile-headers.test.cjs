@@ -13,7 +13,8 @@ test('purchases menu keeps the native header visible', () => {
   const achats = lire('app/achats/index.tsx');
 
   assert.match(achats, /headerShown:\s*true/);
-  assert.match(achats, /title:\s*'Achats'/);
+  assert.match(achats, /title:\s*profilUI\.libelles\.achats/);
+  assert.match(achats, /resoudreProfilUIMobile/);
   assert.doesNotMatch(achats, /headerShown:\s*false/);
 });
 

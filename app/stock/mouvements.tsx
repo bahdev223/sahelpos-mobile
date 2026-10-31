@@ -44,6 +44,8 @@ import {
 import {
   BARRE_HORIZONTALE, BandeauEtat, couleurs } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
+import { useSession } from '../_layout';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
 
 const PAR_PAGE = 25;
 
@@ -74,6 +76,7 @@ interface LigneMouvement {
 
 interface Filtres {
   produitId: number | null;
+  varianteId: number | null;
   nature: NatureMouvement | null;
   source: SourceOperation | null;
   /** Bornes au format AAAA-MM-JJ, ou null pour "depuis toujours". */
@@ -84,6 +87,7 @@ interface Filtres {
 
 const FILTRES_VIDES: Filtres = {
   produitId: null,
+  varianteId: null,
   nature: null,
   source: null,
   du: null,
@@ -104,6 +108,10 @@ function construireConditions(filtres: Filtres): {
   if (filtres.produitId !== null) {
     conditions.push('m.produit_id = ?');
     parametres.push(filtres.produitId);
+  }
+  if (filtres.varianteId !== null) {
+    conditions.push('m.variante_id = ?');
+    parametres.push(filtres.varianteId);
   }
   if (filtres.nature !== null) {
     conditions.push('m.nature = ?');
@@ -191,10 +199,10 @@ async function chercherProduits(terme: string): Promise<Suggestion[]> {
   const db = await obtenirBase();
   return db.getAllAsync<Suggestion>(
     `SELECT id, nom FROM produit
-      WHERE nom LIKE ? OR code_barre LIKE ?
+      WHERE nom LIKE ? OR code_barre LIKE ? OR marque LIKE ? OR reference_fabricant LIKE ?
       ORDER BY nom COLLATE NOCASE
       LIMIT 8`,
-    [`%${terme}%`, `%${terme}%`],
+    [`%${terme}%`, `%${terme}%`, `%${terme}%`, `%${terme}%`],
   );
 }
 
@@ -303,17 +311,22 @@ type Phase = 'chargement' | 'erreur' | 'pret';
 
 export default function Mouvements() {
   const router = useRouter();
-  const parametres = useLocalSearchParams<{ produit?: string; nature?: string }>();
+  const { profilCommerce } = useSession();
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
+  const parametres = useLocalSearchParams<{ produit?: string; variante?: string; nature?: string }>();
 
   // Les autres ecrans arrivent ici avec un filtre deja pose : la fiche produit
   // sur un produit, l'ecran des receptions sur les entrees.
   const [filtres, setFiltres] = useState<Filtres>(() => {
     const produitInitial = Number(parametres.produit);
+    const varianteInitiale = Number(parametres.variante);
     const nature = parametres.nature;
     return {
       ...FILTRES_VIDES,
       produitId:
         Number.isInteger(produitInitial) && produitInitial > 0 ? produitInitial : null,
+      varianteId:
+        Number.isInteger(varianteInitiale) && varianteInitiale > 0 ? varianteInitiale : null,
       nature:
         nature === 'ENTREE' || nature === 'SORTIE' || nature === 'AJUSTEMENT' ? nature : null,
     };
@@ -392,6 +405,7 @@ export default function Mouvements() {
   const nbFiltresActifs = useMemo(() => {
     let nombre = 0;
     if (filtres.produitId !== null) nombre += 1;
+    if (filtres.varianteId !== null) nombre += 1;
     if (filtres.nature !== null) nombre += 1;
     if (filtres.source !== null) nombre += 1;
     if (filtres.du !== null || filtres.au !== null) nombre += 1;
@@ -438,7 +452,13 @@ export default function Mouvements() {
           {filtres.produitId !== null ? (
             <Etiquette
               texte={nomProduitFiltre || 'Produit'}
-              onRetirer={() => setFiltres({ ...filtres, produitId: null })}
+              onRetirer={() => setFiltres({ ...filtres, produitId: null, varianteId: null })}
+            />
+          ) : null}
+          {filtres.varianteId !== null ? (
+            <Etiquette
+              texte={`Variante #${filtres.varianteId}`}
+              onRetirer={() => setFiltres({ ...filtres, varianteId: null })}
             />
           ) : null}
           {filtres.nature !== null ? (
@@ -474,6 +494,7 @@ export default function Mouvements() {
         <PanneauFiltres
           filtres={filtres}
           nomProduit={nomProduitFiltre}
+          libelleProduit={profilUI.libelles.produit}
           onChange={setFiltres}
           onFermer={() => setPanneauOuvert(false)}
         />
@@ -562,6 +583,7 @@ function Etiquette(p: { texte: string; onRetirer: () => void }) {
 function PanneauFiltres(p: {
   filtres: Filtres;
   nomProduit: string;
+  libelleProduit: string;
   onChange: (filtres: Filtres) => void;
   onFermer: () => void;
 }) {
@@ -620,11 +642,11 @@ function PanneauFiltres(p: {
   return (
     <ScrollView style={sl.panneau} keyboardShouldPersistTaps="handled">
       <View style={sl.bloc}>
-        <Text style={s.libelle}>Produit</Text>
+        <Text style={s.libelle}>{p.libelleProduit}</Text>
         {p.filtres.produitId !== null ? (
           <View style={sl.produitChoisi}>
             <Text style={sl.produitChoisiNom} numberOfLines={1}>
-              {p.nomProduit || 'Produit selectionne'}
+              {p.nomProduit || `${p.libelleProduit} sélectionné(e)`}
             </Text>
             <Pressable
               onPress={() => {
@@ -642,7 +664,7 @@ function PanneauFiltres(p: {
                 style={s.saisie}
                 value={saisieProduit}
                 onChangeText={setSaisieProduit}
-                placeholder="Tapez les premieres lettres"
+                placeholder={`Nom, marque, référence ou code`}
                 placeholderTextColor={C.texteFaible}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -663,7 +685,7 @@ function PanneauFiltres(p: {
               </Pressable>
             ))}
             {saisieProduit.trim().length >= 2 && suggestions.length === 0 ? (
-              <Text style={s.explication}>Aucun produit ne porte ce nom.</Text>
+              <Text style={s.explication}>Aucun(e) {p.libelleProduit.toLocaleLowerCase('fr')} ne correspond.</Text>
             ) : null}
           </>
         )}

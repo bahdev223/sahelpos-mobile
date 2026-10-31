@@ -55,6 +55,12 @@ import {
 } from '../(tabs)/stock';
 import { BandeauEtat, couleurs } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
+import { useSession } from '../_layout';
+import {
+  libelleVariante,
+  listerVariantesProduit,
+  type VarianteMobile,
+} from '../../src/db/repositories/variante';
 
 // --------------------------------------------------------------------------
 // Motifs proposes selon la nature
@@ -105,11 +111,15 @@ type Phase = 'chargement' | 'erreur' | 'pret';
 export default function Ajustement() {
   const router = useRouter();
   const parametres = useLocalSearchParams<{ produit?: string; nature?: string }>();
+  const { profilCommerce } = useSession();
+  const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
 
   const [phase, setPhase] = useState<Phase>('chargement');
   const [messageChargement, setMessageChargement] = useState('');
   const [catalogue, setCatalogue] = useState<ProduitStock[]>([]);
   const [produit, setProduit] = useState<ProduitStock | null>(null);
+  const [variantes, setVariantes] = useState<VarianteMobile[]>([]);
+  const [varianteChoisie, setVarianteChoisie] = useState<VarianteMobile | null>(null);
 
   const natureInitiale: NatureMouvement = estNature(parametres.nature)
     ? parametres.nature
@@ -144,6 +154,9 @@ export default function Ajustement() {
         if (trouve) {
           setProduit(trouve);
           setUniteNom(trouve.unite_base);
+          const declinaisons = variantesActives ? await listerVariantesProduit(trouve.id) : [];
+          setVariantes(declinaisons);
+          setVarianteChoisie(declinaisons.length === 1 ? declinaisons[0] : null);
         }
       }
       setPhase('pret');
@@ -151,7 +164,7 @@ export default function Ajustement() {
       setMessageChargement(messageDe(probleme));
       setPhase('erreur');
     }
-  }, [identifiantDemande]);
+  }, [identifiantDemande, variantesActives]);
 
   useFocusEffect(
     useCallback(() => {
@@ -176,7 +189,7 @@ export default function Ajustement() {
   const apercu = useMemo(() => {
     if (!produit || !unite || quantite === null || quantite < 0) return null;
     const quantiteBase = convertirVersBase(quantite, unite.facteur);
-    const avant = produit.quantite_base;
+    const avant = varianteChoisie ? varianteChoisie.stockActuel : produit.quantite_base;
 
     if (nature === 'ENTREE') {
       return { avant, apres: arrondirQuantite(avant + quantiteBase), ecart: quantiteBase };
@@ -189,24 +202,27 @@ export default function Ajustement() {
       apres: quantiteBase,
       ecart: arrondirQuantite(quantiteBase - avant),
     };
-  }, [nature, produit, quantite, unite]);
+  }, [nature, produit, quantite, unite, varianteChoisie]);
 
   const problemeSaisie = useMemo(() => {
     if (!produit) return 'Choisissez un produit.';
+    if (variantes.length > 0 && !varianteChoisie) return 'Choisissez la variante exacte à modifier.';
     if (quantiteTexte.trim() === '') return null;
     if (quantite === null) return 'Quantite illisible. Utilisez des chiffres, la virgule est acceptee.';
     if (quantite < 0) return 'La quantite ne peut pas etre negative.';
     if (nature !== 'AJUSTEMENT' && quantite === 0) return 'La quantite doit etre superieure a zero.';
     if (apercu && apercu.apres < 0) {
-      return `Il n'y a que ${formaterQuantite(produit.quantite_base)} ${produit.unite_base} en stock.`;
+      const disponible = varianteChoisie ? varianteChoisie.stockActuel : produit.quantite_base;
+      return `Il n'y a que ${formaterQuantite(disponible)} ${produit.unite_base} en stock.`;
     }
     return null;
-  }, [apercu, nature, produit, quantite, quantiteTexte]);
+  }, [apercu, nature, produit, quantite, quantiteTexte, varianteChoisie, variantes.length]);
 
   const peutEnregistrer =
     produit !== null &&
     unite !== null &&
     quantite !== null &&
+    (variantes.length === 0 || varianteChoisie !== null) &&
     problemeSaisie === null &&
     (nature === 'AJUSTEMENT' ? quantite >= 0 : quantite > 0) &&
     !enregistrement;
@@ -218,14 +234,17 @@ export default function Ajustement() {
     setSucces(null);
   }, []);
 
-  const choisirProduit = useCallback((choisi: ProduitStock) => {
+  const choisirProduit = useCallback(async (choisi: ProduitStock) => {
     setProduit(choisi);
     setUniteNom(choisi.unite_base);
     setQuantiteTexte('');
     setRecherche('');
     setErreur(null);
     setSucces(null);
-  }, []);
+    const declinaisons = variantesActives ? await listerVariantesProduit(choisi.id) : [];
+    setVariantes(declinaisons);
+    setVarianteChoisie(declinaisons.length === 1 ? declinaisons[0] : null);
+  }, [variantesActives]);
 
   const enregistrer = useCallback(async () => {
     if (!produit || !unite || quantite === null) return;
@@ -235,6 +254,7 @@ export default function Ajustement() {
     try {
       const resultat = await ecrireMouvement({
         produitId: produit.id,
+        varianteId: varianteChoisie?.id ?? null,
         nature,
         source,
         quantite,
@@ -249,14 +269,21 @@ export default function Ajustement() {
       // une vente a pu passer entre l'ouverture de l'ecran et l'enregistrement.
       const rafraichi = await chargerProduitStock(produit.id);
       if (rafraichi) setProduit(rafraichi);
+      if (variantes.length > 0) {
+        const declinaisons = await listerVariantesProduit(produit.id);
+        setVariantes(declinaisons);
+        setVarianteChoisie(
+          varianteChoisie ? declinaisons.find((v) => v.id === varianteChoisie.id) ?? null : null,
+        );
+      }
 
       setQuantiteTexte('');
       setMotifTexte('');
       setReferenceTexte('');
       setPrixTexte('');
       setSucces(
-        `Stock de ${produit.nom} : ${formaterQuantite(resultat.stockAvant)} vers ` +
-          `${formaterQuantite(resultat.stockApres)} ${produit.unite_base}.`,
+        `Stock de ${produit.nom}${varianteChoisie ? ` - ${libelleVariante(varianteChoisie)}` : ''} : ` +
+          `${formaterQuantite(resultat.stockAvant)} vers ${formaterQuantite(resultat.stockApres)} ${produit.unite_base}.`,
       );
     } catch (probleme) {
       if (probleme instanceof StockInsuffisant || probleme instanceof MouvementImpossible) {
@@ -267,14 +294,14 @@ export default function Ajustement() {
     } finally {
       setEnregistrement(false);
     }
-  }, [motifTexte, nature, prix, produit, quantite, referenceTexte, source, unite]);
+  }, [motifTexte, nature, prix, produit, quantite, referenceTexte, source, unite, varianteChoisie, variantes.length]);
 
   const confirmer = useCallback(() => {
     if (!produit || !unite || quantite === null || !apercu) return;
     const onglet = NATURES_ONGLETS.find((o) => o.cle === nature);
     Alert.alert(
       onglet ? onglet.libelle : 'Mouvement',
-      `${produit.nom}\n\n` +
+      `${produit.nom}${varianteChoisie ? ` - ${libelleVariante(varianteChoisie)}` : ''}\n\n` +
         `${formaterQuantite(quantite)} ${unite.nom}\n` +
         `Stock : ${formaterQuantite(apercu.avant)} vers ${formaterQuantite(apercu.apres)} ` +
         `${produit.unite_base}`,
@@ -283,7 +310,7 @@ export default function Ajustement() {
         { text: 'Enregistrer', onPress: () => void enregistrer() },
       ],
     );
-  }, [apercu, enregistrer, nature, produit, quantite, unite]);
+  }, [apercu, enregistrer, nature, produit, quantite, unite, varianteChoisie]);
 
   const suggestions = useMemo(() => {
     const terme = normaliser(recherche.trim());
@@ -365,7 +392,7 @@ export default function Ajustement() {
                 <Pressable
                   key={candidat.id}
                   style={sl.ligneProduit}
-                  onPress={() => choisirProduit(candidat)}>
+                  onPress={() => void choisirProduit(candidat)}>
                   <View style={sl.ligneProduitTextes}>
                     <Text style={sl.ligneProduitNom} numberOfLines={2}>
                       {candidat.nom}
@@ -405,6 +432,8 @@ export default function Ajustement() {
             <Pressable
               onPress={() => {
                 setProduit(null);
+                setVariantes([]);
+                setVarianteChoisie(null);
                 setSucces(null);
                 setErreur(null);
               }}
@@ -413,6 +442,32 @@ export default function Ajustement() {
             </Pressable>
           </View>
         </View>
+
+        {variantes.length > 0 ? (
+          <View style={s.carte}>
+            <Text style={s.titreSection}>Variante exacte</Text>
+            <Text style={s.explication}>
+              Le mouvement ne modifiera que cette combinaison. Le stock total de la référence sera recalculé automatiquement.
+            </Text>
+            <View style={s.puces}>
+              {variantes.map((variante) => (
+                <Pressable
+                  key={variante.idLocal}
+                  style={[s.puce, varianteChoisie?.id === variante.id ? s.puceActive : null]}
+                  onPress={() => {
+                    setVarianteChoisie(variante);
+                    setQuantiteTexte('');
+                    setSucces(null);
+                    setErreur(null);
+                  }}>
+                  <Text style={[s.puceTexte, varianteChoisie?.id === variante.id ? s.puceTexteActif : null]}>
+                    {libelleVariante(variante)} · {formaterQuantite(variante.stockActuel)} {produit.unite_base}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         <View style={sl.onglets}>
           {NATURES_ONGLETS.map((onglet) => (

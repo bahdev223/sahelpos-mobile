@@ -12,7 +12,7 @@ function lire(relatif) {
 test('first mobile setup stores the local PIN through the auth service', () => {
   const demarrage = lire('app/demarrage.tsx');
 
-  assert.match(demarrage, /initialiserCompteAdministrateur/);
+  assert.match(demarrage, /finaliserConnexionMobile/);
   assert.match(demarrage, /pin:\s*pin/);
   assert.doesNotMatch(demarrage, /INSERT INTO utilisateur[\s\S]*code_pin[\s\S]*pin,/);
 });

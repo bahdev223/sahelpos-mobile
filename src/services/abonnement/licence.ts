@@ -47,6 +47,7 @@ export interface Droit {
   peutEcrire: boolean;
   fonctionnalites: string[];
   commerce: ProfilCommerceMobile | null;
+  membre?: {id_local: string; role: 'patron'|'gerant'|'vendeur'};
   /** Message destine au commercant. Vide si tout va bien. */
   raison: string;
   /** Vraie echeance commerciale, distincte du droit offline de 30 jours. */
@@ -178,6 +179,7 @@ export function lireDroit(licence: string): Droit {
       : [],
     raison: String(brut.raison ?? ''),
     commerce: lireProfilCommerce(brut.commerce),
+    ...(brut.membre ? {membre: lireMembre(brut.membre)} : {}),
     abonnementExpireLe: String(brut.abonnement_expire_le ?? ''),
     finGraceLe: String(brut.fin_grace_le ?? ''),
     joursRestants: Number.isFinite(Number(brut.jours_restants))
@@ -193,4 +195,10 @@ export function droitPerime(droit: Droit, maintenant = new Date()): boolean {
   const fin = new Date(droit.expireLe);
   if (Number.isNaN(fin.getTime())) return true;
   return fin.getTime() < maintenant.getTime();
+}
+
+function lireMembre(value: unknown): NonNullable<Droit['membre']> {
+  const member = value as {id_local?: unknown; role?: unknown};
+  if (!member || typeof member.id_local !== 'string' || !/^[0-9a-f]{32}$/.test(member.id_local) || !['patron','gerant','vendeur'].includes(String(member.role))) throw new LicenceInvalide('Le profil signé de ce téléphone est invalide.');
+  return {id_local: member.id_local, role: member.role as 'patron'|'gerant'|'vendeur'};
 }

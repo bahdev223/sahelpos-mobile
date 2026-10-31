@@ -14,10 +14,18 @@ function chargerAbonnement(options = {}) {
   ]);
   const moduleCharge = new Module(chemin, module);
   moduleCharge.paths = Module._nodeModulePaths(resolve(__dirname, '..'));
+  const domainFile = resolve(__dirname, '../src/domain/accounts.ts');
+  const domainModule = new Module(domainFile, module);
+  domainModule._compile(ts.transpileModule(readFileSync(domainFile, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS}}).outputText, domainFile);
   const imports = {
+    '../../domain/accounts': domainModule.exports,
     '../../db/repositories/base': {
       lireTout: async (_sql, cle) => [{ valeur: parametres.get(cle) ?? null }],
       executer: async (_sql, cle, valeur) => { parametres.set(cle, valeur); },
+    },
+    '../../domain/commerce': {
+      ecritureCommerceAutorisee: (commerce, type) =>
+        Boolean(commerce?.ecritures_autorisees?.includes(type)),
     },
     './licence': {
       lireDroit: (licence) => ({
@@ -26,7 +34,11 @@ function chargerAbonnement(options = {}) {
         peutEcrire: true,
         fonctionnalites: [],
         raison: '',
-        commerce: { compatible: true, raison: '' },
+        commerce: {
+          compatible: true,
+          raison: '',
+          ecritures_autorisees: ['utilisateurs','produits','clients','fournisseurs','achats','boutique','ventes','mouvements'],
+        },
         ...options.droit,
       }),
       droitPerime: () => false,
@@ -60,7 +72,11 @@ test('a licence refresh cannot replace the licence of a linked shop', async () =
 
 test('an incompatible commerce licence keeps consultation but blocks offline writes', async () => {
   const { service } = chargerAbonnement({ droit: {
-    commerce: { compatible: false, raison: 'Variantes non prises en charge sur ce mobile.' },
+    commerce: {
+      compatible: false,
+      raison: 'Variantes non prises en charge sur ce mobile.',
+      ecritures_autorisees: [],
+    },
   } });
   const etat = await service.etatCourant();
   assert.equal(etat.active, true);

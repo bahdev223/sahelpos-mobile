@@ -16,11 +16,21 @@ import {
 } from '../../src/db/repositories/variante';
 import { listerFournisseurs, type Fournisseur } from '../../src/db/repositories/fournisseur';
 import { useSession } from '../_layout';
+import { estReferenceTechnique } from '../../src/domain/presentation-commerce';
 import { calculerLigneAchat, enregistrerAchat, type ArticleAchat, type ModePaiementAchat } from '../../src/services/achat';
 import type { Produit, SousUnite } from '../../src/domain/types';
 
 type Etape = 1 | 2 | 3;
 interface Unite { nom: string; facteur: number; prixIndicatif: number }
+
+function coutAchatPour(
+  produit: Produit,
+  facteur: number,
+  variante?: VarianteMobile | null,
+): number {
+  const coutBase = variante?.prixAchat ?? produit.prixAchat;
+  return Math.round(coutBase * facteur);
+}
 
 const dateAujourdhui = () => new Intl.DateTimeFormat('fr-FR', {
   day: '2-digit', month: '2-digit', year: 'numeric',
@@ -31,7 +41,7 @@ export default function EcranNouvelAchat() {
   const { commande, matrice } = useLocalSearchParams<{ commande?: string; matrice?: string }>();
   const { boutique, profilCommerce } = useSession();
   const habillement = profilCommerce?.secteur === 'HABILLEMENT';
-  const quincaillerie = profilCommerce?.secteur === 'QUINCAILLERIE';
+  const referenceTechnique = estReferenceTechnique(profilCommerce);
   const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
   const matriceAutorisee =
     habillement && (profilCommerce?.capabilities_effectives.includes('PURCHASE_MATRIX') ?? false);
@@ -107,9 +117,11 @@ export default function EcranNouvelAchat() {
   const ouvrirProduit = useCallback(async (produit: Produit) => {
     const sousUnites: SousUnite[] = await listerSousUnites(produit.id);
     const liste = [
-      { nom: produit.uniteBase, facteur: 1, prixIndicatif: produit.prixAchat },
+      { nom: produit.uniteBase, facteur: 1, prixIndicatif: coutAchatPour(produit, 1) },
       ...sousUnites.map((item) => ({
-        nom: item.nom, facteur: item.facteur, prixIndicatif: Math.round(produit.prixAchat * item.facteur),
+        nom: item.nom,
+        facteur: item.facteur,
+        prixIndicatif: coutAchatPour(produit, item.facteur),
       })),
     ];
     const declinaisons = variantesActives
@@ -132,7 +144,12 @@ export default function EcranNouvelAchat() {
       return;
     }
     if (variantes.length > 0 && !varianteChoisie) {
-      Alert.alert('Variante requise', 'Choisissez la taille et la couleur à approvisionner.');
+      Alert.alert(
+        'Variante requise',
+        referenceTechnique
+          ? 'Choisissez les caractéristiques techniques exactes à approvisionner.'
+          : 'Choisissez la taille et la couleur à approvisionner.',
+      );
       return;
     }
     setArticles((liste) => [...liste, {
@@ -151,7 +168,7 @@ export default function EcranNouvelAchat() {
     setVariantes([]);
     setRecherche('');
     setChoixOuvert(false);
-  }, [prix, produitChoisi, quantite, uniteChoisie, varianteChoisie, variantes.length]);
+  }, [prix, produitChoisi, quantite, referenceTechnique, uniteChoisie, varianteChoisie, variantes.length]);
 
   const suivant = useCallback(async () => {
     if (etape === 1) {
@@ -182,11 +199,11 @@ export default function EcranNouvelAchat() {
       });
       Alert.alert(
         recevoirMaintenant
-          ? ((habillement || quincaillerie) ? 'Approvisionnement reçu' : 'Achat reçu')
-          : ((habillement || quincaillerie) ? 'Approvisionnement enregistré' : 'Achat enregistré'),
+          ? ((habillement || referenceTechnique) ? 'Approvisionnement reçu' : 'Achat reçu')
+          : ((habillement || referenceTechnique) ? 'Approvisionnement enregistré' : 'Achat enregistré'),
         recevoirMaintenant
           ? `${achat.numero} : la marchandise est entrée en stock.`
-          : `${achat.numero} : ${(habillement || quincaillerie) ? 'approvisionnement' : 'achat'} en attente de réception.`,
+          : `${achat.numero} : ${(habillement || referenceTechnique) ? 'approvisionnement' : 'achat'} en attente de réception.`,
         [{ text: 'Voir', onPress: () => router.replace(`/achats/${achat.achatId}`) }],
       );
     } catch (erreur) {
@@ -199,7 +216,7 @@ export default function EcranNouvelAchat() {
     <Stack.Screen options={{ headerShown: false }} />
     <View style={styles.header}>
       <Pressable onPress={retour} style={styles.retour} hitSlop={10}><Icone nom="retour" taille={27} couleur="#061541" /></Pressable>
-      <Text style={styles.titre}>{(habillement || quincaillerie) ? 'Nouvel approvisionnement' : 'Nouvel achat'}</Text>
+      <Text style={styles.titre}>{(habillement || referenceTechnique) ? 'Nouvel approvisionnement' : 'Nouvel achat'}</Text>
       <View style={styles.brouillon}><Icone nom="document" taille={17} couleur={couleurs.primaire} /><Text style={styles.brouillonTexte}>Brouillon</Text></View>
     </View>
     <ScrollView contentContainerStyle={styles.contenu} showsVerticalScrollIndicator={false}>
@@ -248,14 +265,19 @@ export default function EcranNouvelAchat() {
       onProduit={(produit) => void ouvrirProduit(produit)}
       onVariante={(variante) => {
         setVarianteChoisie(variante);
-        const cout = variante.prixAchat ?? produitChoisi?.prixAchat ?? 0;
+        const facteur = uniteChoisie?.facteur ?? 1;
+        const cout = produitChoisi ? coutAchatPour(produitChoisi, facteur, variante) : 0;
         setPrix(String(cout || ''));
       }}
       onUnite={() => {
         if (!unites.length) return;
         const index = unites.findIndex((item) => item.nom === uniteChoisie?.nom);
         const prochaine = unites[(index + 1) % unites.length];
-        setUniteChoisie(prochaine ?? null); setPrix(String(prochaine?.prixIndicatif || ''));
+        setUniteChoisie(prochaine ?? null);
+        const cout = produitChoisi && prochaine
+          ? coutAchatPour(produitChoisi, prochaine.facteur, varianteChoisie)
+          : 0;
+        setPrix(String(cout || ''));
       }}
       onQuantite={setQuantite} onPrix={setPrix} onAjouter={ajouterArticle}
     />

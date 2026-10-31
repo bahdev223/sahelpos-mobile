@@ -81,6 +81,7 @@ export interface ProprietesBouton {
   /** Bouton d'action principale d'un ecran : plus haut et plus lisible. */
   grand?: boolean;
   sousTitre?: string;
+  icone?: ReactNode;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -92,6 +93,7 @@ export function Bouton({
   enCours = false,
   grand = false,
   sousTitre,
+  icone,
   style,
 }: ProprietesBouton) {
   const inactif = desactive || enCours;
@@ -118,7 +120,9 @@ export function Bouton({
       {enCours ? (
         <ActivityIndicator color={teinte} />
       ) : (
-        <View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {icone}
+          <View>
           <Text
             numberOfLines={1}
             style={[
@@ -134,6 +138,7 @@ export function Bouton({
               {sousTitre}
             </Text>
           ) : null}
+          </View>
         </View>
       )}
     </Pressable>

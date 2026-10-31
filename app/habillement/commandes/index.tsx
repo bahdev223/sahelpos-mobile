@@ -58,7 +58,7 @@ export default function CommandesClientsHabillement(){
         <View style={s.carteHaut}><Text style={s.numero}>{c.numero}</Text><View style={[s.badge,c.statut==='PRETE'&&s.badgePret,c.statut==='ANNULEE'&&s.badgeAnnule]}>
           <Text style={s.badgeTexte}>{LIBELLES[c.statut]??c.statut}</Text></View></View>
         <Text style={s.client}>{c.clientNom||'Client de passage'}</Text>
-        <View style={s.progression}><View style={s.progressionFond}><View style={[s.progressionBarre,{width:(c.pieces>0?Math.min(100,(c.preparees/c.pieces)*100):0)+'%'}]}/></View>
+        <View style={s.progression}><View style={s.progressionFond}><View style={[s.progressionBarre,{width:`${c.pieces>0?Math.min(100,(c.preparees/c.pieces)*100):0}%` as const}]}/></View>
           <Text style={s.progressionTexte}>{c.preparees}/{c.pieces} préparée(s)</Text></View>
         <View style={s.carteBas}><Text style={s.sync}>{c.syncStatut==='SYNCED'?'Synchronisée':'À synchroniser'}</Text>
           <Text style={s.total}>{Math.round(c.total).toLocaleString('fr-FR')} {boutique.devise}</Text></View>

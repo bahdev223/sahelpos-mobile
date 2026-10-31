@@ -44,6 +44,8 @@ import {
   etatCourant as etatAbonnementCourant,
 } from '../../src/services/abonnement';
 import { AccueilHabillement } from '../../src/profile-ui/habillement/AccueilHabillement';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
+import { routeReferenceTechnique } from '../../src/domain/presentation-commerce';
 
 function bornesJour(): { debut: string; fin: string } {
   const debut = new Date();
@@ -101,7 +103,8 @@ export default function EcranAccueil() {
 
 function AccueilStandard() {
   const router = useRouter();
-  const { utilisateur, boutique, revisionSynchronisation, synchroniserMaintenant } = useSession();
+  const { utilisateur, boutique, revisionSynchronisation, synchroniserMaintenant, profilCommerce } = useSession();
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [rafraichit, setRafraichit] = useState(false);
   const derniereLectureValide = useRef<Donnees | null>(null);
@@ -274,7 +277,7 @@ function AccueilStandard() {
                 Stock à surveiller
               </Text>
               <Text style={s.raccourciValeur} numberOfLines={1} adjustsFontSizeToFit>
-                {d.alertes.length} produits
+                {d.alertes.length} {profilUI.libelles.produits.toLocaleLowerCase('fr')}
               </Text>
             </View>
             <Icone nom="chevron" taille={18} couleur={couleurs.texteFaible} />
@@ -358,7 +361,7 @@ function AccueilStandard() {
         )}
 
         <View style={s.sectionEntete}>
-          <Text style={s.sectionTitre}>Produits en alerte</Text>
+          <Text style={s.sectionTitre}>{profilUI.libelles.produits} en alerte</Text>
           <Pressable onPress={() => router.push('/stock/alertes')} hitSlop={8}>
             <Text style={s.lienVoirTout}>Voir tout</Text>
           </Pressable>
@@ -369,7 +372,7 @@ function AccueilStandard() {
               <Pressable
                 key={produit.id}
                 onPress={() =>
-                  router.push({ pathname: '/produit/[id]', params: { id: String(produit.id) } })
+                  router.push(routeReferenceTechnique(profilCommerce, produit.id))
                 }
                 style={({ pressed }) => [s.alerteCarte, pressed && s.lignePressee]}
               >
@@ -388,7 +391,7 @@ function AccueilStandard() {
         ) : (
           <Pressable style={s.alerteVide} onPress={() => router.push('/stock/alertes')}>
             <Icone nom="stock" taille={20} couleur={couleurs.texteEteint} />
-            <Text style={s.alerteVideTexte}>Aucun produit en alerte</Text>
+            <Text style={s.alerteVideTexte}>Aucun {profilUI.libelles.produit.toLocaleLowerCase('fr')} en alerte</Text>
           </Pressable>
         )}
       </ScrollView>

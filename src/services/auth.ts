@@ -23,6 +23,7 @@ import {
 } from '../db/repositories/base';
 import type { Role, Utilisateur } from '../domain/types';
 import { marquerChangement } from './synchronisation';
+import { etatCourant, type Droit } from './abonnement';
 
 const SEL = 'SahelPOS360::pin::v1';
 
@@ -127,11 +128,14 @@ export interface CompteConnexion extends Utilisateur {
 }
 
 export async function listerComptesConnexion(): Promise<CompteConnexion[]> {
+  const membre = (await etatCourant()).droit?.membre;
   const lignes = await lireTout<LigneUtilisateur & { code_pin: string }>(
     `SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a, code_pin
        FROM utilisateur WHERE actif = 1 ORDER BY nom COLLATE NOCASE, login COLLATE NOCASE`,
   );
-  return lignes.map((ligne) => ({
+  return lignes.filter((ligne) => !membre || (
+    ligne.id_local === membre.id_local && ligne.role === (membre.role === 'patron' ? 'admin' : membre.role)
+  )).map((ligne) => ({
     ...versUtilisateur(ligne),
     aCodeLocal: Boolean(ligne.code_pin && ligne.code_pin.trim()),
   }));
@@ -215,6 +219,29 @@ export async function initialiserCompteAdministrateur(saisie: SaisieUtilisateur)
     await executer("UPDATE utilisateur SET role = 'admin' WHERE id = ?", existant.id);
   }
   return existant.id;
+}
+
+/** Legacy credentials can now return a scoped licence; keep that exact identity. */
+export async function finaliserConnexionMobile(droit: Droit, saisie: SaisieUtilisateur): Promise<Utilisateur> {
+  if (droit.membre) {
+    const user = await obtenirUtilisateurParIdLocal(droit.membre.id_local);
+    if (!user || !user.actif) throw new PinInvalide('Le profil signé n’est pas encore synchronisé. Réessayez.');
+    await verifierProfilAppareil(user);
+    const row = await lirePremier<{ code_pin: string }>('SELECT code_pin FROM utilisateur WHERE id = ?', user.id);
+    return row?.code_pin ? connecter(user.login, saisie.pin) : initialiserPinAccounts(user.idLocal, saisie.pin);
+  }
+  const id = await initialiserCompteAdministrateur(saisie);
+  const user = await obtenirUtilisateurParId(id);
+  if (!user) throw new PinInvalide('Le profil local est introuvable.');
+  return user;
+}
+
+/** Preserved profiles need their own online enrollment before using a scoped device. */
+export async function verifierProfilAppareil(compte: Pick<Utilisateur, 'idLocal' | 'role'>): Promise<void> {
+  const membre = (await etatCourant()).droit?.membre;
+  if (membre && (membre.id_local !== compte.idLocal || compte.role !== (membre.role === 'patron' ? 'admin' : membre.role))) {
+    throw new PinInvalide('Ce profil n’est pas autorisé sur cet appareil. Connectez-le avec SahelTech pour l’activer. Son PIN et ses données sont conservés.');
+  }
 }
 
 export async function modifierUtilisateur(
@@ -309,17 +336,21 @@ export async function connecter(login: string, pin: string): Promise<Utilisateur
   if (!versBooleen(l.actif)) {
     throw new PinInvalide('Ce compte est desactive. Voyez avec le responsable.');
   }
-
+  await verifierProfilAppareil(versUtilisateur(l));
   return versUtilisateur(l);
 }
 
 /** L'horaire bride l'encaissement, jamais la consultation de l'historique. */
 export async function verifierAccesCaisse(utilisateurId: number | null | undefined): Promise<void> {
-  if (!utilisateurId) return;
-  const compte = await lirePremier<{ actif: number; caisse_ouvre_a: string | null; caisse_ferme_a: string | null }>(
-    'SELECT actif, caisse_ouvre_a, caisse_ferme_a FROM utilisateur WHERE id = ?', utilisateurId,
+  if (!utilisateurId) {
+    if ((await etatCourant()).droit?.membre) throw new PinInvalide('Ouvrez le profil autorisé sur cet appareil avant d’encaisser.');
+    return;
+  }
+  const compte = await lirePremier<LigneUtilisateur>(
+    'SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a FROM utilisateur WHERE id = ?', utilisateurId,
   );
   if (!compte || !versBooleen(compte.actif)) throw new PinInvalide('Ce compte est desactive.');
+  await verifierProfilAppareil(versUtilisateur(compte));
   const debut = compte.caisse_ouvre_a;
   const fin = compte.caisse_ferme_a;
   if (!debut || !fin) return;
@@ -342,4 +373,20 @@ const DROITS: Record<Role, string[]> = {
 export function aLeDroit(role: Role, action: string): boolean {
   const droits = DROITS[role] ?? [];
   return droits.includes('*') || droits.includes(action);
+}
+
+/** Initializes only the freshly enrolled member; existing PINs never change here. */
+export async function initialiserPinAccounts(idLocal: string, pin: string): Promise<Utilisateur> {
+  verifierFormatPin(pin);
+  const row = await lirePremier<{id: number; code_pin: string; actif: number}>(
+    'SELECT id, code_pin, actif FROM utilisateur WHERE id_local = ?', idLocal,
+  );
+  if (!row || !row.actif) throw new Error('Le profil SahelTech n’est pas encore synchronisé ou est inactif.');
+  if (row.code_pin) throw new Error('Ce profil possède déjà un PIN. Utilisez son code habituel.');
+  const hash = await hacher(pin);
+  await executer("UPDATE utilisateur SET code_pin = ? WHERE id = ? AND (code_pin = '' OR code_pin IS NULL)", hash, row.id);
+  notifierChangementCompteLocal();
+  const user = await obtenirUtilisateurParIdLocal(idLocal);
+  if (!user) throw new Error('Le profil local est introuvable.');
+  return user;
 }

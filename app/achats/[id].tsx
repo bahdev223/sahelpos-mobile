@@ -67,6 +67,8 @@ export default function EcranDetailAchat() {
   const achatId = Number(id);
   const { profilCommerce } = useSession();
   const habillement = profilCommerce?.secteur === 'HABILLEMENT';
+  const receptionPartielle = ['HABILLEMENT', 'QUINCAILLERIE', 'ELECTRICITE', 'COMMERCE_GENERAL']
+    .includes(profilCommerce?.secteur ?? '');
 
   const [achat, setAchat] = useState<AchatResume | null>(null);
   const [lignes, setLignes] = useState<LigneAchat[]>([]);
@@ -293,7 +295,7 @@ export default function EcranDetailAchat() {
                     ? `  (${formaterQuantite(l.quantiteBase)} unites)`
                     : ''}
                 </Text>
-                {l.quantiteRecue > 0 || habillement ? (
+                {l.quantiteRecue > 0 || receptionPartielle ? (
                   <Text style={styles.receptionDetail}>
                     Reçu : {formaterQuantite(l.quantiteRecue)} / {formaterQuantite(l.quantite)} {l.unite}
                   </Text>
@@ -360,9 +362,9 @@ export default function EcranDetailAchat() {
           <ActionsDocument preparer={() => preparerDocumentAchat(achat.id)} />
           {achat.statut === 'BROUILLON' ? (
             <>
-              {habillement ? (
+              {receptionPartielle ? (
                 <Bouton
-                  titre="Réceptionner par taille / couleur"
+                  titre={habillement ? "Réceptionner par taille / couleur" : "Réception partielle par référence"}
                   sousTitre="Saisir uniquement les quantités réellement arrivées"
                   onPress={ouvrirReceptionPartielle}
                   desactive={enCours}
@@ -370,7 +372,7 @@ export default function EcranDetailAchat() {
                 />
               ) : null}
               <Bouton
-                titre={habillement ? "Tout recevoir maintenant" : "Recevoir la marchandise"}
+                titre={receptionPartielle ? "Tout recevoir maintenant" : "Recevoir la marchandise"}
                 sousTitre="Entrée en stock et mise à jour des prix d'achat"
                 onPress={recevoir}
                 enCours={enCours}

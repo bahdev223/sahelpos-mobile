@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
 import { useSession } from '../_layout';
+import { resoudreProfilUIMobile } from '../../src/domain/commerce';
 
 import {
   Bouton,
@@ -55,7 +56,8 @@ function dateCourte(iso: string): string {
 export default function EcranAchats() {
   const router = useRouter();
   const { boutique, synchroniserMaintenant, profilCommerce } = useSession();
-  const habillement = profilCommerce?.secteur === 'HABILLEMENT';
+  const profilUI = resoudreProfilUIMobile(profilCommerce);
+  const approvisionnementSpecialise = ['HABILLEMENT', 'QUINCAILLERIE', 'ELECTRICITE'].includes(profilUI.code);
   const [achats, setAchats] = useState<AchatResume[]>([]);
   const [filtre, setFiltre] = useState<StatutAchat | 'TOUS'>('TOUS');
   const [recherche, setRecherche] = useState('');
@@ -96,7 +98,7 @@ export default function EcranAchats() {
 
   return (
     <SafeAreaView style={styles.page} edges={['bottom']}>
-      <Stack.Screen options={{ headerShown: true, title: habillement ? 'Approvisionnements' : 'Achats' }} />
+      <Stack.Screen options={{ headerShown: true, title: profilUI.libelles.achats }} />
 
       {erreur ? (
         <Erreur message={erreur} onReessayer={charger} />
@@ -131,10 +133,12 @@ export default function EcranAchats() {
           ListEmptyComponent={
             <ListeVide
               titre="Aucun achat"
-              message={habillement
+              message={profilUI.code === 'HABILLEMENT'
                 ? "Enregistrez vos approvisionnements par modèle, taille et couleur."
-                : "Enregistrez vos achats fournisseur pour faire entrer la marchandise en stock et suivre ce que vous devez."}
-              actionTitre={habillement ? "Nouvel approvisionnement" : "Enregistrer un achat"}
+                : approvisionnementSpecialise
+                  ? "Enregistrez vos approvisionnements par référence et caractéristiques."
+                  : "Enregistrez vos achats fournisseur pour faire entrer la marchandise en stock et suivre ce que vous devez."}
+              actionTitre={approvisionnementSpecialise ? "Nouvel approvisionnement" : "Enregistrer un achat"}
               onAction={() => router.push('/achats/nouveau')}
             />
           }
@@ -171,7 +175,7 @@ export default function EcranAchats() {
 
       <View style={styles.pied}>
         <Bouton
-          titre={habillement ? "Nouvel approvisionnement" : "Enregistrer un achat"}
+          titre={approvisionnementSpecialise ? "Nouvel approvisionnement" : "Enregistrer un achat"}
           onPress={() => router.push('/achats/nouveau')}
           grand
         />

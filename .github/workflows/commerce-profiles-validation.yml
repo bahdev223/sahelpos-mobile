@@ -1,0 +1,43 @@
+name: Commerce profiles validation (no native build)
+on:
+  push:
+    branches: [feat/electricite-commerce-general, feat/cereales-vrac]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: commerce-profiles-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      # Keep the committed dependency tree. Normal npm ci tries to add new
+      # peer packages absent from this lock; do not update SDK versions in CI.
+      - run: npm ci --legacy-peer-deps
+      - name: Run JavaScript domain tests
+        run: node --test tests/*.test.cjs
+  types:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - name: Type checking only — no native build
+        run: npx --no-install tsc --noEmit

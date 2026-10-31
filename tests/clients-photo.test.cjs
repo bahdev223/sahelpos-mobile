@@ -49,6 +49,12 @@ function fixture() {
     '../../services/synchronisation': {
       marquerChangement: async (type, idLocal) => changements.push({ type, idLocal }),
     },
+    '../../services/abonnement': {
+      exigerEcriture: async () => {},
+    },
+    '../../services/abonnement': {
+      exigerEcriture: async () => {},
+    },
   });
   return { db, repo, changements };
 }

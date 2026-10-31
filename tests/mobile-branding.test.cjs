@@ -9,14 +9,19 @@ function lire(relatif) {
   return readFileSync(resolve(racine, relatif), 'utf8');
 }
 
-test('mobile app is branded SahelPOS, not Nere', () => {
+test('managed mobile app is branded SahelPOS, not Nere', () => {
   const app = JSON.parse(lire('app.json'));
-  const strings = lire('android/app/src/main/res/values/strings.xml');
-
   assert.equal(app.expo.name, 'SahelPOS');
-  assert.match(strings, /<string name="app_name">SahelPOS<\/string>/);
   assert.doesNotMatch(app.expo.name, /N[ée]r[ée]/i);
-  assert.doesNotMatch(strings, /N[ée]r[ée]/i);
+
+  // Le dossier android est généré au moment du prebuild/build et n'est pas
+  // une source de vérité du dépôt Expo. S'il existe localement, on le vérifie.
+  const stringsPath = resolve(racine, 'android/app/src/main/res/values/strings.xml');
+  if (existsSync(stringsPath)) {
+    const strings = readFileSync(stringsPath, 'utf8');
+    assert.match(strings, /<string name="app_name">SahelPOS<\/string>/);
+    assert.doesNotMatch(strings, /N[ée]r[ée]/i);
+  }
 });
 
 test('launcher assets come from symbol-only SahelPOS source', () => {

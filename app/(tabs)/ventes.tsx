@@ -175,9 +175,9 @@ export default function EcranVentes() {
               <Text style={styles.resumeLibelle}>
                 {totaux.nbVentes} vente{totaux.nbVentes > 1 ? 's' : ''}
               </Text>
-              <Text style={styles.benefice}>
-                Benefice {formaterMontant(totaux.benefice, boutique.devise)}
-              </Text>
+              {utilisateur?.role !== 'vendeur' ? (
+                <Text style={styles.benefice}>Bénéfice {formaterMontant(totaux.benefice, boutique.devise)}</Text>
+              ) : null}
             </View>
           </View>
 
