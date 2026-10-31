@@ -2,6 +2,14 @@
 
 Date de reference : 2026-09-26
 
+## Reprise Android du 9 octobre 2026
+
+Ce guide contient un historique. Pour les versions, sources, signature et
+preuves actuelles, lire [la livraison Android du 9 octobre](../agents/LIVRAISON_ANDROID_2026-10-09.md).
+La source est 1.3.0/code 9 dans la branche de consolidation, pas 1.2.3/code 7.
+Les derniers contrats Accounts et multi-profils de `docs/accounts-qr.md`
+priment sur les descriptions mono-compte historiques ci-dessous.
+
 Ce document est la consigne de passation pour tout agent qui reprend la version mobile SahelPOS. Il doit etre lu avant toute modification du depot mobile.
 
 ## Depots et responsabilites
@@ -88,12 +96,10 @@ adb install -r C:\sahelpos-mobile\android\app\build\outputs\apk\release\app-rele
 
 Si l'installation echoue pour signature incompatible :
 
-```powershell
-adb uninstall tech.saheltech.sahelpos
-adb install C:\sahelpos-mobile\android\app\build\outputs\apk\release\app-release.apk
-```
-
-Attention : `adb uninstall` supprime les donnees locales du telephone. Ne le faire que si le test accepte de repartir de zero.
+Arreter l'installation et comparer les certificats avec `apksigner verify
+--verbose --print-certs`. Retrouver la cle originale ; ne jamais desinstaller
+l'application ni effacer ses donnees pour contourner cette erreur. Un build
+release signe avec une cle de debogage n'est pas distribuable.
 
 ## Mode de compilation
 
