@@ -44,11 +44,13 @@ test('launcher assets come from symbol-only SahelPOS source', () => {
   }
 });
 
-test('mobile onboarding uses SahelPOS space language', () => {
+test('mobile onboarding uses the two-step SahelPOS boutique design', () => {
   const demarrage = lire('app/demarrage.tsx');
 
   assert.match(demarrage, /Creer mon espace/);
-  assert.match(demarrage, /Votre entreprise/);
-  assert.match(demarrage, /premier point de vente/);
-  assert.doesNotMatch(demarrage, /Creer ma boutique|Creer une nouvelle boutique|Parlez-nous de votre boutique/);
+  assert.match(demarrage, /InscriptionMobile/);
+  const inscription = lire('src/ui/inscription/InscriptionMobile.tsx');
+  assert.match(inscription, /Créer ma boutique/);
+  assert.match(inscription, /Mon compte/);
+  assert.doesNotMatch(demarrage, /function EtapesCreation/);
 });
