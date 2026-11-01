@@ -16,6 +16,7 @@ export function construireNavigationMobile(secteur: SecteurCommerce, role: Role,
   const mode = secteur === 'HABILLEMENT';
   const technique = secteur === 'ELECTRICITE' || secteur === 'QUINCAILLERIE';
   const vrac = secteur === 'CEREALES_VRAC';
+  const arrivages = capabilities.includes('ARRIVAL_MANAGEMENT') || capabilities.includes('ARRIVALS');
   const groupes: GroupeNavigationMobile[] = [
     { id:'ventes',titre:'Ventes',entrees:[
       lien('caisse','Caisse','Nouvelle vente','/(tabs)/caisse','caisse'),
@@ -47,6 +48,8 @@ export function construireNavigationMobile(secteur: SecteurCommerce, role: Role,
     { id:'approvisionnement',titre:'Approvisionnements',entrees:[
       lien('achats',mode?'Entrées de stock':'Achats fournisseurs','Commandes et réceptions','/achats','achats'),
       lien('nouvel-achat','Nouvel approvisionnement','Enregistrer un achat','/achats/nouveau','plus'),
+      ...(mode && arrivages?[lien('arrivages','Arrivages & transit','Expéditions, réception et coût rendu','/habillement/arrivages','achats')]:[]),
+      ...(mode?[lien('lots-mode','Lots & péremptions','Lots reçus','/habillement/lots','etiquette','LOT_TRACKING')]:[]),
       ...(mode?[lien('matrice','Matrice taille × couleur','Répartir les quantités','/habillement/approvisionnement-matrice','inventaire','PURCHASE_MATRIX')]:[]),
       lien('fournisseurs','Fournisseurs','Contacts et dettes','/fournisseurs','fournisseurs'),
     ] },
