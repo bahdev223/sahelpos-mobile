@@ -7,6 +7,8 @@ import {
   TextInput,
   View,
   StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -27,9 +29,13 @@ import {
   ecrireParametres,
   useSession,
 } from "../../app/_layout";
-import { SECTEURS_COMMERCE } from "../domain/commerce";
+import { BOUTIQUE_INITIALE, donneesBoutiqueAccounts, validerBoutique, type DonneesBoutique } from "../domain/inscription";
+import { ActivitesInscription } from './inscription/Activites';
+import { ActionCreation, ChampsBoutiqueCreation, PanneauCreation, ProgressionCreation, s as creationStyles } from './inscription/Champs';
 
-export default function AccesAccounts() {
+export default function AccesAccounts({ boutiqueInitiale, inscription = false, desactive = false }: {
+  boutiqueInitiale?: DonneesBoutique; inscription?: boolean; desactive?: boolean;
+} = {}) {
   const { recharger, ouvrirSession } = useSession();
   const [permission, requestPermission] = useCameraPermissions();
   const [open, setOpen] = useState(false),
@@ -45,15 +51,16 @@ export default function AccesAccounts() {
   const [approved, setApproved] = useState(false),
     [pin, setPin] = useState(""),
     [confirmation, setConfirmation] = useState("");
-  const [business, setBusiness] = useState({
-    nom_boutique: "",
-    telephone: "",
-    ville: "",
-    secteur: "COMMERCE_GENERAL",
-  });
+  const [business, setBusiness] = useState(() => donneesBoutiqueAccounts(boutiqueInitiale ?? BOUTIQUE_INITIALE));
+  const [etapeBoutique, setEtapeBoutique] = useState<1 | 2>(boutiqueInitiale?.secteur ? 2 : 1);
+  const [erreursBoutique, setErreursBoutique] = useState<Record<string,string>>({});
+  const creationEnCours = useRef(false);
   const [key, setKey] = useState("");
   const scanLatch = useRef(false);
   function reset() {
+    setBusiness(donneesBoutiqueAccounts(boutiqueInitiale ?? BOUTIQUE_INITIALE));
+    setEtapeBoutique(boutiqueInitiale?.secteur ? 2 : 1);
+    setErreursBoutique({});
     setError("");
     setQr(null);
     setSession(null);
@@ -153,17 +160,26 @@ export default function AccesAccounts() {
     }
   }
   async function createShop() {
-    if (!session) return;
+    if (!session || creationEnCours.current) return;
+    const erreurs = validerBoutique(business);
+    setErreursBoutique(erreurs);
+    if (Object.keys(erreurs).length) {
+      setError(Object.values(erreurs)[0]);
+      if (erreurs.secteur) setEtapeBoutique(1);
+      return;
+    }
+    creationEnCours.current = true;
     setBusy(true);
     setError("");
     try {
       const result = await accountsRequest<{
         utilisateur: AccountsSession["utilisateur"];
-      }>("/auth/onboarding/", session, { ...business, key });
+      }>("/auth/onboarding/", session, { ...donneesBoutiqueAccounts(business), key });
       await enter({ ...session, utilisateur: result.utilisateur });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Création impossible.");
     } finally {
+      creationEnCours.current = false;
       setBusy(false);
     }
   }
@@ -193,22 +209,23 @@ export default function AccesAccounts() {
         variante="secondaire"
         grand
         enCours={busy}
+        desactive={desactive}
         onPress={() => void auth("google", true)}
       />
-      <Bouton
+      {!inscription ? <Bouton
         titre="▣  Scanner un QR code"
         grand
         variante="secondaire"
         desactive={busy}
         onPress={() => void scan()}
-      />
+      /> : null}
       <Bouton
         titre="Identifiant et mot de passe SahelTech"
         variante="discret"
-        desactive={busy}
+        desactive={busy || desactive}
         onPress={() => void auth("accounts", true)}
       />
-      <Text style={styles.or}>ou utilisez votre profil et PIN habituels</Text>
+      {!inscription ? <Text style={styles.or}>ou utilisez votre profil et PIN habituels</Text> : null}
       <Modal
         visible={open}
         animationType="slide"
@@ -221,6 +238,7 @@ export default function AccesAccounts() {
         }}
       >
         <SafeAreaView style={styles.screen}>
+          <KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <ScrollView
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
@@ -314,57 +332,23 @@ export default function AccesAccounts() {
               </>
             )}
             {needsShop && session.utilisateur.boutiques.length === 0 && (
-              <>
-                <Text>
-                  Votre identité est prête. Complétez uniquement les
-                  informations du commerce. Essai gratuit : 14 jours.
-                </Text>
-                <TextInput
-                  style={styles.input}
-                  accessibilityLabel="Nom de la boutique"
-                  placeholder="Nom de la boutique"
-                  value={business.nom_boutique}
-                  onChangeText={(value) =>
-                    setBusiness({ ...business, nom_boutique: value })
-                  }
-                />
-                <TextInput
-                  style={styles.input}
-                  accessibilityLabel="Téléphone professionnel"
-                  placeholder="Téléphone professionnel"
-                  keyboardType="phone-pad"
-                  value={business.telephone}
-                  onChangeText={(value) =>
-                    setBusiness({ ...business, telephone: value })
-                  }
-                />
-                <TextInput
-                  style={styles.input}
-                  accessibilityLabel="Ville"
-                  placeholder="Ville"
-                  value={business.ville}
-                  onChangeText={(value) =>
-                    setBusiness({ ...business, ville: value })
-                  }
-                />
-                <Text>Profil commerce</Text>
-                {SECTEURS_COMMERCE.map((item) => (
-                  <Bouton
-                    key={item.code}
-                    titre={`${business.secteur === item.code ? "✓ " : ""}${item.titre}`}
-                    variante="secondaire"
-                    onPress={() =>
-                      setBusiness({ ...business, secteur: item.code })
-                    }
-                  />
-                ))}
-                <Bouton
-                  titre="Créer ma boutique"
-                  desactive={!business.nom_boutique.trim() || busy}
-                  enCours={busy}
-                  onPress={() => void createShop()}
-                />
-              </>
+              <View style={creationStyles.carte}>
+                <ProgressionCreation etape={etapeBoutique}/>
+                <Text style={creationStyles.titre} accessibilityRole="header">{etapeBoutique === 1 ? 'Quel commerce créez-vous ?' : 'Finalisez la création de votre boutique'}</Text>
+                {etapeBoutique === 1 ? <>
+                  <ActivitesInscription valeur={business.secteur} surChoisir={secteur => setBusiness({...business,secteur})} disabled={busy}/>
+                  <ActionCreation titre="Continuer" disabled={!business.secteur || busy} onPress={() => setEtapeBoutique(2)}/>
+                </> : <View style={{gap:14}}>
+                  <ChampsBoutiqueCreation data={business} onChange={setBusiness} surActivite={() => setEtapeBoutique(1)} disabled={busy} erreurs={erreursBoutique}/>
+                  <PanneauCreation titre="Mon compte">
+                    <Text style={creationStyles.label}>{session.utilisateur.nom || session.utilisateur.email}</Text>
+                    <Text style={creationStyles.aide}>Votre compte est connecté. Aucun mot de passe supplémentaire n’est nécessaire.</Text>
+                  </PanneauCreation>
+                  <Text style={creationStyles.aide}>14 jours d’essai gratuit · Sans paiement à l’ouverture</Text>
+                  <ActionCreation titre="Retour" secondaire disabled={busy} onPress={() => setEtapeBoutique(1)}/>
+                  <ActionCreation titre="Créer ma boutique" busy={busy} onPress={() => void createShop()}/>
+                </View>}
+              </View>
             )}
             {prepared?.needsPin && (
               <>
@@ -411,6 +395,7 @@ export default function AccesAccounts() {
               }}
             />
           </ScrollView>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
     </View>
