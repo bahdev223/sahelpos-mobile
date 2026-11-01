@@ -21,3 +21,9 @@ locale ; ne pas vider SQLite pour changer de contexte.
 Distinguer QR d'invitation, QR de connexion (approbation et code à comparer),
 et code produit. Utiliser le lien d'invitation si la caméra est indisponible.
 Le support est le contact configuré côté service, pas un numéro inventé ici.
+## Complement inscription du 1er novembre 2026
+# Prise en main
+
+Nouvelle inscription : choisir l'activité illustrée, continuer vers « Ma boutique » et « Mon compte », puis créer la boutique. Retour ou Modifier permet de corriger l'activité sans perdre les valeurs métier. Google/Accounts évite le mot de passe local ; la création classique conserve les identifiants serveur. Le PIN local vient ensuite selon le parcours existant.
+
+Pour rejoindre une boutique, invitations, QR et rôles : [guide faisant autorité](../accounts-qr.md). Cette refonte ne donne aucun nouveau droit vendeur. [État vérifié et limites](../inscription-mobile-2026-11-01.md).

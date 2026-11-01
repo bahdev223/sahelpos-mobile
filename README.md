@@ -4,6 +4,8 @@ Caisse Android **offline-first** de SahelPOS, en React Native / Expo.
 
 Version source actuelle : **1.3.0** (`versionCode 9`).
 
+Refonte d'inscription du 1er novembre 2026 : [état, tests et captures](docs/inscription-mobile-2026-11-01.md). Développée sur branche, sans build ni distribution. [Index de consolidation](docs/agents/ETAT_CONSOLIDATION.md).
+
 ## Ce que fait l'application
 
 - **Caisse** : panier, encaissement, crédit, reçus et impression thermique Bluetooth.

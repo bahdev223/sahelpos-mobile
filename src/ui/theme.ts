@@ -12,6 +12,11 @@
  */
 
 export const couleurs = {
+  // Inscription : mêmes repères visuels que les maquettes Web, sans changer la caisse.
+  inscriptionBleu: '#0665ef',
+  inscriptionFond: '#f5f9ff',
+  inscriptionEncre: '#102a55',
+  inscriptionBordure: '#dce6f5',
   // --- marque ------------------------------------------------------------
   primaire: '#004a8d',
   primaireFonce: '#003d73',

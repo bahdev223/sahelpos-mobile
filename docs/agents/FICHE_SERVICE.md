@@ -15,3 +15,9 @@ Aucun paiement réel vérifié.
 Présenter la mobilité hors connexion comme un parcours à recetter sur appareil
 avant engagement. Les tests automatiques n'attestent pas une APK distribuée.
 Le contact support est celui configuré par le service ; aucun numéro ajouté.
+## Complement inscription du 1er novembre 2026
+# Fiche service
+
+SahelPOS Mobile est la caisse Android avec travail local et synchronisation décrite dans le [README](../../README.md). L'inscription propose onze activités, dont Habillement, avec des illustrations embarquées. La disponibilité métier dépend des capacités et droits signés existants.
+
+Cette évolution ne change ni offres ni prix. Aucun nouveau tarif, paiement opérationnel ou contact commercial n'est vérifié dans ce chantier. [État exact de livraison](ETAT_CONSOLIDATION.md).
