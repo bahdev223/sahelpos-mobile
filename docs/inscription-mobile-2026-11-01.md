@@ -34,4 +34,3 @@ Vérifications du 1er novembre 2026, Windows, Node, branche de travail :
 Captures : [activité](validation/inscription-mobile-2026-11-01/activite-390.jpg), [boutique](validation/inscription-mobile-2026-11-01/boutique-390.jpg), [compte](validation/inscription-mobile-2026-11-01/compte-390.jpg), [tablette](validation/inscription-mobile-2026-11-01/tablette-1024.jpg).
 
 L'aperçu est un harnais temporaire hors dépôt : adaptateurs Web pour images/SVG et boutons Accounts simulés, sans SQLite, appel réseau ou création réelle. Il valide la disposition des composants, pas les comportements natifs du clavier, du bouton retour Android, de la zone sûre ou d'OAuth. Aucun essai d'authentification réel, APK/AAB, installation, build natif, GitHub Actions, fusion, déploiement ou distribution effectué. Les guides ci-dessous indexent cette évolution ; ils ne certifient pas les recettes historiques manquantes.
-
