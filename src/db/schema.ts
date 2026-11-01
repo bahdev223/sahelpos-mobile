@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -515,5 +515,92 @@ export const MIGRATIONS: string[][] = [
     `ALTER TABLE sous_unite ADD COLUMN prix_gros REAL NOT NULL DEFAULT 0`,
     `CREATE INDEX IF NOT EXISTS idx_produit_marque ON produit(marque)`,
     `CREATE INDEX IF NOT EXISTS idx_produit_reference_fabricant ON produit(reference_fabricant)`,
+  ],
+
+  // --- version 17 : arrivages offline-first --------------------------------
+  [
+    `ALTER TABLE achat ADD COLUMN serveur_id INTEGER`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_achat_serveur
+       ON achat(serveur_id) WHERE serveur_id IS NOT NULL`,
+
+    `CREATE TABLE IF NOT EXISTS arrivage (
+      id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local                TEXT NOT NULL UNIQUE,
+      serveur_id              INTEGER,
+      numero                  TEXT NOT NULL,
+      titre                   TEXT NOT NULL,
+      statut                  TEXT NOT NULL DEFAULT 'BROUILLON',
+      transporteur            TEXT NOT NULL DEFAULT '',
+      tracking_number         TEXT NOT NULL DEFAULT '',
+      date_creation           TEXT NOT NULL,
+      date_expedition         TEXT,
+      date_reception_estimee  TEXT,
+      date_reception_reelle   TEXT,
+      notes                   TEXT NOT NULL DEFAULT '',
+      date_modification       TEXT NOT NULL,
+      supprime_le             TEXT
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_arrivage_serveur
+       ON arrivage(serveur_id) WHERE serveur_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_arrivage_statut_date
+       ON arrivage(statut, date_creation)`,
+
+    `CREATE TABLE IF NOT EXISTS ligne_arrivage (
+      id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local                 TEXT NOT NULL UNIQUE,
+      serveur_id               INTEGER,
+      arrivage_id              INTEGER NOT NULL REFERENCES arrivage(id) ON DELETE CASCADE,
+      produit_id               INTEGER NOT NULL REFERENCES produit(id),
+      variante_id              INTEGER REFERENCES variante_produit(id),
+      ligne_achat_serveur_id   INTEGER,
+      comptee                  INTEGER NOT NULL DEFAULT 0,
+      quantite_prevue          REAL NOT NULL,
+      quantite_recue           REAL NOT NULL DEFAULT 0,
+      quantite_rejetee         REAL NOT NULL DEFAULT 0,
+      motif_ecart              TEXT NOT NULL DEFAULT '',
+      prix_achat_unitaire      REAL NOT NULL DEFAULT 0,
+      poids_unitaire_kg        REAL NOT NULL DEFAULT 0,
+      volume_unitaire_m3       REAL NOT NULL DEFAULT 0,
+      frais_approche_alloues   REAL NOT NULL DEFAULT 0,
+      cout_revient_unitaire    REAL NOT NULL DEFAULT 0,
+      lot_serveur_id           INTEGER,
+      numero_lot               TEXT NOT NULL DEFAULT '',
+      date_peremption          TEXT,
+      produit_nom_snapshot     TEXT NOT NULL DEFAULT '',
+      variante_sku_snapshot    TEXT NOT NULL DEFAULT '',
+      variante_nom_snapshot    TEXT NOT NULL DEFAULT '',
+      date_modification        TEXT NOT NULL,
+      supprime_le              TEXT
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_ligne_arrivage_serveur
+       ON ligne_arrivage(serveur_id) WHERE serveur_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_arrivage_arrivage
+       ON ligne_arrivage(arrivage_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_ligne_arrivage_variante
+       ON ligne_arrivage(variante_id)`,
+
+    `CREATE TABLE IF NOT EXISTS frais_arrivage (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      id_local           TEXT NOT NULL UNIQUE,
+      serveur_id         INTEGER,
+      arrivage_id        INTEGER NOT NULL REFERENCES arrivage(id) ON DELETE CASCADE,
+      type_frais         TEXT NOT NULL DEFAULT 'FRET',
+      libelle            TEXT NOT NULL DEFAULT '',
+      montant            REAL NOT NULL DEFAULT 0,
+      mode_repartition   TEXT NOT NULL DEFAULT 'VALEUR',
+      date_frais         TEXT NOT NULL,
+      date_modification  TEXT NOT NULL,
+      supprime_le        TEXT
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_frais_arrivage_serveur
+       ON frais_arrivage(serveur_id) WHERE serveur_id IS NOT NULL`,
+    `CREATE INDEX IF NOT EXISTS idx_frais_arrivage_arrivage
+       ON frais_arrivage(arrivage_id)`,
+
+    `CREATE TABLE IF NOT EXISTS arrivage_achat (
+      arrivage_id INTEGER NOT NULL REFERENCES arrivage(id) ON DELETE CASCADE,
+      achat_id    INTEGER NOT NULL REFERENCES achat(id) ON DELETE CASCADE,
+      PRIMARY KEY (arrivage_id, achat_id)
+    )`,
   ],
 ];
