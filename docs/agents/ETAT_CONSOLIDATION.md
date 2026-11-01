@@ -1,5 +1,8 @@
 # État Android — 8 octobre 2026
 
+Etat courant : [candidate Android du 1er novembre](LIVRAISON_ANDROID_2026-11-01.md).
+Les sections ci-dessous conservent les releves historiques et leur perimetre.
+
 Reprise du 9 octobre : voir [le compte rendu Android](LIVRAISON_ANDROID_2026-10-09.md)
 pour la signature, la compilation et l'installation. Les absences de tests
 materiels mentionnees ci-dessous decrivent le releve historique du 8 octobre.

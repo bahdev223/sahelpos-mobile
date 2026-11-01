@@ -2,9 +2,9 @@
 
 Caisse Android **offline-first** de SahelPOS, en React Native / Expo.
 
-Version source actuelle : **1.3.0** (`versionCode 9`).
+Version source actuelle : **1.3.1** (`versionCode 10`).
 
-Refonte d'inscription du 1er novembre 2026 : [état, tests et captures](docs/inscription-mobile-2026-11-01.md). Développée sur branche, sans build ni distribution. [Index de consolidation](docs/agents/ETAT_CONSOLIDATION.md).
+Refonte d'inscription du 1er novembre 2026 : [état, tests et captures](docs/inscription-mobile-2026-11-01.md). Intégrée à la candidate Android, avec les corrections métier : [livraison courante](docs/agents/LIVRAISON_ANDROID_2026-11-01.md). [Index de consolidation](docs/agents/ETAT_CONSOLIDATION.md).
 
 ## Ce que fait l'application
 
@@ -145,6 +145,13 @@ La publication d'un APK/AAB stable reste conditionnée par cette recette.
 Un APK interne peut être préparé et installé à la demande explicite du
 propriétaire pour lui permettre de réaliser les essais, sans être présenté
 comme une release commerciale validée.
+
+## Candidate Android du 1er novembre 2026
+
+La branche `codex/android-harmonisation-20261101` réunit la consolidation
+métier du 31 octobre et l'inscription illustrée du 1er novembre, en version
+**1.3.1 / code 10**. Le [rapport courant](docs/agents/LIVRAISON_ANDROID_2026-11-01.md)
+précise les sources, les contrôles, la compilation et les limites de recette.
 
 ## Livraison Android du 9 octobre 2026
 
