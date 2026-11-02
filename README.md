@@ -153,6 +153,10 @@ métier du 31 octobre et l'inscription illustrée du 1er novembre, en version
 **1.3.1 / code 10**. Le [rapport courant](docs/agents/LIVRAISON_ANDROID_2026-11-01.md)
 précise les sources, les contrôles, la compilation et les limites de recette.
 
+[Télécharger la préversion de test 1.3.1/code 10](https://github.com/bahdev223/sahelpos-mobile/releases/download/mobile-v1.3.1-rc.1/SahelPOS-1.3.1-code10.apk),
+publiée séparément le 2 novembre. Elle ne remplace pas la version stable ni
+le téléchargement principal du site ; la recette sur appareil reste à faire.
+
 ## Livraison Android du 9 octobre 2026
 
 La version **1.3.0 / code 9** a été compilée avec la signature existante et

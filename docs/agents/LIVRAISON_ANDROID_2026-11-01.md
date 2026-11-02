@@ -101,3 +101,25 @@ doivent etre testes sur le materiel et une entreprise de recette autorisee.
 Aucun deploiement, fusion de master ou remplacement du telechargement public
 n'est compris dans cette compilation. Aucun audit npm recent n'a ete execute
 dans cette reprise ; les avis historiques ne sont pas declares corriges.
+
+## Publication de test du 2 novembre 2026
+
+Apres choix explicite de l'utilisateur « Publier un lien de test separe »,
+la candidate a ete publiee sous le tag `mobile-v1.3.1-rc.1`, avec
+`isDraft=false`, `isPrerelease=true` et sans designation comme derniere stable.
+
+- [Page de la preversion](https://github.com/bahdev223/sahelpos-mobile/releases/tag/mobile-v1.3.1-rc.1).
+- [Telecharger l'APK de test](https://github.com/bahdev223/sahelpos-mobile/releases/download/mobile-v1.3.1-rc.1/SahelPOS-1.3.1-code10.apk).
+- Publication GitHub : 2026-11-02 19:49:01 UTC.
+- Empreinte SHA-256 de l'asset GitHub identique au binaire local :
+  `720630773c80ca56ac00cdb9476a050cf275e599224a22e51ed94fd6ce685480`.
+- Requete HEAD anonyme sur le lien APK : HTTP 200, 63 750 219 octets,
+  type `application/vnd.android.package-archive`.
+- La release stable GitHub reste `mobile-v1.2.0`.
+- `/api/public/offres/` annonce toujours 1.0.0 et son ancien lien : aucun
+  remplacement du bouton principal, changement Coolify ou deploiement.
+- Aucun workflow configure pour les publications/tags dans le fichier
+  Actions inspecte ; aucune action GitHub lancee manuellement.
+
+Ce lien permet les essais ; sa publication ne valide pas les parcours materiels
+encore ouverts et ne signifie pas une installation sur le telephone.
