@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -603,4 +603,21 @@ export const MIGRATIONS: string[][] = [
       PRIMARY KEY (arrivage_id, achat_id)
     )`,
   ],
+  // --- version 18 : journal durable des reglements et annulations de ventes ---
+  // L'outbox porte l'identite de chaque operation, jamais celle de la vente
+  // seule : deux paiements distincts ne doivent pas devenir un seul upsert.
+  [
+    `CREATE TABLE IF NOT EXISTS operation_vente_mobile (
+      id_local        TEXT PRIMARY KEY NOT NULL,
+      vente_id        INTEGER NOT NULL REFERENCES vente(id) ON DELETE CASCADE,
+      nature          TEXT NOT NULL CHECK(nature IN ('REGLEMENT', 'ANNULATION')),
+      montant         REAL NOT NULL DEFAULT 0,
+      mode_paiement   TEXT NOT NULL DEFAULT 'especes',
+      motif           TEXT,
+      date_creation   TEXT NOT NULL
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_operation_vente_mobile_vente
+       ON operation_vente_mobile(vente_id, date_creation)`,
+  ],
+
 ];

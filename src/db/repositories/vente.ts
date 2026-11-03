@@ -6,7 +6,7 @@
  * parce qu'il touche aussi le stock et doit rester une seule transaction.
  */
 import type { LigneVente, ModePaiement, StatutVente } from '../../domain/types';
-import { dansTransaction, executer, lirePremier, lireTout, maintenant } from './base';
+import { dansTransaction, executer, genererIdLocal, lirePremier, lireTout, maintenant } from './base';
 
 export interface VenteResume {
   id: number;
@@ -209,8 +209,8 @@ export async function encaisser(venteId: number, montant: number): Promise<void>
   const arrondi = montant;
 
   await dansTransaction(async () => {
-    const v = await lirePremier<{ total: number; montant_paye: number; statut: string }>(
-      'SELECT total, montant_paye, statut FROM vente WHERE id = ?',
+    const v = await lirePremier<{ total: number; montant_paye: number; statut: string; id_local: string }>(
+      'SELECT total, montant_paye, statut, id_local FROM vente WHERE id = ?',
       venteId,
     );
     if (!v) throw new Error('Vente introuvable.');
@@ -236,6 +236,18 @@ export async function encaisser(venteId: number, montant: number): Promise<void>
       statut,
       venteId,
     );
+    const operationId = genererIdLocal();
+    await executer(
+      `INSERT INTO operation_vente_mobile
+         (id_local, vente_id, nature, montant, mode_paiement, date_creation)
+       VALUES (?, ?, 'REGLEMENT', ?, 'especes', ?)`,
+      operationId, venteId, arrondi, maintenant(),
+    );
+    await executer(
+      `INSERT INTO sync_outbox (type_objet, id_local, operation, date_creation)
+       VALUES ('operation_vente', ?, 'upsert', ?)`,
+      operationId, maintenant(),
+    );
   });
 }
 
@@ -248,8 +260,8 @@ export async function encaisser(venteId: number, montant: number): Promise<void>
  */
 export async function annulerVente(venteId: number, motif = ''): Promise<void> {
   await dansTransaction(async () => {
-    const v = await lirePremier<{ numero: string; statut: string }>(
-      'SELECT numero, statut FROM vente WHERE id = ?',
+    const v = await lirePremier<{ numero: string; statut: string; id_local: string }>(
+      'SELECT numero, statut, id_local FROM vente WHERE id = ?',
       venteId,
     );
     if (!v) throw new Error('Vente introuvable.');
@@ -319,5 +331,17 @@ export async function annulerVente(venteId: number, motif = ''): Promise<void> {
     }
 
     await executer("UPDATE vente SET statut = 'annulee' WHERE id = ?", venteId);
+    const operationId = genererIdLocal();
+    await executer(
+      `INSERT INTO operation_vente_mobile
+         (id_local, vente_id, nature, montant, motif, date_creation)
+       VALUES (?, ?, 'ANNULATION', 0, ?, ?)`,
+      operationId, venteId, motif, maintenant(),
+    );
+    await executer(
+      `INSERT INTO sync_outbox (type_objet, id_local, operation, date_creation)
+       VALUES ('operation_vente', ?, 'upsert', ?)`,
+      operationId, maintenant(),
+    );
   });
 }
