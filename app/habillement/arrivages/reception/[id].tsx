@@ -15,6 +15,7 @@ import { useSession } from '../../../_layout';
 import { BandeauEtat, Bouton, espaces, rayons } from '../../../../src/ui/components';
 import { Icone } from '../../../../src/ui/icones';
 import { HABILLEMENT_MOBILE_THEME as H } from '../../../../src/profile-ui/habillement/theme';
+import { ChampDate } from '../../../../src/ui/ChampDate';
 
 interface Saisie {
   recue: string;
@@ -169,7 +170,7 @@ export default function ReceptionArrivageHabillement() {
           <Text style={s.sectionLabel}>Traçabilité du lot</Text>
           <View style={s.deux}>
             <Champ label="N° lot" value={saisie.lot} onChange={v=>setSaisies(cur=>({...cur,[item.id]:{...cur[item.id],lot:v}}))} clavier="default"/>
-            <Champ label="Péremption" value={saisie.peremption} onChange={v=>setSaisies(cur=>({...cur,[item.id]:{...cur[item.id],peremption:v}}))} clavier="default" placeholder="AAAA-MM-JJ"/>
+            <ChampDate label="Péremption" valeur={saisie.peremption} onChange={v=>setSaisies(cur=>({...cur,[item.id]:{...cur[item.id],peremption:v}}))}/>
           </View>
         </View>;
       }}

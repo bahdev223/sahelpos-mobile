@@ -90,10 +90,10 @@ export function EcranDemarrage() {
   const sousTitreEtape = useMemo(() => {
     if (etape === 0) {
       return mode === 'connexion'
-        ? 'Accedez a votre espace SahelPOS'
+        ? 'Accédez à votre espace SahelPOS'
         : 'Configurez votre espace SahelPOS';
     }
-    return 'Protegez la caisse sur ce telephone.';
+    return 'Protégez la caisse sur ce téléphone.';
   }, [etape, mode]);
 
   const validerEtape = useCallback((): boolean => {
@@ -152,7 +152,7 @@ export function EcranDemarrage() {
     try {
       const etat =
         mode === 'connexion'
-          ? await connecterCompteMobile(login, motDePasseWeb, 'Telephone principal')
+          ? await connecterCompteMobile(login, motDePasseWeb, 'Téléphone principal')
           : await creerBoutiqueMobile(
               {
                 nomBoutique,
@@ -167,7 +167,7 @@ export function EcranDemarrage() {
                 devise,
                 plan: 'START',
               },
-              'Telephone principal',
+              'Téléphone principal',
             );
       if (!etat.droit) throw new Error("Le serveur n'a pas renvoye l'espace SahelPOS.");
       if (!etat.droit.peutEntrer) throw new Error(etat.droit.raison || "Cet espace SahelPOS n'est pas actif.");
@@ -185,7 +185,7 @@ export function EcranDemarrage() {
       setErreurGenerale(
         erreur instanceof Error
           ? erreur.message
-          : 'Connexion impossible. Verifiez Internet et reessayez.',
+          : 'Connexion impossible. Vérifiez Internet et réessayez.',
       );
     } finally {
       connexionEnCours.current = false;
@@ -228,7 +228,7 @@ export function EcranDemarrage() {
       await recharger();
       ouvrirSession(compte);
     } catch (erreur) {
-      const message = erreur instanceof Error ? erreur.message : "L'acces local n'a pas pu etre enregistre.";
+      const message = erreur instanceof Error ? erreur.message : "L'accès local n'a pas pu etre enregistre.";
       if (/deja utilise/i.test(message)) {
         setErreurs({ login: message });
       } else {
@@ -301,12 +301,12 @@ export function EcranDemarrage() {
             <Text style={styles.heroSahel}>Sahel</Text>
             <Text style={styles.heroPos}>POS</Text>
           </Text>
-          <Text style={styles.heroTexte}>Gerez votre caisse, votre stock et vos ventes, ou que vous soyez.</Text>
+          <Text style={styles.heroTexte}>Gérez votre caisse, votre stock et vos ventes, où que vous soyez.</Text>
 
           <AccesAccounts />
           <View style={styles.fonctions}>
             <MiniFonction icone="boutique" titre="Vente" sousTitre="simple et rapide" fond="#dcfce7" couleur="#16a34a" />
-            <MiniFonction icone="stock" titre="Stock" sousTitre="en temps reel" fond="#ffedd5" couleur="#f97316" />
+            <MiniFonction icone="stock" titre="Stock" sousTitre="en temps réel" fond="#ffedd5" couleur="#f97316" />
             <MiniFonction icone="clients" titre="Clients" sousTitre="et ardoises" fond="#e0f2fe" couleur="#0b77ff" />
             <MiniFonction icone="graphique" titre="Tableau" sousTitre="clair et complet" fond="#ede9fe" couleur="#7c3aed" />
           </View>
@@ -323,7 +323,7 @@ export function EcranDemarrage() {
           </Pressable>
           <Pressable style={styles.boutonBlanc} onPress={() => afficherFormulaire('creation')}>
             <Icone nom="boutique" taille={24} couleur={couleurs.texte} />
-            <Text style={styles.boutonBlancTexte}>Creer mon espace</Text>
+            <Text style={styles.boutonBlancTexte}>Créer mon espace</Text>
           </Pressable>
           <Pressable onPress={() => afficherFormulaire('creation')}>
             <Text style={styles.essai}>Essayer gratuitement pendant 14 jours</Text>
@@ -352,7 +352,7 @@ export function EcranDemarrage() {
             <View style={styles.formBloc}>
               {mode === 'connexion' ? (
                 <View>
-                  <ChampMaquette icone="document" label="Identifiant" valeur={login} onChangeText={setLogin} placeholder="Email ou numero de telephone" erreur={erreurs.login} autoFocus />
+                  <ChampMaquette icone="document" label="Identifiant" valeur={login} onChangeText={setLogin} placeholder="Email ou numéro de téléphone" erreur={erreurs.login} autoFocus />
                   <ChampMaquette icone="caisse" label="Mot de passe" valeur={motDePasseWeb} onChangeText={setMotDePasseWeb} placeholder="Votre mot de passe" retourClavier="done" onValider={() => void connecterBoutique()} secret erreur={erreurs.motDePasseWeb} />
 
                   <View style={styles.ligneOptions}>
@@ -362,11 +362,10 @@ export function EcranDemarrage() {
                       </View>
                       <View>
                         <Text style={styles.memoireTitre}>Se souvenir de moi</Text>
-                        <Text style={styles.memoireTexte}>Restez connecte plus longtemps</Text>
                       </View>
                     </Pressable>
                     <Pressable hitSlop={8}>
-                      <Text style={styles.lienBleu}>Mot de passe oublie ?</Text>
+                      <Text style={styles.lienBleu}>Mot de passe oublié ?</Text>
                     </Pressable>
                   </View>
 
@@ -386,16 +385,9 @@ export function EcranDemarrage() {
                     <Text style={styles.googleTexte}>Continuer avec Google</Text>
                   </Pressable>
 
-                  <View style={styles.securite}>
-                    <Icone nom="coche" taille={28} couleur={couleurs.primaire} />
-                    <View style={styles.securiteTexteBloc}>
-                      <Text style={styles.securiteTitre}>Vos donnees sont securisees</Text>
-                      <Text style={styles.securiteTexte}>Chiffrement et protection de niveau professionnel</Text>
-                    </View>
-                  </View>
 
                   <Pressable onPress={() => afficherFormulaire('creation')}>
-                    <Text style={styles.creerBas}>Pas encore de compte ? <Text style={styles.creerBasLien}>Creer mon espace</Text></Text>
+                    <Text style={styles.creerBas}>Pas encore de compte ? <Text style={styles.creerBasLien}>Créer mon espace</Text></Text>
                   </Pressable>
                 </View>
               ) : (
@@ -409,18 +401,13 @@ export function EcranDemarrage() {
           {etape === 1 ? (
             <Carte style={styles.carteCode}>
               <View style={styles.boutiqueConnectee}>
-                <Text style={styles.boutiqueLibelle}>Espace connecte</Text>
+                <Text style={styles.boutiqueLibelle}>Espace connecté</Text>
                 <Text style={styles.boutiqueNom}>{droit?.nom || 'SahelPOS'}</Text>
                 <Text style={styles.boutiqueDetail}>Plan {droit?.plan || '-'} recu depuis SahelPOS Web.</Text>
-                <Text style={styles.boutiqueDetail}>{droit?.commerce?.secteur_libelle || 'Profil a verifier'}</Text>
+                <Text style={styles.boutiqueDetail}>{droit?.commerce?.secteur_libelle || 'Profil à vérifier'}</Text>
               </View>
               {!droit?.commerce || droit.commerce.ecritures_autorisees.length === 0 ? (
-                <BandeauErreur message={droit?.commerce?.raison || 'Connectez-vous pour verifier le profil commerce.'} />
-              ) : !droit.commerce.compatible && droit.commerce.raison ? (
-                <View style={styles.infoCreation}>
-                  <View style={styles.infoPastille}><Text style={styles.infoPastilleTexte}>i</Text></View>
-                  <Text style={styles.infoCreationTexte}>{droit.commerce.raison}</Text>
-                </View>
+                <BandeauErreur message={droit?.commerce?.raison || 'Connectez-vous pour vérifier le profil commerce.'} />
               ) : null}
               <Champ label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Aminata Diarra" autoFocus />
               <Champ label="Identifiant local" valeur={login} onChangeText={setLogin} placeholder="aminata" erreur={erreurs.login} />

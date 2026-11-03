@@ -128,7 +128,7 @@ export default function EcranFicheClient() {
   const choisirPhoto = useCallback(async () => {
     const permission = await SelecteurImage.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Acces aux photos', "Autorisez l'acces aux photos pour choisir le profil du client.");
+      Alert.alert('Accès aux photos', "Autorisez l'accès aux photos pour choisir le profil du client.");
       return;
     }
     const resultat = await SelecteurImage.launchImageLibraryAsync({
@@ -144,7 +144,7 @@ export default function EcranFicheClient() {
   const demanderSuppression = useCallback(() => {
     Alert.alert(
       'Supprimer ce client ?',
-      'Cette operation ne peut pas etre defaite.',
+      'Cette opération ne peut pas etre defaite.',
       [
         { text: 'Non', style: 'cancel' },
         {
@@ -161,7 +161,7 @@ export default function EcranFicheClient() {
                 // rendrait l'ardoise introuvable.
                 Alert.alert(
                   'Suppression refusee',
-                  'Ce client a des ventes enregistrees. Il ne peut pas etre supprime sans rendre son historique orphelin.',
+                  'Ce client a des ventes enregistrées. Il ne peut pas etre supprime sans rendre son historique orphelin.',
                 );
               }
             } catch (e) {
@@ -207,7 +207,7 @@ export default function EcranFicheClient() {
         {solde ? (
           <Carte>
             <Text style={styles.ardoiseLibelle}>
-              {solde.resteDu > 0 ? 'Ce client vous doit' : 'Ce client est a jour'}
+              {solde.resteDu > 0 ? 'Ce client vous doit' : 'Ce client est à jour'}
             </Text>
             <Montant
               valeur={solde.resteDu}
@@ -240,7 +240,7 @@ export default function EcranFicheClient() {
               <Champ
                 valeur={telephone}
                 onChangeText={setTelephone}
-                label="Telephone"
+                label="Téléphone"
                 clavier="phone-pad"
               />
               <Champ valeur={adresse} onChangeText={setAdresse} label="Adresse" />
@@ -262,7 +262,7 @@ export default function EcranFicheClient() {
           ) : (
             <>
               <Ligne libelle="Nom" valeur={client.nom} />
-              <Ligne libelle="Telephone" valeur={client.telephone ?? '-'} />
+              <Ligne libelle="Téléphone" valeur={client.telephone ?? '-'} />
               <Ligne libelle="Adresse" valeur={client.adresse ?? '-'} />
               <Bouton
                 titre="Modifier"

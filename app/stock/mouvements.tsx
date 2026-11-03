@@ -46,6 +46,8 @@ import {
 import { Icone } from '../../src/ui/icones';
 import { useSession } from '../_layout';
 import { resoudreProfilUIMobile } from '../../src/domain/commerce';
+import { useAccent, useStylesAccent } from '../../src/ui/accent';
+import { libelleUnite } from '../../src/domain/unites';
 
 const PAR_PAGE = 25;
 
@@ -286,7 +288,7 @@ function effetSurStock(m: LigneMouvement): Effet {
 
   const signe = m.nature === 'ENTREE' ? '+' : '-';
   return {
-    texte: `${signe}${formaterQuantite(m.quantite)} ${unite}`.trim(),
+    texte: `${signe}${formaterQuantite(m.quantite)} ${libelleUnite(unite, m.quantite)}`.trim(),
     couleur: m.nature === 'ENTREE' ? C.vert : C.rouge,
   };
 }
@@ -310,6 +312,8 @@ function couleurNature(nature: string): string {
 type Phase = 'chargement' | 'erreur' | 'pret';
 
 export default function Mouvements() {
+  const A = useStylesAccent();
+  const accentCouleur = useAccent().primaire;
   const router = useRouter();
   const { profilCommerce } = useSession();
   const profilUI = resoudreProfilUIMobile(profilCommerce);
@@ -418,8 +422,8 @@ export default function Mouvements() {
       <BandeauEtat />
       <View style={s.entete}>
         <Pressable onPress={() => router.back()} style={s.retour}>
-          <Icone nom="retour" taille={17} couleur={couleurs.primaire} />
-          <Text style={s.retourTexte}>Retour</Text>
+          <Icone nom="retour" taille={17} couleur={accentCouleur} />
+          <Text style={[s.retourTexte, A.texte]}>Retour</Text>
         </Pressable>
         <Text style={s.titre}>Journal du stock</Text>
       </View>
@@ -510,7 +514,7 @@ export default function Mouvements() {
           <Text style={sl.centreTitre}>Le journal n&apos;a pas pu etre lu</Text>
           <Text style={sl.centreTexte}>{message}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger(filtres)}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       ) : (
@@ -526,7 +530,7 @@ export default function Mouvements() {
               <Text style={sl.centreTitre}>Aucun mouvement</Text>
               <Text style={sl.centreTexte}>
                 {nbFiltresActifs > 0
-                  ? 'Aucun mouvement ne correspond a ces filtres.'
+                  ? 'Aucun mouvement ne correspond à ces filtres.'
                   : "Le journal se remplit tout seul : chaque vente, chaque entree et chaque " +
                     'ajustement y laisse une ligne.'}
               </Text>
@@ -564,13 +568,14 @@ export default function Mouvements() {
 }
 
 function Etiquette(p: { texte: string; onRetirer: () => void }) {
+  const A = useStylesAccent();
   return (
-    <View style={sl.etiquette}>
-      <Text style={sl.etiquetteTexte} numberOfLines={1}>
+    <View style={[sl.etiquette, A.fondDoux]}>
+      <Text style={[sl.etiquetteTexte, A.texte]} numberOfLines={1}>
         {p.texte}
       </Text>
       <Pressable onPress={p.onRetirer} hitSlop={8}>
-        <Text style={sl.etiquetteCroix}>X</Text>
+        <Text style={[sl.etiquetteCroix, A.texte]}>X</Text>
       </Pressable>
     </View>
   );
@@ -740,7 +745,7 @@ function PanneauFiltres(p: {
       </View>
 
       <View style={sl.bloc}>
-        <Text style={s.libelle}>Periode</Text>
+        <Text style={s.libelle}>Période</Text>
         <View style={s.puces}>
           <Puce texte="Tout" actif={p.filtres.du === null && p.filtres.au === null} onPress={() => periode(null)} />
           <Puce texte="Aujourd'hui" actif={false} onPress={() => periode(0)} />
@@ -784,14 +789,14 @@ function PanneauFiltres(p: {
       </View>
 
       <View style={sl.bloc}>
-        <Text style={s.libelle}>Motif ou reference</Text>
+        <Text style={s.libelle}>Motif ou référence</Text>
         <View style={s.zoneSaisie}>
           <TextInput
             style={s.saisie}
             value={texte}
             onChangeText={setTexte}
             onBlur={() => p.onChange({ ...p.filtres, texte })}
-            placeholder="Casse, bon de livraison, numero de vente..."
+            placeholder="Casse, bon de livraison, numéro de vente..."
             placeholderTextColor={C.texteFaible}
             autoCapitalize="none"
           />
@@ -836,6 +841,7 @@ function Puce(p: { texte: string; actif: boolean; onPress: () => void }) {
 // --------------------------------------------------------------------------
 
 function CarteMouvement({ mouvement }: { mouvement: LigneMouvement }) {
+  const A = useStylesAccent();
   const effet = effetSurStock(mouvement);
   const couleur = couleurNature(mouvement.nature);
 
@@ -849,7 +855,7 @@ function CarteMouvement({ mouvement }: { mouvement: LigneMouvement }) {
               {mouvement.produit_nom ?? 'Produit supprime'}
             </Text>
             {mouvement.variante_nom ? (
-              <Text style={sl.variante} numberOfLines={1}>
+              <Text style={[sl.variante, A.texte]} numberOfLines={1}>
                 {mouvement.variante_nom}
                 {mouvement.variante_sku ? ` · ${mouvement.variante_sku}` : ''}
               </Text>
@@ -875,7 +881,7 @@ function CarteMouvement({ mouvement }: { mouvement: LigneMouvement }) {
         {mouvement.stock_avant !== null && mouvement.stock_apres !== null ? (
           <Text style={sl.detail}>
             Stock : {formaterQuantite(mouvement.stock_avant)} vers{' '}
-            {formaterQuantite(mouvement.stock_apres)} {mouvement.unite_base ?? ''}
+            {formaterQuantite(mouvement.stock_apres)} {libelleUnite(mouvement.unite_base, mouvement.stock_apres)}
           </Text>
         ) : null}
 
@@ -892,7 +898,7 @@ function CarteMouvement({ mouvement }: { mouvement: LigneMouvement }) {
             </Text>
           ) : null}
           {mouvement.prix_unitaire !== null && mouvement.prix_unitaire > 0 ? (
-            <Text style={sl.prix}>{formaterFrancs(mouvement.prix_unitaire)} / unite</Text>
+            <Text style={sl.prix}>{formaterFrancs(mouvement.prix_unitaire)} / unité</Text>
           ) : null}
           {mouvement.utilisateur ? (
             <Text style={sl.utilisateur} numberOfLines={1}>

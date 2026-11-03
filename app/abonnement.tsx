@@ -39,7 +39,7 @@ function dateCourte(iso: string): string {
 const NOM_PLAN: Record<string, string> = {
   START: 'Essentiel',
   PRO: 'Boutique',
-  BUSINESS: 'Reseau',
+  BUSINESS: 'Réseau',
 };
 
 const NOM_STATUT: Record<string, string> = {
@@ -96,10 +96,10 @@ export default function EcranAbonnement() {
       setEtat(nouveau);
       setCode('');
       Alert.alert(
-        'Application activee',
+        'Application activée',
         nouveau.droit
           ? `${nouveau.droit.nom} — offre ${NOM_PLAN[nouveau.droit.plan] ?? nouveau.droit.plan}.`
-          : 'Activation enregistree.',
+          : 'Activation enregistrée.',
       );
     } catch (erreur) {
       Alert.alert(
@@ -115,10 +115,10 @@ export default function EcranAbonnement() {
     setEnCours(true);
     try {
       setEtat(await rafraichir());
-      Alert.alert('A jour', 'Votre abonnement a ete verifie.');
+      Alert.alert('À jour', 'Votre abonnement a ete verifie.');
     } catch (erreur) {
       Alert.alert(
-        'Verification impossible',
+        'Vérification impossible',
         erreur instanceof Error ? erreur.message : "Le serveur n a pas repondu.",
       );
     } finally {
@@ -128,7 +128,7 @@ export default function EcranAbonnement() {
 
   const surDetacher = useCallback(() => {
     Alert.alert(
-      'Detacher ce telephone',
+      'Detacher ce téléphone',
       "L'application redemandera un code d'activation. VOS DONNEES NE SONT PAS " +
         'EFFACEES : ventes, produits, clients et stock restent en place.',
       [
@@ -224,13 +224,13 @@ export default function EcranAbonnement() {
             />
           </Carte>
         ) : (
-          <Carte titre="Verification">
+          <Carte titre="Vérification">
             <Text style={styles.aide}>
               L application verifie votre abonnement toute seule. Ce bouton sert
               si vous venez de renouveler et voulez en profiter tout de suite.
             </Text>
             <Bouton
-              titre="Verifier maintenant"
+              titre="Vérifier maintenant"
               onPress={() => void surRafraichir()}
               enCours={enCours}
               variante="secondaire"
@@ -239,7 +239,7 @@ export default function EcranAbonnement() {
           </Carte>
         )}
 
-        <Carte titre="Travailler sans reseau">
+        <Carte titre="Travailler sans réseau">
           <Text style={styles.aide}>
             Vos ventes, vos produits et vos clients sont dans ce telephone.
             L application fonctionne sans Internet ; la connexion ne sert qu a
@@ -248,12 +248,12 @@ export default function EcranAbonnement() {
         </Carte>
 
         {droit ? (
-          <Carte titre="Changer de telephone">
+          <Carte titre="Changer de téléphone">
             <Text style={styles.aide}>
               Detachez ce telephone avant d installer l application sur un autre
               appareil. Vos donnees ne sont pas effacees.
             </Text>
-            <Bouton titre="Detacher ce telephone" onPress={surDetacher} variante="danger" />
+            <Bouton titre="Detacher ce téléphone" onPress={surDetacher} variante="danger" />
           </Carte>
         ) : null}
       </ScrollView>

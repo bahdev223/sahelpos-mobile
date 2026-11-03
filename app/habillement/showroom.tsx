@@ -7,6 +7,7 @@ import { uriImage, formaterFrancs } from '../produit/nouveau';
 import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
 import { Icone } from '../../src/ui/icones';
 import { espaces, rayons } from '../../src/ui/components';
+import { IconeCategorie } from '../../src/ui/IconeCategorie';
 
 interface CarteShowroom {
   id: number;
@@ -74,7 +75,6 @@ export default function ShowroomHabillement() {
         </Pressable>
         <View style={{ flex: 1 }}>
           <Text style={s.titre}>Showroom</Text>
-          <Text style={s.sous}>Vue visuelle des modèles disponibles</Text>
         </View>
       </View>
 
@@ -102,7 +102,7 @@ export default function ShowroomHabillement() {
               <Image source={{ uri: uriImage(m.image)! }} style={s.image} resizeMode="cover" />
             ) : (
               <View style={[s.image, s.imageVide]}>
-                <Text style={s.initiale}>{m.nom[0]?.toUpperCase()}</Text>
+                <IconeCategorie nom={m.categorie} taille={64} epaisseur={1.4} />
               </View>
             )}
             <View style={s.corps}>

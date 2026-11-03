@@ -103,7 +103,7 @@ export default function EcranFicheFournisseur() {
   }, [fournisseurId, nom, contact, telephone, adresse, charger]);
 
   const demanderSuppression = useCallback(() => {
-    Alert.alert('Supprimer ce fournisseur ?', 'Cette operation ne peut pas etre defaite.', [
+    Alert.alert('Supprimer ce fournisseur ?', 'Cette opération ne peut pas etre defaite.', [
       { text: 'Non', style: 'cancel' },
       {
         text: 'Supprimer',
@@ -153,7 +153,7 @@ export default function EcranFicheFournisseur() {
         {solde ? (
           <Carte>
             <Text style={styles.detteLibelle}>
-              {solde.resteDu > 0 ? 'Vous devez a ce fournisseur' : 'Vous etes a jour'}
+              {solde.resteDu > 0 ? 'Vous devez à ce fournisseur' : 'Vous etes à jour'}
             </Text>
             <Montant
               valeur={solde.resteDu}
@@ -185,7 +185,7 @@ export default function EcranFicheFournisseur() {
               <Champ
                 valeur={telephone}
                 onChangeText={setTelephone}
-                label="Telephone"
+                label="Téléphone"
                 clavier="phone-pad"
               />
               <Champ
@@ -213,7 +213,7 @@ export default function EcranFicheFournisseur() {
             <>
               <Ligne libelle="Nom" valeur={fournisseur.nom} />
               <Ligne libelle="Contact" valeur={fournisseur.contact ?? '-'} />
-              <Ligne libelle="Telephone" valeur={fournisseur.telephone ?? '-'} />
+              <Ligne libelle="Téléphone" valeur={fournisseur.telephone ?? '-'} />
               <Bouton
                 titre="Modifier"
                 onPress={() => setModifie(true)}

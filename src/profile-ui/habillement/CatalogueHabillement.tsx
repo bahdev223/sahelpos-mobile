@@ -13,6 +13,8 @@ import { Icone } from '../../ui/icones';
 import { BoutonMenu } from '../../ui/tiroir';
 import { uriImage, formaterFrancs } from '../../../app/produit/nouveau';
 import { HABILLEMENT_MOBILE_THEME as H } from './theme';
+import { IconeCategorie } from '../../ui/IconeCategorie';
+import { comparerTailles } from '../../domain/tailles';
 
 interface Modele {
   id: number;
@@ -66,7 +68,7 @@ async function chargerModeles(): Promise<Modele[]> {
       nbVariantes: new Set(variantes.map((v) => v.id)).size,
       stockVariantes: await stockTotalVariantes(p.id),
       couleurs: [...couleursSet].slice(0, 4),
-      tailles: [...taillesSet].slice(0, 5),
+      tailles: [...taillesSet].sort(comparerTailles).slice(0, 5),
     });
   }
   return resultat;
@@ -106,7 +108,6 @@ export function CatalogueHabillement() {
         <BoutonMenu />
         <View style={s.enteteTextes}>
           <Text style={s.titre}>Modèles</Text>
-          <Text style={s.sousTitre}>Tailles · couleurs · variantes</Text>
         </View>
         <Pressable style={s.boutonIcone} onPress={() => router.push('/habillement/referentiel')}>
           <Icone nom="etiquette" taille={20} couleur={H.primaire} />
@@ -125,7 +126,7 @@ export function CatalogueHabillement() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.raccourcis}>
+        style={s.raccourcisZone} contentContainerStyle={s.raccourcis}>
         <Pressable style={s.puce} onPress={() => router.push('/habillement/referentiel')}>
           <Text style={s.puceTexte}>Tailles & couleurs</Text>
         </Pressable>
@@ -153,7 +154,7 @@ export function CatalogueHabillement() {
               <Image source={{ uri: uriImage(item.image)! }} style={s.image} resizeMode="cover" />
             ) : (
               <View style={[s.image, s.imageVide]}>
-                <Text style={s.initiale}>{item.nom.slice(0, 1).toUpperCase()}</Text>
+                <IconeCategorie nom={item.categorie} taille={56} epaisseur={1.4} />
               </View>
             )}
             <View style={s.corps}>
@@ -211,6 +212,7 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: H.bordure, backgroundColor: H.surface,
   },
   saisie: { flex: 1, color: H.texte, fontSize: 14 },
+  raccourcisZone: { flexGrow: 0, flexShrink: 0 },
   raccourcis: { gap: espaces.s, paddingHorizontal: espaces.m, paddingBottom: espaces.m },
   puce: { paddingVertical: 9, paddingHorizontal: 13, borderRadius: 20, backgroundColor: H.primaireClair },
   puceTexte: { color: H.primaire, fontSize: 12, fontWeight: '800' },

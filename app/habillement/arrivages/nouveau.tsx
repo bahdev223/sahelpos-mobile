@@ -9,6 +9,7 @@ import { creerArrivage } from '../../../src/services/arrivage';
 import { BandeauEtat, Bouton, espaces, rayons } from '../../../src/ui/components';
 import { Icone } from '../../../src/ui/icones';
 import { HABILLEMENT_MOBILE_THEME as H } from '../../../src/profile-ui/habillement/theme';
+import { ChampDate } from '../../../src/ui/ChampDate';
 
 function Champ({label,value,onChange,placeholder,multiline=false}:{
   label:string;value:string;onChange:(v:string)=>void;placeholder?:string;multiline?:boolean;
@@ -63,21 +64,14 @@ export default function NouvelArrivageHabillement() {
       </Pressable>
       <View style={s.enteteTextes}>
         <Text style={s.titre}>Nouvel arrivage</Text>
-        <Text style={s.sous}>Créer le dossier logistique</Text>
       </View>
     </View>
     <KeyboardAvoidingView style={s.page} behavior={Platform.OS==='ios'?'padding':undefined}>
       <ScrollView contentContainerStyle={s.contenu} keyboardShouldPersistTaps="handled">
-        <View style={s.info}>
-          <Text style={s.infoTitre}>Commencez par le dossier</Text>
-          <Text style={s.infoTexte}>
-            Les bons fournisseurs, tailles/couleurs, frais, quantités reçues et lots seront ajoutés sur la fiche suivante.
-          </Text>
-        </View>
         <Champ label="Titre *" value={titre} onChange={setTitre} placeholder="Ex. Conteneur Dakar octobre"/>
         <Champ label="Transporteur / transitaire" value={transporteur} onChange={setTransporteur} placeholder="Ex. Sahel Transit"/>
         <Champ label="N° tracking / BL" value={tracking} onChange={setTracking} placeholder="Ex. BL-2026-1044"/>
-        <Champ label="Réception estimée" value={dateEstimee} onChange={setDateEstimee} placeholder="AAAA-MM-JJ"/>
+        <ChampDate label="Réception estimée" valeur={dateEstimee} onChange={setDateEstimee}/>
         <Champ label="Notes" value={notes} onChange={setNotes} placeholder="Informations utiles…" multiline/>
       </ScrollView>
       <View style={s.pied}>

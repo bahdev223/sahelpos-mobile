@@ -95,7 +95,6 @@ export function AccueilHabillement() {
       <ScrollView contentContainerStyle={s.contenu}>
         <View style={s.bienvenue}>
           <Text style={s.salut}>Bonjour {utilisateur?.nom||utilisateur?.login||''}</Text>
-          <Text style={s.sousSalut}>Prêt-à-porter · tailles · couleurs · variantes</Text>
         </View>
 
         <View style={s.caCarte}>

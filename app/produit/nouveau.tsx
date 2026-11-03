@@ -48,6 +48,8 @@ import { couleurs } from '../../src/ui/theme';
 import { Icone } from '../../src/ui/icones';
 import { useSession } from '../_layout';
 import { estReferenceTechnique, estVrac, tarifGrosDisponible } from '../../src/domain/presentation-commerce';
+import { IconeCategorie } from '../../src/ui/IconeCategorie';
+import { useAccent } from '../../src/ui/accent';
 export { C };
 
 // --------------------------------------------------------------------------
@@ -55,7 +57,7 @@ export { C };
 // --------------------------------------------------------------------------
 
 /** Unites de base proposees. La saisie libre reste possible via "Autre". */
-export const UNITES_BASE = ['Unite', 'Piece', 'Metre', 'Kg', 'Litre', 'Rouleau', 'Boite', 'Carton', 'Sac'] as const;
+export const UNITES_BASE = ['Unité', 'Pièce', 'Metre', 'Kg', 'Litre', 'Rouleau', 'Boite', 'Carton', 'Sac'] as const;
 
 const TYPES_CODE_BARRE = [
   'ean13',
@@ -206,10 +208,10 @@ export { uriImage };
 function messageErreur(erreur: unknown): string {
   const texte = erreur instanceof Error ? erreur.message : String(erreur);
   if (/UNIQUE.*code_barre/i.test(texte)) {
-    return 'Ce code-barres est deja utilise par un autre produit.';
+    return 'Ce code-barres est déjà utilise par un autre produit.';
   }
   if (/UNIQUE/i.test(texte)) {
-    return 'Un produit identique existe deja en base.';
+    return 'Un produit identique existe déjà en base.';
   }
   return texte;
 }
@@ -286,7 +288,7 @@ export function validerSaisie(saisie: SaisieProduit, creation: boolean): {
       return;
     }
     if (nomsVus.has(nomSu.toLowerCase())) {
-      erreurs.sousUnites[index] = 'Cette unite est deja definie.';
+      erreurs.sousUnites[index] = 'Cette unité est déjà definie.';
       return;
     }
     if (prix < 0 || prixGrosLigne < 0) {
@@ -583,7 +585,7 @@ function ModaleCamera(p: {
               <Text style={s.boutonClairTexte}>Autoriser la camera</Text>
             </Pressable>
             <Pressable style={s.boutonFantome} onPress={p.onFermer}>
-              <Text style={s.boutonFantomeTexte}>Saisir a la main</Text>
+              <Text style={s.boutonFantomeTexte}>Saisir à la main</Text>
             </Pressable>
           </View>
         ) : (
@@ -629,6 +631,8 @@ export interface ProprietesFormulaire {
   /** Rendu sous le formulaire : suppression, stock courant, etc. */
   complement?: React.ReactNode;
   libelleValider: string;
+  /** Modele Habillement : ni unites, ni sous-unites, ni code-barres (portes par les variantes). */
+  mode?: boolean;
   onValider: (valide: ProduitValide, saisie: SaisieProduit) => Promise<void>;
   onAnnuler: () => void;
 }
@@ -711,8 +715,8 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
       const permission = await SelecteurImage.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
         Alert.alert(
-          'Acces aux photos',
-          "Autorisez l'acces aux photos pour en choisir une, ou prenez la photo avec l'appareil.",
+          'Accès aux photos',
+          "Autorisez l'accès aux photos pour en choisir une, ou prenez la photo avec l'appareil.",
         );
         return;
       }
@@ -766,7 +770,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
           'Marge nulle ou negative',
           `Le prix de vente (${formaterMontant(valide.prixUnitaire, boutique.devise)}) ne couvre pas le prix ` +
             `d'achat (${formaterMontant(valide.prixAchat, boutique.devise)}). Perte de ${formaterMontant(perte, boutique.devise)} ` +
-            'par unite vendue. Enregistrer quand meme ?',
+            'par unité vendue. Enregistrer quand meme ?',
           [
             { text: 'Corriger', style: 'cancel', onPress: () => resoudre(false) },
             { text: 'Enregistrer', onPress: () => resoudre(true) },
@@ -873,7 +877,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
           />
 
           <Champ
-            libelle="Categorie"
+            libelle="Catégorie"
             valeur={saisie.categorie}
             onChange={(v) => modifier('categorie', v)}
             indication="Alimentaire"
@@ -969,13 +973,13 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
 
         {/* ---- Unites ---- */}
         <View style={s.carte}>
-          <Text style={s.titreSection}>Unite de base</Text>
+          <Text style={s.titreSection}>Unité de base</Text>
           <Pressable
             style={[s.selecteurUnite, erreurs.champs.uniteBase ? s.zoneSaisieErreur : null]}
             onPress={() => setUniteMenuOuvert(true)}
           >
             <Text style={s.selecteurUniteTexte}>
-              {uniteLibre ? 'Autre unite' : saisie.uniteBase || 'Choisir'}
+              {uniteLibre ? 'Autre unité' : saisie.uniteBase || 'Choisir'}
             </Text>
             <Text style={s.selecteurUniteChevron}>⌄</Text>
           </Pressable>
@@ -987,7 +991,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
           >
             <Pressable style={s.voileSelecteur} onPress={() => setUniteMenuOuvert(false)}>
               <View style={s.menuUnite} onStartShouldSetResponder={() => true}>
-                <Text style={s.menuUniteTitre}>Unite de base</Text>
+                <Text style={s.menuUniteTitre}>Unité de base</Text>
                 {[...UNITES_BASE, 'Autre'].map((u) => (
                   <Pressable
                     key={u}
@@ -1011,7 +1015,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
           </Modal>
           {uniteLibre ? (
             <Champ
-              libelle="Nom de l'unite"
+              libelle="Nom de l'unité"
               valeur={saisie.uniteBase}
               onChange={(v) => modifier('uniteBase', v)}
               erreur={erreurs.champs.uniteBase}
@@ -1024,7 +1028,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
 
         {/* ---- Sous-unites ---- */}
         <View style={s.carte}>
-          <Text style={s.titreSection}>Sous-unites</Text>
+          <Text style={s.titreSection}>Sous-unités</Text>
           <Text style={s.explication}>
             Une sous-unite vaut "facteur" fois l&apos;unite de base. Un sac de 50 kg pour un
             produit en Kg : facteur 50. Prix laisse a 0 : la caisse applique le prix de base
@@ -1094,7 +1098,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
           ))}
 
           <Pressable style={s.boutonSecondaire} onPress={ajouterSousUnite}>
-            <Text style={s.boutonSecondaireTexte}>Ajouter une sous-unite</Text>
+            <Text style={s.boutonSecondaireTexte}>Ajouter une sous-unité</Text>
           </Pressable>
         </View>
 
@@ -1103,7 +1107,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
           <Text style={s.titreSection}>Stock</Text>
           <Bascule
             libelle="Suivre le stock"
-            explication="Desactive, le produit se vend sans jamais decompter de quantite."
+            explication="Désactivé, le produit se vend sans jamais decompter de quantité."
             valeur={saisie.gestionStock}
             onChange={(v) => modifier('gestionStock', v)}
           />
@@ -1133,7 +1137,7 @@ export function FormulaireProduit(p: ProprietesFormulaire) {
           ) : null}
           <Bascule
             libelle="Produit actif"
-            explication="Un produit inactif reste en base mais n'apparait plus a la caisse."
+            explication="Un produit inactif reste en base mais n'apparait plus à la caisse."
             valeur={saisie.actif}
             onChange={(v) => modifier('actif', v)}
           />
@@ -1202,6 +1206,8 @@ interface ProprietesFormulaireMobile {
 
 /** La composition mobile validee : les details restent accessibles, sans noyer la saisie. */
 function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
+  const accent = useAccent();
+  const mode = Boolean(props.p.mode);
   const [menuCategorieOuvert, setMenuCategorieOuvert] = useState(false);
   const [menuPhotoOuvert, setMenuPhotoOuvert] = useState(false);
   const [nouvelleCategorie, setNouvelleCategorie] = useState('');
@@ -1248,7 +1254,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
               <Image source={{ uri: props.apercu! }} style={m.photo} resizeMode="cover" />
             ) : (
               <>
-                <Icone nom="appareilPhoto" taille={24} couleur={couleurs.primaire} />
+                <Icone nom="appareilPhoto" taille={24} couleur={accent.primaire} />
                 <Text style={m.zonePhotoTexte}>Ajouter une image</Text>
               </>
             )}
@@ -1256,11 +1262,11 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
 
           <View style={m.identiteChamps}>
             <ChampMobile
-              libelle={props.vrac ? 'Nom de la denrée' : props.referenceTechnique ? 'Nom de la référence' : 'Nom du produit'}
+              libelle={mode ? 'Nom du modèle' : props.vrac ? 'Nom de la denrée' : props.referenceTechnique ? 'Nom de la référence' : 'Nom du produit'}
               obligatoire
               valeur={props.saisie.nom}
               onChangeText={(valeur) => props.modifier('nom', valeur)}
-              indication="Ex : Riz Royal 50 kg"
+              indication={mode ? 'Ex : Robe Lina' : 'Ex : Riz Royal 50 kg'}
               erreur={props.erreurs.champs.nom}
             />
             <View style={m.champMobile}>
@@ -1269,7 +1275,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
                 style={[m.selecteur, props.erreurs.champs.categorie ? m.selecteurErreur : null]}
                 onPress={() => setMenuCategorieOuvert(true)}
               >
-                <Icone nom="etiquette" taille={21} couleur={couleurs.texte} />
+                {mode ? <IconeCategorie nom={props.saisie.categorie} taille={21} couleur={accent.primaire} /> : <Icone nom="etiquette" taille={21} couleur={couleurs.texte} />}
                 <Text
                   style={[m.selecteurTexte, !props.saisie.categorie && m.selecteurIndication]}
                   numberOfLines={1}
@@ -1307,9 +1313,11 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
           <View style={m.titreCarteMobile}>
             <PastilleMobile nom="argent" fond={couleurs.succesDouce} couleur={couleurs.succesFonce} />
             <Text style={m.titreCarteTexte}>Prix ({props.devise})</Text>
-            <View style={m.puceExplication}>
-              <Text style={m.puceExplicationTexte} numberOfLines={1}>{props.vrac ? 'Prix/kg' : 'Prix/unité'}</Text>
-            </View>
+            {mode ? null : (
+              <View style={m.puceExplication}>
+                <Text style={m.puceExplicationTexte} numberOfLines={1}>{props.vrac ? 'Prix/kg' : 'Prix/unité'}</Text>
+              </View>
+            )}
           </View>
           <View style={m.ligneChamps}>
             <View style={m.champDemi}>
@@ -1346,6 +1354,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
           ) : null}
         </View>
 
+        {mode ? null : (<>
         <View style={m.carteRangee}>
           <PastilleMobile nom="stock" />
           <LibelleMobile texte="Unité de base" obligatoire style={m.libelleRangee} />
@@ -1456,19 +1465,21 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
           </View>
         </View>
 
+        </>)}
+
         <View style={m.carteStock}>
           <View style={m.stockEntete}>
             <PastilleMobile nom="stock" fond={couleurs.surfaceDouce} couleur={couleurs.texte} />
             <View style={m.rangeeTexte}>
               <Text style={m.titreRangee}>{props.vrac ? 'Stock en kilogrammes' : 'Gestion du stock'}</Text>
-              <Text style={m.sousTitreRangee}>
-                {props.vrac ? 'Le stock consolidé reste en kg, quel que soit le conditionnement vendu.' : 'Suivre les quantités et être alerté.'}
-              </Text>
+              {props.vrac ? (
+                <Text style={m.sousTitreRangee}>Le stock consolidé reste en kg, quel que soit le conditionnement vendu.</Text>
+              ) : null}
             </View>
             <Switch
               value={props.saisie.gestionStock}
               onValueChange={(valeur) => props.modifier('gestionStock', valeur)}
-              trackColor={{ false: couleurs.bordure, true: couleurs.primaire }}
+              trackColor={{ false: couleurs.bordure, true: accent.primaire }}
               thumbColor={couleurs.surface}
             />
           </View>
@@ -1504,7 +1515,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
               <Switch
                 value={props.saisie.actif}
                 onValueChange={(valeur) => props.modifier('actif', valeur)}
-                trackColor={{ false: couleurs.bordure, true: couleurs.primaire }}
+                trackColor={{ false: couleurs.bordure, true: accent.primaire }}
                 thumbColor={couleurs.surface}
               />
             </View>
@@ -1519,7 +1530,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
           <Text style={m.boutonAnnulerMobileTexte}>Annuler</Text>
         </Pressable>
         <Pressable
-          style={[m.boutonCreerMobile, props.enregistrement ? m.boutonDesactiveMobile : null]}
+          style={[m.boutonCreerMobile, { backgroundColor: accent.primaire }, props.enregistrement ? m.boutonDesactiveMobile : null]}
           onPress={props.onEnregistrer}
           disabled={props.enregistrement}
         >
@@ -1528,7 +1539,7 @@ function FormulaireProduitMobile(props: ProprietesFormulaireMobile) {
           ) : (
             <>
               <Icone nom="coche" taille={22} couleur={couleurs.texteInverse} />
-              <Text style={m.boutonCreerMobileTexte}>{props.p.libelleValider}</Text>
+              <Text style={m.boutonCreerMobileTexte} numberOfLines={1}>{props.p.libelleValider}</Text>
             </>
           )}
         </Pressable>

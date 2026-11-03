@@ -67,8 +67,8 @@ export default function EcranImprimante() {
       setAppareils(trouves);
       if (trouves.length === 0) {
         setMessageRecherche(
-          "Aucune imprimante trouvee. Verifiez qu'elle est allumee, que le " +
-            'Bluetooth du telephone est actif, et qu elle est appairee dans les ' +
+          "Aucune imprimante trouvee. Vérifiez qu'elle est allumee, que le " +
+            'Bluetooth du téléphone est actif, et qu elle est appairee dans les ' +
             'reglages Bluetooth d Android.',
         );
       }
@@ -94,7 +94,7 @@ export default function EcranImprimante() {
           imprimanteCanal: appareil.canal,
         });
         Alert.alert(
-          'Imprimante connectee',
+          'Imprimante connectée',
           `${appareil.nom ?? 'Appareil'} est prete. Imprimez un ticket de test pour verifier.`,
         );
       } catch (e) {
@@ -102,7 +102,7 @@ export default function EcranImprimante() {
           'Connexion impossible',
           e instanceof Error
             ? e.message
-            : "L'imprimante n'a pas repondu. Elle est peut-etre eteinte ou deja connectee a un autre telephone.",
+            : "L'imprimante n'a pas repondu. Elle est peut-etre eteinte ou déjà connectée à un autre téléphone.",
         );
       } finally {
         setConnexion(false);
@@ -217,7 +217,7 @@ export default function EcranImprimante() {
           })}
         </Carte>
 
-        <Carte titre="Verification">
+        <Carte titre="Vérification">
           <Text style={styles.aide}>
             Le ticket de test imprime une regle graduee. Si elle est coupee, la
             largeur de papier choisie ne correspond pas a votre imprimante.

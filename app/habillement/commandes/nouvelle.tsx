@@ -39,7 +39,7 @@ export default function NouvelleCommandeHabillement(){
 
   return <View style={s.page}>
     <View style={s.entete}><Pressable onPress={()=>router.back()}><Icone nom="retour" taille={23} couleur={H.texte}/></Pressable>
-      <View style={{flex:1}}><Text style={s.titre}>Nouvelle commande</Text><Text style={s.sous}>Commande client Habillement</Text></View></View>
+      <View style={{flex:1}}><Text style={s.titre}>Nouvelle commande</Text></View></View>
 
     <ScrollView contentContainerStyle={s.contenu}>
       <Text style={s.label}>Client</Text>
@@ -58,7 +58,7 @@ export default function NouvelleCommandeHabillement(){
         <Text style={s.articleTotal}>{Math.round(a.quantite*a.prixUnitaire).toLocaleString('fr-FR')} {boutique.devise}</Text>
         <Pressable onPress={()=>setArticles(cur=>cur.filter((_,idx)=>idx!==i))}><Icone nom="corbeille" taille={18} couleur={H.danger}/></Pressable>
       </View>)}
-      {!articles.length?<View style={s.vide}><Text style={s.videTexte}>Ajoutez les modèles, tailles et couleurs commandés par le client.</Text></View>:null}
+      {!articles.length?<View style={s.vide}><Text style={s.videTexte}>Aucun article</Text></View>:null}
 
       <Text style={s.label}>Note</Text>
       <TextInput value={note} onChangeText={setNote} multiline placeholder="Ex. préparer avant vendredi..."

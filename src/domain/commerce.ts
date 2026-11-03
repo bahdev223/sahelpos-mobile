@@ -6,16 +6,16 @@ export const SECTEURS_COMMERCE = [
   { code: 'ELECTRICITE', titre: 'Électricité', icone: 'stock' },
   { code: 'QUINCAILLERIE', titre: 'Quincaillerie', icone: 'stock' },
   { code: 'COSMETIQUE', titre: 'Cosmetique', icone: 'image' },
-  { code: 'PIECES_DETACHEES', titre: 'Pieces detachees', icone: 'mouvements' },
+  { code: 'PIECES_DETACHEES', titre: 'Pièces détachées', icone: 'mouvements' },
   { code: 'CEREALES_VRAC', titre: 'Céréales & Vrac', icone: 'stock' },
-  { code: 'COMMERCE_GENERAL', titre: 'Commerce general', icone: 'boutique' },
+  { code: 'COMMERCE_GENERAL', titre: 'Commerce général', icone: 'boutique' },
   { code: 'AUTRE', titre: 'Autre', icone: 'catalogue' },
 ] as const;
 
 export const MODES_VENTE = [
-  { code: 'DETAIL', titre: 'Detail' },
+  { code: 'DETAIL', titre: 'Détail' },
   { code: 'GROS', titre: 'Gros' },
-  { code: 'MIXTE', titre: 'Detail et gros' },
+  { code: 'MIXTE', titre: 'Détail et gros' },
 ] as const;
 
 export const MODES_APPROVISIONNEMENT = [
@@ -153,7 +153,7 @@ const LIBELLES_STANDARD: LibellesProfilMobile = {
   produit: 'Produit',
   nouveauProduit: 'Nouveau produit',
   inventaire: 'Inventaire',
-  categories: 'Categories',
+  categories: 'Catégories',
 };
 
 const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'code'>>> = {
@@ -201,15 +201,15 @@ const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'c
     ],
   },
   HABILLEMENT: {
-    nom: 'Pret-a-porter & Habillement',
+    nom: 'Prêt-à-porter & Habillement',
     libelles: {
       ...LIBELLES_STANDARD,
-      catalogue: 'Modeles',
+      catalogue: 'Modèles',
       achats: 'Appro.',
       stock: 'Stock',
-      produits: 'Modeles',
-      produit: 'Modele',
-      nouveauProduit: 'Nouveau modele',
+      produits: 'Modèles',
+      produit: 'Modèle',
+      nouveauProduit: 'Nouveau modèle',
       inventaire: 'Inventaire',
       categories: 'Collections',
     },
@@ -228,7 +228,7 @@ const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'c
       produits: 'Articles',
       produit: 'Article',
       nouveauProduit: 'Nouvel article',
-      categories: 'Lots / categories',
+      categories: 'Lots / catégories',
     },
     capabilities: ['PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT'],
   },

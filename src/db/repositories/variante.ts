@@ -1,6 +1,7 @@
 import { genererIdLocal, lirePremier, lireTout, executer, dansTransaction, maintenant } from './base';
 import { marquerChangement } from '../../services/synchronisation';
 import { etatCourant, exigerEcriture } from '../../services/abonnement';
+import { comparerValeursVariantes } from '../../domain/tailles';
 
 export interface ValeurVarianteMobile {
   dimensionCode: string;
@@ -92,7 +93,8 @@ export async function listerVariantesProduit(
       ORDER BY sku`,
     produitId,
   );
-  return Promise.all(lignes.map(convertir));
+  const variantes = await Promise.all(lignes.map(convertir));
+  return variantes.sort((x, y) => comparerValeursVariantes(x.valeurs, y.valeurs));
 }
 
 export async function obtenirVariante(id: number): Promise<VarianteMobile | null> {

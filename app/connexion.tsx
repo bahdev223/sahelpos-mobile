@@ -1,4 +1,5 @@
 import AccesAccounts from '../src/ui/AccesAccounts';
+import { useAccent } from '../src/ui/accent';
 /**
  * Connexion multi-profils.
  *
@@ -43,6 +44,8 @@ type Etat = 'chargement' | 'pret' | 'erreur';
 export function EcranConnexion() {
   const { boutique, ouvrirSession, recharger } = useSession();
 
+  const accent = useAccent();
+  const [autreCompte, setAutreCompte] = useState(false);
   const [etat, setEtat] = useState<Etat>('chargement');
   const [messageErreur, setMessageErreur] = useState('');
   const [comptes, setComptes] = useState<CompteConnexion[]>([]);
@@ -246,13 +249,14 @@ export function EcranConnexion() {
   }
 
   const pretAValider = compte.aCodeLocal && pin.length >= LONGUEUR_PIN_MIN;
+  const plusieursProfils = comptes.length > 1;
 
   return (
     <SafeAreaView style={styles.ecran} edges={['top', 'bottom']}>
       <View style={styles.contenu}>
         <View style={styles.entete}>
           <View style={styles.logoRang}>
-            <View style={styles.logoPastille}>
+            <View style={[styles.logoPastille, { backgroundColor: accent.primaire }]}>
               <Text style={styles.logoTexte}>S</Text>
             </View>
             <Text style={styles.marque}>SahelPOS</Text>
@@ -260,9 +264,9 @@ export function EcranConnexion() {
           <Text style={styles.nomBoutique} numberOfLines={1}>{boutique.nom}</Text>
         </View>
 
-        <AccesAccounts />
-        <Text style={styles.profilsTitre}>Choisir un profil</Text>
-        <ScrollView
+        {autreCompte ? <AccesAccounts /> : null}
+        {plusieursProfils ? <Text style={styles.profilsTitre}>Choisir un profil</Text> : null}
+        {plusieursProfils ? <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.profils}
@@ -276,9 +280,9 @@ export function EcranConnexion() {
                 accessibilityRole="button"
                 accessibilityState={{ selected: actif }}
                 accessibilityLabel={`${u.nom || u.login}, ${libelleRole(u.role)}`}
-                style={[styles.profil, actif && styles.profilActif]}
+                style={[styles.profil, actif && styles.profilActif, actif && { borderColor: accent.primaire, backgroundColor: accent.primaireDouce }]}
               >
-                <View style={[styles.avatar, actif && styles.avatarActif]}>
+                <View style={[styles.avatar, actif && styles.avatarActif, actif && { backgroundColor: accent.primaire }]}>
                   <Text style={[styles.avatarTexte, actif && styles.avatarTexteActif]}>
                     {(u.nom || u.login).slice(0, 1).toUpperCase()}
                   </Text>
@@ -297,7 +301,7 @@ export function EcranConnexion() {
               </Pressable>
             );
           })}
-        </ScrollView>
+        </ScrollView> : null}
 
         <View style={styles.blocCentral}>
           <Text style={styles.titre}>{compte.nom || compte.login}</Text>
@@ -317,6 +321,7 @@ export function EcranConnexion() {
                   style={[
                     styles.pastille,
                     index < pin.length && styles.pastillePleine,
+                    index < pin.length && { backgroundColor: accent.primaire, borderColor: accent.primaire },
                     index >= LONGUEUR_PIN_MIN && styles.pastilleFacultative,
                   ]}
                 />
@@ -350,6 +355,9 @@ export function EcranConnexion() {
           grand
           style={styles.action}
         />
+        <Pressable onPress={() => setAutreCompte((v) => !v)} accessibilityRole="button" style={styles.autreCompte}>
+          <Text style={[styles.autreCompteTexte, { color: accent.primaire }]}>{autreCompte ? 'Fermer' : 'Autre compte'}</Text>
+        </Pressable>
       </View>
     </SafeAreaView>
   );
@@ -435,6 +443,8 @@ const styles = StyleSheet.create({
     fontWeight: '700', color: couleurs.danger,
   },
   refusInvisible: { opacity: 0 },
+  autreCompte: { alignSelf: 'center', paddingVertical: espaces.s, paddingHorizontal: espaces.m },
+  autreCompteTexte: { fontSize: 13, fontWeight: '700' },
   clavier: {
     flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center',
     gap: espaces.s, marginTop: 'auto',

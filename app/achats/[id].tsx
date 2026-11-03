@@ -44,7 +44,7 @@ import { useSession } from '../_layout';
 
 const LIBELLE_STATUT: Record<StatutAchat, string> = {
   BROUILLON: 'A recevoir',
-  RECU: 'Recu en stock',
+  RECU: 'Reçu en stock',
   ANNULE: 'Annule',
 };
 
@@ -152,7 +152,7 @@ export default function EcranDetailAchat() {
     if (!achat) return;
     Alert.alert(
       `Recevoir ${achat.numero} ?`,
-      'La marchandise va entrer en stock et les prix d achat des produits seront mis a jour.',
+      'La marchandise va entrer en stock et les prix d achat des produits seront mis à jour.',
       [
         { text: 'Pas encore', style: 'cancel' },
         {
@@ -163,7 +163,7 @@ export default function EcranDetailAchat() {
               await recevoirAchat(achat.id);
               await charger();
             } catch (e) {
-              Alert.alert('Reception impossible', e instanceof Error ? e.message : 'Erreur.');
+              Alert.alert('Réception impossible', e instanceof Error ? e.message : 'Erreur.');
             } finally {
               setEnCours(false);
             }
@@ -205,7 +205,7 @@ export default function EcranDetailAchat() {
           onPress: async () => {
             setEnCours(true);
             try {
-              await annulerAchat(achat.id, 'Annule depuis le detail');
+              await annulerAchat(achat.id, 'Annule depuis le détail');
               await charger();
             } catch (e) {
               Alert.alert('Annulation refusee', e instanceof Error ? e.message : 'Erreur.');
@@ -235,7 +235,7 @@ export default function EcranDetailAchat() {
       if (!partage) {
         Alert.alert(
           'Partage indisponible',
-          "Ce telephone ne propose pas de partage de fichier. Le document n a pas pu etre envoye.",
+          "Ce téléphone ne propose pas de partage de fichier. Le document n a pas pu etre envoye.",
         );
       }
     } catch (e) {
@@ -306,13 +306,13 @@ export default function EcranDetailAchat() {
           ))}
         </Carte>
 
-        <Carte titre="Reglement">
+        <Carte titre="Règlement">
           <View style={styles.totalLigne}>
             <Text style={styles.totalLibelle}>Total</Text>
             <Montant valeur={achat.total} taille="grand" />
           </View>
           <View style={styles.ligneReglement}>
-            <Text style={styles.reglementLibelle}>Deja paye</Text>
+            <Text style={styles.reglementLibelle}>Déjà paye</Text>
             <Text style={styles.reglementValeur}>{formaterMontant(achat.montantPaye)}</Text>
           </View>
           {reste > 0 && achat.statut !== 'ANNULE' ? (

@@ -161,7 +161,7 @@ export default function Receptions() {
           <Icone nom="retour" taille={17} couleur={couleurs.primaire} />
           <Text style={s.retourTexte}>Retour</Text>
         </Pressable>
-        <Text style={s.titre}>Receptions de stock</Text>
+        <Text style={s.titre}>Réceptions de stock</Text>
       </View>
 
       {etat.phase === 'chargement' ? (
@@ -174,7 +174,7 @@ export default function Receptions() {
           <Text style={sl.centreTitre}>Les receptions n&apos;ont pas pu etre lues</Text>
           <Text style={sl.centreTexte}>{etat.message}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger(false)}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       ) : (
@@ -202,7 +202,7 @@ export default function Receptions() {
                   style={s.saisie}
                   value={recherche}
                   onChangeText={setRecherche}
-                  placeholder="Produit, fournisseur ou reference"
+                  placeholder="Produit, fournisseur ou référence"
                   placeholderTextColor={C.texteFaible}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -248,12 +248,12 @@ export default function Receptions() {
           }
           ListEmptyComponent={
             <View style={sl.centre}>
-              <Text style={sl.centreTitre}>Aucune reception</Text>
+              <Text style={sl.centreTitre}>Aucune réception</Text>
               <Text style={sl.centreTexte}>
                 {receptions.length === 0
-                  ? "Aucune entree de stock n'a encore ete enregistree. Elles apparaitront ici " +
-                    'des la premiere reception saisie.'
-                  : 'Aucune reception ne correspond a cette recherche.'}
+                  ? "Aucune entree de stock n'a encore ete enregistrée. Elles apparaitront ici " +
+                    'des la première réception saisie.'
+                  : 'Aucune réception ne correspond à cette recherche.'}
               </Text>
               {receptions.length === 0 ? (
                 <Pressable

@@ -38,32 +38,33 @@ import { enteteRecu, lireParametres } from '../../src/services/parametres';
 import { preparerDocumentVente } from '../../src/services/document-vente';
 import { ActionsDocument } from '../../src/ui/ActionsDocument';
 import { useSession } from '../_layout';
+import { libelleUnite } from '../../src/domain/unites';
 
 const LIBELLE_STATUT: Record<StatutVente, string> = {
-  payee: 'Payee',
-  partielle: 'Partiellement payee',
-  impayee: 'Impayee',
-  annulee: 'Annulee',
+  payee: 'Payée',
+  partielle: 'Partiellement payée',
+  impayee: 'Impayée',
+  annulee: 'Annulée',
 };
 
 const COULEUR_STATUT: Record<StatutVente, string> = {
-  payee: couleurs.primaire,
+  payee: couleurs.succesFonce,
   partielle: couleurs.avertissement,
   impayee: couleurs.danger,
   annulee: couleurs.texteFaible,
 };
 
 const LIBELLE_PAIEMENT: Record<string, string> = {
-  especes: 'Especes',
+  especes: 'Espèces',
   mobile_money: 'Mobile Money',
-  credit: 'Credit',
+  credit: 'Crédit',
 };
 
 function dateLisible(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const deux = (n: number) => String(n).padStart(2, '0');
-  return `${deux(d.getDate())}/${deux(d.getMonth() + 1)}/${d.getFullYear()} a ${deux(d.getHours())}:${deux(d.getMinutes())}`;
+  return `${deux(d.getDate())}/${deux(d.getMonth() + 1)}/${d.getFullYear()} à ${deux(d.getHours())}:${deux(d.getMinutes())}`;
 }
 
 export default function EcranDetailVente() {
@@ -116,7 +117,7 @@ export default function EcranDetailVente() {
     if (!vente) return;
     const montant = Number(saisieEncaissement.replace(',', '.'));
     if (!Number.isFinite(montant) || montant <= 0) {
-      Alert.alert('Montant invalide', 'Saisissez le montant recu du client.');
+      Alert.alert('Montant invalide', 'Saisissez le montant reçu du client.');
       return;
     }
     setEnCours(true);
@@ -135,7 +136,7 @@ export default function EcranDetailVente() {
     if (!vente || !gestionnaire) return;
     Alert.alert(
       `Annuler ${vente.numero} ?`,
-      'Les produits vendus retournent en stock. Cette operation ne peut pas etre defaite.',
+      'Les produits vendus retournent en stock. Cette opération ne peut pas etre defaite.',
       [
         { text: 'Non', style: 'cancel' },
         {
@@ -144,7 +145,7 @@ export default function EcranDetailVente() {
           onPress: async () => {
             setEnCours(true);
             try {
-              await annulerVente(vente.id, 'Annulee depuis le detail de la vente');
+              await annulerVente(vente.id, 'Annulée depuis le détail de la vente');
               await charger();
             } catch (e) {
               Alert.alert(
@@ -189,7 +190,7 @@ export default function EcranDetailVente() {
         'Impression impossible',
         e instanceof Error
           ? e.message
-          : "Verifiez que l'imprimante est allumee et connectee.",
+          : "Vérifiez que l'imprimante est allumee et connectée.",
       );
     }
   }, [vente, lignes]);
@@ -214,7 +215,7 @@ export default function EcranDetailVente() {
 
   return (
     <SafeAreaView style={styles.page} edges={['bottom']}>
-      <Stack.Screen options={{ headerShown: true, title: vente.numero }} />
+      <Stack.Screen options={{ headerShown: true, title: 'Vente' }} />
       <ScrollView contentContainerStyle={styles.contenu}>
         <Carte>
           <View style={styles.enteteLigne}>
@@ -235,7 +236,7 @@ export default function EcranDetailVente() {
               <View style={styles.articleGauche}>
                 <Text style={styles.articleNom}>{l.libelle}</Text>
                 <Text style={styles.articleDetail}>
-                  {formaterQuantite(l.quantite)} {l.unite} x {formaterMontant(l.prixUnitaire)}
+                  {formaterQuantite(l.quantite)} {libelleUnite(l.unite, l.quantite)} × {formaterMontant(l.prixUnitaire)}
                 </Text>
               </View>
               <Text style={styles.articleTotal}>{formaterMontant(l.total)}</Text>
@@ -243,14 +244,14 @@ export default function EcranDetailVente() {
           ))}
         </Carte>
 
-        <Carte titre="Reglement">
+        <Carte titre="Règlement">
           <View style={styles.ligneTotal}>
             <Text style={styles.totalLibelle}>Total</Text>
             <Montant valeur={vente.total} taille="grand" />
           </View>
           <View style={styles.ligneReglement}>
             <Text style={styles.reglementLibelle}>
-              Paye ({LIBELLE_PAIEMENT[vente.modePaiement] ?? vente.modePaiement})
+              Payé ({LIBELLE_PAIEMENT[vente.modePaiement] ?? vente.modePaiement})
             </Text>
             <Text style={styles.reglementValeur}>{formaterMontant(vente.montantPaye)}</Text>
           </View>
@@ -296,7 +297,7 @@ export default function EcranDetailVente() {
         </Carte>
 
         <View style={styles.actions}>
-          <Bouton titre="Reimprimer le recu" onPress={() => void reimprimer()} variante="secondaire" />
+          <Bouton titre="Réimprimer le reçu" onPress={() => void reimprimer()} variante="secondaire" />
           {gestionnaire && !annulee ? (
             <Bouton
               titre="Annuler cette vente"

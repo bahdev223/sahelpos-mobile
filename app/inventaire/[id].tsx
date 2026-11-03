@@ -374,7 +374,7 @@ const FILTRES: { cle: Filtre; libelle: string }[] = [
   { cle: 'tous', libelle: 'Tous' },
   { cle: 'restants', libelle: 'A compter' },
   { cle: 'comptes', libelle: 'Comptes' },
-  { cle: 'ecarts', libelle: 'Ecarts' },
+  { cle: 'ecarts', libelle: 'Écarts' },
 ];
 
 type Etat =
@@ -576,7 +576,7 @@ export default function EcranInventaire() {
     if (bilan.comptes === 0) {
       Alert.alert(
         'Rien a valider',
-        "Aucun produit n'a encore ete compte. Saisissez au moins une quantite reelle.",
+        "Aucun produit n'a encore ete compte. Saisissez au moins une quantité réelle.",
       );
       return;
     }
@@ -587,7 +587,7 @@ export default function EcranInventaire() {
         ? `${bilan.restants} produit(s) non compte(s) : leur stock ne sera pas touche.`
         : null,
       bilan.ecarts === 0
-        ? 'Aucun ecart : les stocks comptes sont conformes.'
+        ? 'Aucun écart : les stocks comptes sont conformes.'
         : `${bilan.ecarts} ecart(s), soit ${formaterEcartFrancs(bilan.valeur)} au prix d'achat.`,
       bilan.ecarts > 0 ? 'Les stocks concernes seront corriges. Cette action est definitive.' : null,
     ]
@@ -675,7 +675,7 @@ export default function EcranInventaire() {
             Il a peut-etre ete supprime depuis une autre fenetre.
           </Text>
           <Pressable style={s.boutonSecondaire} onPress={() => router.back()}>
-            <Text style={s.boutonSecondaireTexte}>Retour a la liste</Text>
+            <Text style={s.boutonSecondaireTexte}>Retour à la liste</Text>
           </Pressable>
         </View>
       </View>
@@ -690,7 +690,7 @@ export default function EcranInventaire() {
           <Text style={sl.centreTitre}>Le comptage n&apos;a pas pu etre lu</Text>
           <Text style={sl.centreTexte}>{etat.message}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger()}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       </View>
@@ -740,7 +740,7 @@ export default function EcranInventaire() {
                   setRecherche(texte);
                   setCible(null);
                 }}
-                placeholder="Nom, categorie ou code-barres"
+                placeholder="Nom, catégorie ou code-barres"
                 placeholderTextColor={C.texteFaible}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -802,7 +802,7 @@ export default function EcranInventaire() {
             <Text style={sl.centreTexte}>
               {analyses.length === 0
                 ? "Cet inventaire ne porte sur aucun produit. Il a sans doute ete ouvert alors que le catalogue etait vide."
-                : 'Aucun produit ne correspond a cette recherche.'}
+                : 'Aucun produit ne correspond à cette recherche.'}
             </Text>
             {analyses.length > 0 ? (
               <Pressable
@@ -838,7 +838,7 @@ export default function EcranInventaire() {
             couleur={bilan.restants > 0 ? C.orange : C.vert}
           />
           <BlocBilan
-            titre="Ecarts"
+            titre="Écarts"
             valeur={String(bilan.ecarts)}
             couleur={bilan.ecarts > 0 ? C.orange : C.vert}
           />
@@ -885,7 +885,7 @@ export default function EcranInventaire() {
           </View>
         ) : (
           <Pressable style={s.boutonSecondaire} onPress={() => router.back()}>
-            <Text style={s.boutonSecondaireTexte}>Retour a la liste</Text>
+            <Text style={s.boutonSecondaireTexte}>Retour à la liste</Text>
           </Pressable>
         )}
       </View>
@@ -960,7 +960,7 @@ function LigneInventaire(p: {
   let libelleEcart = 'Pas encore compte';
   if (analyse.invalide) {
     couleurEcart = C.rouge;
-    libelleEcart = 'Quantite illisible';
+    libelleEcart = 'Quantité illisible';
   } else if (compte && ecart !== null) {
     if (Math.abs(ecart) <= SEUIL_ECART) {
       couleurEcart = C.vert;
@@ -1130,7 +1130,7 @@ function ModaleScanner(p: {
               <Text style={s.boutonClairTexte}>Autoriser la camera</Text>
             </Pressable>
             <Pressable style={s.boutonFantome} onPress={p.onFermer}>
-              <Text style={s.boutonFantomeTexte}>Chercher a la main</Text>
+              <Text style={s.boutonFantomeTexte}>Chercher à la main</Text>
             </Pressable>
           </View>
         ) : (

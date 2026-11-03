@@ -165,7 +165,7 @@ export default function StockInitial() {
     }
 
     if (lignes.length === 0) {
-      setErreur("Renseignez au moins une quantite avant d'enregistrer.");
+      setErreur("Renseignez au moins une quantité avant d'enregistrer.");
       return;
     }
 
@@ -189,7 +189,7 @@ export default function StockInitial() {
 
   const confirmer = useCallback(() => {
     if (bilan.nombre === 0) {
-      setErreur("Renseignez au moins une quantite avant d'enregistrer.");
+      setErreur("Renseignez au moins une quantité avant d'enregistrer.");
       return;
     }
     Alert.alert(
@@ -225,12 +225,12 @@ export default function StockInitial() {
           <Text style={sl.centreTitre}>La liste n&apos;a pas pu etre lue</Text>
           <Text style={sl.centreTexte}>{etat.message}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger()}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       ) : produits.length === 0 ? (
         <View style={sl.centre}>
-          <Text style={sl.centreTitre}>Tout est deja initialise</Text>
+          <Text style={sl.centreTitre}>Tout est déjà initialise</Text>
           <Text style={sl.centreTexte}>
             Chaque produit suivi en stock a deja au moins un mouvement. Pour corriger une
             quantite, passez par un ajustement : le stock sera recalcule a partir de ce que vous
@@ -297,7 +297,7 @@ export default function StockInitial() {
             <View style={sl.piedTextes}>
               <Text style={sl.piedTitre}>
                 {bilan.nombre === 0
-                  ? 'Aucune quantite saisie'
+                  ? 'Aucune quantité saisie'
                   : `${bilan.nombre} produit(s) a enregistrer`}
               </Text>
               {bilan.nombre > 0 ? (
@@ -306,7 +306,7 @@ export default function StockInitial() {
                 </Text>
               ) : null}
               {bilan.invalide ? (
-                <Text style={sl.piedAlerte}>Une quantite saisie est illisible.</Text>
+                <Text style={sl.piedAlerte}>Une quantité saisie est illisible.</Text>
               ) : null}
             </View>
             <Pressable
@@ -356,7 +356,7 @@ function LigneInitiale(p: {
         </Text>
         <Text style={sl.categorie} numberOfLines={1}>
           {(p.produit.categorie ?? '').trim() === ''
-            ? 'Sans categorie'
+            ? 'Sans catégorie'
             : (p.produit.categorie ?? '').trim()}
         </Text>
       </View>
@@ -378,7 +378,7 @@ function LigneInitiale(p: {
 
       <View style={sl.champs}>
         <View style={sl.champQuantite}>
-          <Text style={sl.libelleCourt}>Quantite</Text>
+          <Text style={sl.libelleCourt}>Quantité</Text>
           <View style={[s.zoneSaisie, illisible ? s.zoneSaisieErreur : null]}>
             <TextInput
               style={s.saisie}

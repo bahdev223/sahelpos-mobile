@@ -38,18 +38,20 @@ import type { StatutVente } from '../../src/domain/types';
 import { useSession } from '../_layout';
 import { calculerPeriode, cleGroupe, libelleGroupe, type ModePeriode } from '../../src/domain/periodes';
 import { SelecteurPeriode } from '../../src/ui/SelecteurPeriode';
+import { BoutonMenu } from '../../src/ui/tiroir';
+import { useStylesAccent } from '../../src/ui/accent';
 
 const TAILLE_PAGE = 100;
 
 const LIBELLE_STATUT: Record<StatutVente, string> = {
-  payee: 'Payee',
+  payee: 'Payée',
   partielle: 'Partielle',
-  impayee: 'Impayee',
-  annulee: 'Annulee',
+  impayee: 'Impayée',
+  annulee: 'Annulée',
 };
 
 const COULEUR_STATUT: Record<StatutVente, string> = {
-  payee: couleurs.primaire,
+  payee: couleurs.succesFonce,
   partielle: couleurs.avertissement,
   impayee: couleurs.danger,
   annulee: couleurs.texteFaible,
@@ -63,6 +65,7 @@ function heure(iso: string): string {
 }
 
 export default function EcranVentes() {
+  const A = useStylesAccent();
   const router = useRouter();
   const { synchroniserMaintenant, revisionSynchronisation, utilisateur, boutique } = useSession();
   const utilisateurId = utilisateur?.role === 'vendeur' ? utilisateur.id : undefined;
@@ -162,6 +165,10 @@ export default function EcranVentes() {
 
   return (
     <SafeAreaView style={styles.page} edges={['top']}>
+      <View style={styles.entete}>
+        <BoutonMenu />
+        <Text style={styles.enteteTitre}>Ventes</Text>
+      </View>
       <SelecteurPeriode mode={periode} decalage={decalage} libelle={plage.libelle} onMode={(mode) => { setPeriode(mode); setDecalage(0); }} onDecalage={setDecalage} />
 
       {totaux ? (
@@ -176,7 +183,7 @@ export default function EcranVentes() {
                 {totaux.nbVentes} vente{totaux.nbVentes > 1 ? 's' : ''}
               </Text>
               {utilisateur?.role !== 'vendeur' ? (
-                <Text style={styles.benefice}>Bénéfice {formaterMontant(totaux.benefice, boutique.devise)}</Text>
+                <Text style={[styles.benefice, A.texte]}>Bénéfice {formaterMontant(totaux.benefice, boutique.devise)}</Text>
               ) : null}
             </View>
           </View>
@@ -199,7 +206,7 @@ export default function EcranVentes() {
         renderSectionHeader={({ section }) => <Text style={styles.groupe}>{section.titre}</Text>}
         onEndReached={() => void chargerSuite()}
         onEndReachedThreshold={0.4}
-        ListFooterComponent={suite ? <Pressable style={styles.suite} disabled={chargeSuite} onPress={() => void chargerSuite()}><Text style={styles.benefice}>{chargeSuite ? 'Chargement...' : 'Charger la suite'}</Text></Pressable> : null}
+        ListFooterComponent={suite ? <Pressable style={styles.suite} disabled={chargeSuite} onPress={() => void chargerSuite()}><Text style={[styles.benefice, A.texte]}>{chargeSuite ? 'Chargement...' : 'Charger la suite'}</Text></Pressable> : null}
         keyExtractor={(v) => String(v.id)}
         contentContainerStyle={ventes.length === 0 ? styles.videConteneur : styles.liste}
         refreshControl={
@@ -213,8 +220,8 @@ export default function EcranVentes() {
             titre="Aucune vente"
             message={
               periode === 'jour' && decalage === 0
-                ? "Aucune vente enregistree aujourd'hui."
-                : 'Aucune vente sur cette periode.'
+                ? "Aucune vente enregistrée aujourd'hui."
+                : 'Aucune vente sur cette période.'
             }
           />
         }
@@ -244,6 +251,8 @@ export default function EcranVentes() {
 }
 
 const styles = StyleSheet.create({
+  entete: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 },
+  enteteTitre: { fontSize: 20, fontWeight: '800', color: couleurs.texte },
   groupe: { fontSize: 13, fontWeight: '700', color: couleurs.texteFaible, paddingVertical: 10 },
   suite: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   page: { flex: 1, backgroundColor: couleurs.fond },

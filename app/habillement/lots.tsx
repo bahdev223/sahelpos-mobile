@@ -89,7 +89,6 @@ export default function LotsHabillement() {
         </Pressable>
         <View style={s.enteteTextes}>
           <Text style={s.titre}>Lots & péremptions</Text>
-          <Text style={s.sous}>Traçabilité des lots reçus</Text>
         </View>
       </View>
 
@@ -152,7 +151,6 @@ export default function LotsHabillement() {
           <View style={s.vide}>
             <Icone nom="etiquette" taille={34} couleur={H.texteEteint} />
             <Text style={s.videTitre}>Aucun lot</Text>
-            <Text style={s.videTexte}>Les lots apparaissent après réception définitive d’un arrivage.</Text>
           </View>
         }
       />
