@@ -36,7 +36,7 @@ const CLE_DERNIER_NOMBRE_PULL = 'sync.dernier_nombre_pull';
 const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
 const TAILLE_IMAGE_SYNC_MAX = 4 * 1024 * 1024;
 
-type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'echange' | 'commande_client' | 'mouvement' | 'achat' | 'arrivage' | 'boutique' | 'utilisateur';
+type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'operation_vente' | 'echange' | 'commande_client' | 'mouvement' | 'achat' | 'arrivage' | 'boutique' | 'utilisateur';
 
 const TYPE_ECRITURE_PAR_OBJET: Record<TypeObjet, TypeEcritureCommerce> = {
   produit: 'produits',
@@ -44,6 +44,7 @@ const TYPE_ECRITURE_PAR_OBJET: Record<TypeObjet, TypeEcritureCommerce> = {
   client: 'clients',
   fournisseur: 'fournisseurs',
   vente: 'ventes',
+  operation_vente: 'ventes',
   echange: 'ventes',
   commande_client: 'ventes',
   mouvement: 'mouvements',
@@ -167,6 +168,17 @@ interface VenteSync {
   date_modification?: string | null;
   supprime_le?: string | null;
   lignes: LigneVenteSync[];
+}
+
+interface OperationVenteSync {
+  id_local: string;
+  vente_id_local: string;
+  vendeur_id_local?: string | null;
+  nature: 'REGLEMENT' | 'ANNULATION';
+  montant: number | string;
+  mode_paiement: string;
+  motif?: string | null;
+  date_creation: string;
 }
 
 interface EchangeSync {
@@ -515,9 +527,15 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
     const pending: LigneOutbox[] = [];
     for (const item of pendingTous) {
       if (!ecritureMobileAutorisee(abonnement, TYPE_ECRITURE_PAR_OBJET[item.type_objet])) continue;
-      if (abonnement.droit?.membre && item.type_objet === 'vente') {
+      if (abonnement.droit?.membre && (item.type_objet === 'vente' || item.type_objet === 'operation_vente')) {
         const sale = await lirePremier<{vendeur_id_local: string}>(
-          'SELECT u.id_local AS vendeur_id_local FROM vente v LEFT JOIN utilisateur u ON u.id = v.utilisateur_id WHERE v.id_local = ?', item.id_local,
+          item.type_objet === 'operation_vente'
+            ? `SELECT u.id_local AS vendeur_id_local FROM operation_vente_mobile o
+                 JOIN vente v ON v.id = o.vente_id
+                 LEFT JOIN utilisateur u ON u.id = v.utilisateur_id
+                WHERE o.id_local = ?`
+            : 'SELECT u.id_local AS vendeur_id_local FROM vente v LEFT JOIN utilisateur u ON u.id = v.utilisateur_id WHERE v.id_local = ?',
+          item.id_local,
         );
         if (sale?.vendeur_id_local !== abonnement.droit.membre.id_local) continue;
       }
@@ -685,6 +703,7 @@ async function construirePayload(pending: LigneOutbox[]) {
     clients: await lireClients(ids('client')),
     fournisseurs: await lireFournisseurs(ids('fournisseur')),
     ventes: await lireVentes(ids('vente')),
+    operations_vente: await lireOperationsVente(ids('operation_vente')),
     echanges: await lireEchanges(ids('echange')),
     mouvements: await lireMouvements(ids('mouvement')),
     achats: await lireAchats(ids('achat')),
@@ -869,6 +888,22 @@ async function lireFournisseurs(ids: string[]): Promise<FournisseurSync[]> {
   );
 }
 
+async function lireOperationsVente(ids: string[]): Promise<OperationVenteSync[]> {
+  if (ids.length === 0) return [];
+  return lireTout<OperationVenteSync>(
+    `SELECT o.id_local, v.id_local AS vente_id_local,
+            u.id_local AS vendeur_id_local, o.nature, o.montant,
+            o.mode_paiement, o.motif, o.date_creation
+       FROM operation_vente_mobile o
+       JOIN vente v ON v.id = o.vente_id
+       LEFT JOIN utilisateur u ON u.id = v.utilisateur_id
+      WHERE o.id_local IN (${placeholders(ids)})
+      ORDER BY o.date_creation, o.rowid`,
+    ...ids,
+  );
+}
+
+/** Envoi initial fige : les paiements ulterieurs voyagent en evenements distincts. */
 async function lireVentes(ids: string[]): Promise<VenteSync[]> {
   if (ids.length === 0) return [];
   const ventes = await lireTout<VenteSync & { id: number }>(
@@ -883,6 +918,18 @@ async function lireVentes(ids: string[]): Promise<VenteSync[]> {
     ...ids,
   );
   for (const vente of ventes) {
+    const reglements = await lirePremier<{ total_reglements: number | null }>(
+      `SELECT SUM(montant) AS total_reglements
+         FROM operation_vente_mobile WHERE vente_id = ? AND nature = 'REGLEMENT'`,
+      vente.id,
+    );
+    const payeInitial = nombre(vente.montant_paye) - (reglements?.total_reglements ?? 0);
+    if (!Number.isSafeInteger(payeInitial) || payeInitial < 0 || payeInitial > nombre(vente.total)) {
+      throw new SynchronisationImpossible('Le paiement initial de la vente est incoherent.');
+    }
+    vente.montant_paye = payeInitial;
+    vente.statut = payeInitial >= nombre(vente.total) ? 'payee'
+      : payeInitial > 0 ? 'partielle' : 'impayee';
     vente.lignes = await lireTout<LigneVenteSync>(
       `SELECT l.ligne_serveur_id,
               p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
