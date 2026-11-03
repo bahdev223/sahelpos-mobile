@@ -136,7 +136,7 @@ export default function ListeCommande() {
       {chargement ? (
         <View style={sl.centre}>
           <ActivityIndicator color={C.accent} />
-          <Text style={sl.centreTexte}>Preparation de la commande...</Text>
+          <Text style={sl.centreTexte}>Préparation de la commande...</Text>
         </View>
       ) : (
         <FlatList

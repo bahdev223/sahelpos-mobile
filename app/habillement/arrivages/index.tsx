@@ -81,7 +81,6 @@ export default function ArrivagesHabillement() {
         </Pressable>
         <View style={s.enteteTextes}>
           <Text style={s.titre}>Arrivages & transit</Text>
-          <Text style={s.sousTitre}>Expéditions · réception · coût rendu</Text>
         </View>
         {autorise ? (
           <Pressable
@@ -167,9 +166,6 @@ export default function ArrivagesHabillement() {
           <View style={s.vide}>
             <Icone nom="achats" taille={34} couleur={H.texteEteint} />
             <Text style={s.videTitre}>Aucun arrivage</Text>
-            <Text style={s.videTexte}>
-              Suivez ici vos colis, camions, conteneurs et réceptions fournisseurs.
-            </Text>
           </View>
         }
       />

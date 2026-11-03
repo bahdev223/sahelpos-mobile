@@ -11,6 +11,7 @@ import { BandeauEtat, couleurs, espaces, rayons } from '../../../src/ui/componen
 import { Icone } from '../../../src/ui/icones';
 import { uriImage, formaterFrancs } from '../../produit/nouveau';
 import { HABILLEMENT_MOBILE_THEME as H } from '../../../src/profile-ui/habillement/theme';
+import { IconeCategorie } from '../../../src/ui/IconeCategorie';
 
 export default function FicheModeleHabillement() {
   const router = useRouter();
@@ -68,7 +69,7 @@ export default function FicheModeleHabillement() {
           <Image source={{ uri: uriImage(produit.cheminImage)! }} style={s.hero} resizeMode="cover" />
         ) : (
           <View style={[s.hero, s.heroVide]}>
-            <Text style={s.initiale}>{produit.nom.slice(0, 1).toUpperCase()}</Text>
+            <IconeCategorie nom={produit.categorie} taille={88} epaisseur={1.3} />
           </View>
         )}
 

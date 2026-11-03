@@ -91,7 +91,7 @@ test('commerce resolver exposes habillement labels and capabilities', () => {
     'ARRIVALS',
     'LOT_TRACKING',
     'LANDED_COST',
-    "catalogue: 'Modeles'",
+    "catalogue: 'Modèles'",
     "categories: 'Collections'",
   ]) {
     assert.ok(commerce.includes(attendu), attendu);

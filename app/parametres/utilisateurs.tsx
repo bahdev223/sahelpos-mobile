@@ -31,7 +31,7 @@ import {
 import type { Role, Utilisateur } from '../../src/domain/types';
 
 const ROLES: Array<{ cle: Role; libelle: string; detail: string }> = [
-  { cle: 'admin', libelle: 'Administrateur', detail: 'Acces complet, y compris les reglages' },
+  { cle: 'admin', libelle: 'Administrateur', detail: 'Accès complet, y compris les reglages' },
   { cle: 'gerant', libelle: 'Gerant', detail: 'Ventes, stock, achats, rapports' },
   { cle: 'vendeur', libelle: 'Vendeur', detail: 'Vente et clients uniquement' },
 ];
@@ -125,7 +125,7 @@ export default function EcranUtilisateurs() {
         }
         await charger();
       } catch (e) {
-        Alert.alert('Operation refusee', e instanceof Error ? e.message : 'Erreur.');
+        Alert.alert('Opération refusee', e instanceof Error ? e.message : 'Erreur.');
       }
     },
     [charger],
@@ -169,7 +169,7 @@ export default function EcranUtilisateurs() {
                 </Text>
                 <Text style={styles.detail}>
                   {u.login} · {LIBELLE_ROLE[u.role]}
-                  {u.actif ? '' : ' · desactive'}
+                  {u.actif ? '' : ' · désactivé'}
                 </Text>
                 {u.caisseOuvreA && u.caisseFermeA ? (
                   <Text style={styles.horaire}>Caisse : {u.caisseOuvreA} - {u.caisseFermeA}</Text>
@@ -186,7 +186,7 @@ export default function EcranUtilisateurs() {
                       u.actif ? styles.actionDanger : styles.actionPrimaire,
                     ]}
                   >
-                    {u.actif ? 'Desactiver' : 'Activer'}
+                    {u.actif ? 'Désactiver' : 'Activer'}
                   </Text>
                 </Pressable>
               </View>
@@ -230,7 +230,7 @@ export default function EcranUtilisateurs() {
               label="Code"
               clavier="number-pad"
               secret
-              aide="4 a 9 chiffres. Un code court se tape vite en caisse."
+              aide="4 à 9 chiffres. Un code court se tape vite en caisse."
             />
 
             <Text style={styles.sousTitre}>Role</Text>
@@ -320,7 +320,7 @@ export default function EcranUtilisateurs() {
                 }}
                 variante="secondaire"
               />
-              <Bouton titre="Creer" onPress={() => void creer()} enCours={enCours} />
+              <Bouton titre="Créer" onPress={() => void creer()} enCours={enCours} />
             </View>
           </ScrollView>
         </View>

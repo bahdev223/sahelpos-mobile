@@ -47,6 +47,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Icone } from '../icones';
 import { couleurs, espaces, rayons } from '../theme';
+import { useAccent } from '../accent';
+import { IconeCategorie } from '../IconeCategorie';
 export { couleurs, espaces, rayons };
 
 /**
@@ -97,7 +99,8 @@ export function Bouton({
   style,
 }: ProprietesBouton) {
   const inactif = desactive || enCours;
-  const fond = FONDS_BOUTON[variante];
+  const accent = useAccent();
+  const fond = variante === 'primaire' ? accent.primaire : FONDS_BOUTON[variante];
   const teinte = TEINTES_BOUTON[variante];
 
   return (
@@ -416,7 +419,7 @@ export function Erreur({
       <Text style={stylesEtat.message}>{message}</Text>
       {onReessayer ? (
         <Bouton
-          titre="Reessayer"
+          titre="Réessayer"
           onPress={onReessayer}
           variante="secondaire"
           style={stylesEtat.action}
@@ -559,11 +562,15 @@ export function Vignette({
   chemin,
   nom,
   taille = 52,
+  categorie,
 }: {
   chemin: string | null;
   nom?: string;
   taille?: number;
+  /** Mode Habillement : sans photo, l'icone de la categorie remplace les initiales. */
+  categorie?: string | null;
 }) {
+  const modeHabillement = useAccent().mode;
   const uri = uriImage(chemin);
   const cadre = {
     width: taille,
@@ -578,6 +585,14 @@ export function Vignette({
         style={[cadre, { backgroundColor: couleurs.surfaceDouce }]}
         resizeMode="cover"
       />
+    );
+  }
+
+  if (categorie !== undefined && modeHabillement) {
+    return (
+      <View style={[cadre, { backgroundColor: '#F4ECE4', alignItems: 'center', justifyContent: 'center' }]}>
+        <IconeCategorie nom={categorie} taille={Math.round(taille * 0.55)} />
+      </View>
     );
   }
 

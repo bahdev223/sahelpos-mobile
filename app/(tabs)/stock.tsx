@@ -328,13 +328,13 @@ export interface ResultatMouvement {
  */
 export async function ecrireMouvement(demande: DemandeMouvement): Promise<ResultatMouvement> {
   if (!Number.isFinite(demande.quantite) || demande.quantite < 0) {
-    throw new MouvementImpossible('La quantite doit etre un nombre positif.');
+    throw new MouvementImpossible('La quantité doit etre un nombre positif.');
   }
   if (demande.nature !== 'AJUSTEMENT' && demande.quantite <= 0) {
-    throw new MouvementImpossible('La quantite doit etre superieure a zero.');
+    throw new MouvementImpossible('La quantité doit etre superieure a zero.');
   }
   if (demande.facteur <= 0) {
-    throw new MouvementImpossible(`L'unite "${demande.unite}" n'a pas de facteur valide.`);
+    throw new MouvementImpossible(`L'unité "${demande.unite}" n'a pas de facteur valide.`);
   }
 
   const db = await obtenirBase();
@@ -697,7 +697,7 @@ function StockStandard() {
       <View style={sl.entete}>
         <BoutonMenu />
         <View style={sl.enteteTitre}>
-          <Text style={sl.titreEcran}>Etat du stock</Text>
+          <Text style={sl.titreEcran}>État du stock</Text>
           <Text style={sl.sousTitreEcran}>{produits.length} {profilUI.libelles.produits.toLocaleLowerCase('fr')}</Text>
         </View>
         <View style={sl.enteteActions}>
@@ -724,7 +724,7 @@ function StockStandard() {
           <Text style={sl.centreTitre}>Le stock n&apos;a pas pu etre lu</Text>
           <Text style={sl.centreTexte}>{etat.message}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger(false)}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       ) : (
@@ -746,7 +746,7 @@ function StockStandard() {
                   onChangeText={setRecherche}
                   placeholder={referenceTechnique
                     ? `Rechercher une ${profilUI.libelles.produit.toLocaleLowerCase('fr')}, un code, un rayon...`
-                    : "Rechercher un produit, un code, une categorie..."}
+                    : "Rechercher un produit, un code, une catégorie..."}
                   placeholderTextColor={C.texteFaible}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -779,7 +779,7 @@ function StockStandard() {
                   </Pressable>
                 ))}
                 <Pressable style={sl.puceCategorie} onPress={() => setFiltre('tous')}>
-                  <Text style={sl.puceCategorieTexte}>Categorie</Text>
+                  <Text style={sl.puceCategorieTexte}>Catégorie</Text>
                   <Text style={sl.chevron}>⌄</Text>
                 </Pressable>
               </ScrollView>
@@ -880,7 +880,7 @@ function LigneProduitStock(p: {
               {p.produit.nom}
             </Text>
             <Text style={sl.detail} numberOfLines={1}>
-              {p.produit.categorie || 'Sans categorie'}
+              {p.produit.categorie || 'Sans catégorie'}
             </Text>
             <Text style={sl.meta} numberOfLines={1}>Code : {p.produit.code_barre || '-'}</Text>
             {p.produit.nb_variantes > 0 ? (
@@ -920,7 +920,7 @@ function LigneProduitStock(p: {
         <View style={sl.carteProduitBas}>
           <View style={sl.chiffresStock}>
             <View style={sl.blocChiffre}>
-              <Text style={sl.libelleChiffre}>Quantite</Text>
+              <Text style={sl.libelleChiffre}>Quantité</Text>
               <Text style={sl.quantite} numberOfLines={1} adjustsFontSizeToFit>
                 {formaterQuantite(p.produit.quantite_base)} <Text style={sl.unite}>{p.produit.unite_base}</Text>
               </Text>

@@ -71,8 +71,8 @@ test('habillement core profile is supported and resolves dedicated mobile labels
   assert.equal(habillement?.compatible, true);
   const ui = resoudreProfilUIMobile(habillement);
   assert.equal(ui.code, 'HABILLEMENT');
-  assert.equal(ui.libelles.catalogue, 'Modeles');
-  assert.equal(ui.libelles.produits, 'Modeles');
+  assert.equal(ui.libelles.catalogue, 'Modèles');
+  assert.equal(ui.libelles.produits, 'Modèles');
   assert.equal(ui.libelles.categories, 'Collections');
 });
 

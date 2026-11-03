@@ -14,6 +14,7 @@
  * l'application redemande le code, ce qui est le comportement attendu d'une
  * caisse que plusieurs vendeurs se passent.
  */
+import { ACCENT_MODE, FournisseurAccent } from '../src/ui/accent';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View } from 'react-native';
 import { Redirect, Stack, usePathname } from 'expo-router';
@@ -494,7 +495,7 @@ export default function DispositionRacine() {
             // du style ci-dessous.
             headerShown: false,
             headerStyle: { backgroundColor: couleurs.surface },
-            headerTintColor: couleurs.primaire,
+            headerTintColor: profilCommerce?.secteur === 'HABILLEMENT' ? ACCENT_MODE.primaire : couleurs.primaire,
             headerTitleStyle: { color: couleurs.texte, fontWeight: '700' },
             headerShadowVisible: false,
             contentStyle: { backgroundColor: couleurs.fond },
@@ -508,8 +509,10 @@ export default function DispositionRacine() {
   return (
     <SafeAreaProvider>
       <ContexteSession.Provider value={valeur}>
-        <StatusBar style="dark" />
-        <View style={{ flex: 1, backgroundColor: couleurs.fond }}>{contenu}</View>
+        <FournisseurAccent secteur={profilCommerce?.secteur}>
+          <StatusBar style="dark" />
+          <View style={{ flex: 1, backgroundColor: couleurs.fond }}>{contenu}</View>
+        </FournisseurAccent>
       </ContexteSession.Provider>
     </SafeAreaProvider>
   );

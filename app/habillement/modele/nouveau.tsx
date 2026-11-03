@@ -127,7 +127,7 @@ export default function NouveauModeleHabillement() {
           </Pressable>
           <View style={s.enteteTextes}>
             <Text style={s.titre}>Nouveau modèle</Text>
-            <Text style={s.sousTitre}>Étape 1 sur 2 · informations générales</Text>
+            <Text style={s.sousTitre}>Étape 1 sur 2</Text>
           </View>
         </View>
         <FormulaireProduit
@@ -149,7 +149,8 @@ export default function NouveauModeleHabillement() {
             sousUnites: [],
           }}
           creation
-          libelleValider="Continuer vers les tailles et couleurs"
+          libelleValider="Suivant"
+          mode
           onValider={creerModele}
           onAnnuler={() => router.back()}
         />

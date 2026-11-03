@@ -86,7 +86,7 @@ function normaliser(texte: string): string {
     .toLowerCase();
 }
 
-const SANS_CATEGORIE = 'Sans categorie';
+const SANS_CATEGORIE = 'Sans catégorie';
 
 interface EtatStock {
   texte: string;
@@ -236,7 +236,7 @@ function CatalogueStandard() {
       if (!partage) {
         Alert.alert(
           'Partage indisponible',
-          "Ce telephone ne propose pas de partage de fichier.",
+          "Ce téléphone ne propose pas de partage de fichier.",
         );
       }
     } catch (e) {
@@ -293,7 +293,7 @@ function CatalogueStandard() {
             style={s.saisie}
             value={recherche}
             onChangeText={setRecherche}
-            placeholder={referenceTechnique ? "Nom, marque, référence ou code-barres" : "Nom, categorie ou code-barres"}
+            placeholder={referenceTechnique ? "Nom, marque, référence ou code-barres" : "Nom, catégorie ou code-barres"}
             placeholderTextColor={C.texteFaible}
             autoCapitalize="none"
             autoCorrect={false}
@@ -338,7 +338,7 @@ function CatalogueStandard() {
           <Text style={sl.centreTitre}>Le catalogue n&apos;a pas pu etre lu</Text>
           <Text style={sl.centreTexte}>{etat.message}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger(false)}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       ) : (

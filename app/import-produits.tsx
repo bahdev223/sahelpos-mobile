@@ -169,7 +169,7 @@ export default function EcranImportProduits() {
       const iAchat = trouverColonne(entetes, ['prix achat', 'prix d achat', 'achat']);
       const iCategorie = trouverColonne(entetes, ['categorie', 'famille', 'rayon']);
       const iCode = trouverColonne(entetes, ['code barre', 'code barres', 'codebarre', 'reference']);
-      const iUnite = trouverColonne(entetes, ['unite', 'unite base', 'mesure']);
+      const iUnite = trouverColonne(entetes, ['unite', 'unité base', 'mesure']);
       const iStock = trouverColonne(entetes, ['stock', 'quantite']);
 
       const valides: LigneLue[] = [];
@@ -280,7 +280,7 @@ export default function EcranImportProduits() {
           <View style={styles.exemple}>
             <Text style={styles.exempleTexte}>nom;categorie;prix_achat;prix_vente;stock</Text>
             <Text style={styles.exempleTexte}>Ciment 50kg;Materiaux;6000;7500;40</Text>
-            <Text style={styles.exempleTexte}>Ampoule LED;Electricite;175;500;120</Text>
+            <Text style={styles.exempleTexte}>Ampoule LED;Électricité;175;500;120</Text>
           </View>
         </Carte>
 
@@ -317,13 +317,13 @@ export default function EcranImportProduits() {
             </Carte>
 
             {analyse.valides.length > 0 ? (
-              <Carte titre="Apercu">
+              <Carte titre="Aperçu">
                 {analyse.valides.slice(0, 8).map((l, i) => (
                   <View key={i} style={styles.apercuLigne}>
                     <View style={styles.apercuGauche}>
                       <Text style={styles.apercuNom}>{l.nom}</Text>
                       <Text style={styles.apercuDetail}>
-                        {l.categorie || 'sans categorie'} · {l.uniteBase}
+                        {l.categorie || 'sans catégorie'} · {l.uniteBase}
                       </Text>
                     </View>
                     <View style={styles.apercuDroite}>

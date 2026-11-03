@@ -512,6 +512,17 @@ export async function exigerEcriture(type?: TypeEcritureCommerce): Promise<void>
   );
 }
 
+/** Message a afficher AVANT la saisie quand une famille d'ecriture est fermee (null si ouverte). */
+export async function raisonEcritureFermee(type: TypeEcritureCommerce): Promise<string | null> {
+  try {
+    await exigerEcriture(type);
+    return null;
+  } catch (erreur) {
+    if (erreur instanceof EcritureFermee) return erreur.message;
+    return null;
+  }
+}
+
 /** Verify the signed identity and existing shop binding before touching local state. */
 export async function installerDroitAccounts(licence: string, device: string, memberId: string, boutiqueId: number): Promise<Droit> {
   const droit = lireDroit(licence);

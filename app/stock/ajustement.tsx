@@ -73,7 +73,7 @@ interface Motif {
 
 const MOTIFS: Record<NatureMouvement, Motif[]> = {
   ENTREE: [
-    { source: 'ACHAT', libelle: 'Achat / reception' },
+    { source: 'ACHAT', libelle: 'Achat / réception' },
     { source: 'RETOUR', libelle: 'Retour client' },
     { source: 'CORRECTION', libelle: 'Correction' },
   ],
@@ -89,12 +89,12 @@ const MOTIFS: Record<NatureMouvement, Motif[]> = {
 };
 
 const NATURES_ONGLETS: { cle: NatureMouvement; libelle: string; aide: string }[] = [
-  { cle: 'ENTREE', libelle: 'Entree', aide: 'Ce que vous avez recu, en plus du stock actuel.' },
+  { cle: 'ENTREE', libelle: 'Entree', aide: 'Ce que vous avez reçu, en plus du stock actuel.' },
   { cle: 'SORTIE', libelle: 'Sortie', aide: 'Ce qui est parti sans etre vendu : casse, perte, retour.' },
   {
     cle: 'AJUSTEMENT',
     libelle: 'Ajustement',
-    aide: 'Ce que vous avez COMPTE en rayon. Le stock sera remis a ce total.',
+    aide: 'Ce que vous avez COMPTE en rayon. Le stock sera remis à ce total.',
   },
 ];
 
@@ -209,7 +209,7 @@ export default function Ajustement() {
     if (variantes.length > 0 && !varianteChoisie) return 'Choisissez la variante exacte à modifier.';
     if (quantiteTexte.trim() === '') return null;
     if (quantite === null) return 'Quantite illisible. Utilisez des chiffres, la virgule est acceptee.';
-    if (quantite < 0) return 'La quantite ne peut pas etre negative.';
+    if (quantite < 0) return 'La quantité ne peut pas etre negative.';
     if (nature !== 'AJUSTEMENT' && quantite === 0) return 'La quantite doit etre superieure a zero.';
     if (apercu && apercu.apres < 0) {
       const disponible = varianteChoisie ? varianteChoisie.stockActuel : produit.quantite_base;
@@ -348,7 +348,7 @@ export default function Ajustement() {
           <Text style={sl.centreTitre}>Le catalogue n&apos;a pas pu etre lu</Text>
           <Text style={sl.centreTexte}>{messageChargement}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger()}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       </View>
@@ -366,7 +366,7 @@ export default function Ajustement() {
               style={s.saisie}
               value={recherche}
               onChangeText={setRecherche}
-              placeholder="Nom, categorie ou code-barres"
+              placeholder="Nom, catégorie ou code-barres"
               placeholderTextColor={C.texteFaible}
               autoCapitalize="none"
               autoCorrect={false}
@@ -502,7 +502,7 @@ export default function Ajustement() {
 
           {unites.length > 1 ? (
             <View style={s.champ}>
-              <Text style={s.libelle}>Unite</Text>
+              <Text style={s.libelle}>Unité</Text>
               <View style={s.puces}>
                 {unites.map((u) => (
                   <Pressable
@@ -546,7 +546,7 @@ export default function Ajustement() {
 
           {apercu && quantiteTexte.trim() !== '' && problemeSaisie === null ? (
             <View style={sl.apercu}>
-              <Text style={sl.apercuTitre}>Apres enregistrement</Text>
+              <Text style={sl.apercuTitre}>Après enregistrement</Text>
               <Text style={sl.apercuLigne}>
                 {formaterQuantite(apercu.avant)} vers{' '}
                 <Text style={sl.apercuFort}>{formaterQuantite(apercu.apres)}</Text>{' '}
@@ -562,7 +562,7 @@ export default function Ajustement() {
                     },
                   ]}>
                   {apercu.ecart === 0
-                    ? 'Aucun ecart : le stock etait juste.'
+                    ? 'Aucun écart : le stock etait juste.'
                     : apercu.ecart > 0
                       ? `Excedent de ${formaterQuantite(apercu.ecart)} ${produit.unite_base}`
                       : `Manquant de ${formaterQuantite(Math.abs(apercu.ecart))} ${produit.unite_base}`}
@@ -592,7 +592,7 @@ export default function Ajustement() {
             <Text style={s.libelle}>
               {nature === 'ENTREE' && source === 'ACHAT'
                 ? 'Fournisseur ou origine (facultatif)'
-                : 'Precision (facultatif)'}
+                : 'Précision (facultatif)'}
             </Text>
             <View style={s.zoneSaisie}>
               <TextInput
@@ -617,13 +617,13 @@ export default function Ajustement() {
           {nature === 'ENTREE' ? (
             <>
               <View style={s.champ}>
-                <Text style={s.libelle}>Reference (facultatif)</Text>
+                <Text style={s.libelle}>Référence (facultatif)</Text>
                 <View style={s.zoneSaisie}>
                   <TextInput
                     style={s.saisie}
                     value={referenceTexte}
                     onChangeText={setReferenceTexte}
-                    placeholder="Bon de livraison, numero de facture"
+                    placeholder="Bon de livraison, numéro de facture"
                     placeholderTextColor={C.texteFaible}
                     autoCapitalize="characters"
                   />

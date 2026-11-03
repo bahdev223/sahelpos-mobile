@@ -104,7 +104,7 @@ export default function EcranBoutique() {
 
   const enregistrer = useCallback(async () => {
     if (!nom.trim()) {
-      Alert.alert('Nom manquant', 'Le nom de la boutique apparait sur chaque recu.');
+      Alert.alert('Nom manquant', 'Le nom de la boutique apparait sur chaque reçu.');
       return;
     }
     setEnregistrement(true);
@@ -121,7 +121,7 @@ export default function EcranBoutique() {
       await recharger();
       if (logoSauvegarde && logoSauvegarde !== logo) effacerLogo(logoSauvegarde);
       setLogoSauvegarde(logo);
-      Alert.alert('Enregistre', 'Les prochains recus utiliseront ces informations.');
+      Alert.alert('Enregistre', 'Les prochains reçus utiliseront ces informations.');
     } catch (e) {
       Alert.alert('Enregistrement impossible', e instanceof Error ? e.message : 'Erreur.');
     } finally {
@@ -169,14 +169,14 @@ export default function EcranBoutique() {
           <Champ
             valeur={telephone}
             onChangeText={setTelephone}
-            label="Telephone"
+            label="Téléphone"
             clavier="phone-pad"
             placeholder="Facultatif"
-            aide="Imprime sur le recu : c'est par la que le client vous rappelle."
+            aide="Imprime sur le reçu : c'est par la que le client vous rappelle."
           />
         </Carte>
 
-        <Carte titre="Recu">
+        <Carte titre="Reçu">
           <Champ
             valeur={devise}
             onChangeText={setDevise}
@@ -191,13 +191,13 @@ export default function EcranBoutique() {
           />
         </Carte>
 
-        <Carte titre="Apercu du recu">
+        <Carte titre="Aperçu du reçu">
           <View style={styles.apercu}>
             <Text style={styles.apercuTitre}>{(nom || 'MA BOUTIQUE').toUpperCase()}</Text>
             {adresse ? <Text style={styles.apercuLigne}>{adresse}</Text> : null}
             {telephone ? <Text style={styles.apercuLigne}>Tel : {telephone}</Text> : null}
             <Text style={styles.apercuSeparateur}>{'='.repeat(32)}</Text>
-            <Text style={styles.apercuLigne}>Recu V-...-0001</Text>
+            <Text style={styles.apercuLigne}>Reçu V-...-0001</Text>
             <Text style={styles.apercuSeparateur}>{'-'.repeat(32)}</Text>
             <Text style={styles.apercuLigne}>TOTAL{'          '}12 500 {devise || 'F'}</Text>
             <Text style={styles.apercuSeparateur}>{'='.repeat(32)}</Text>

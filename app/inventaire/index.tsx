@@ -223,7 +223,7 @@ type Filtre = 'tous' | 'nonComptes' | 'ecarts';
 const FILTRES: { cle: Filtre; libelle: string }[] = [
   { cle: 'tous', libelle: 'Tous' },
   { cle: 'nonComptes', libelle: 'Non comptes' },
-  { cle: 'ecarts', libelle: 'Ecarts' },
+  { cle: 'ecarts', libelle: 'Écarts' },
 ];
 
 type Etat =
@@ -309,11 +309,11 @@ export default function ListeInventaires() {
     // photos du meme stock : la seconde validee ecraserait le travail de la
     // premiere. On propose donc d'abord de reprendre.
     Alert.alert(
-      'Un comptage est deja en cours',
+      'Un comptage est déjà en cours',
       `${enCours.numero} a ete ouvert le ${formaterDate(enCours.date_creation)} et n'est pas valide.`,
       [
         { text: 'Reprendre', onPress: () => ouvrir(enCours.id) },
-        { text: 'En creer un autre', style: 'destructive', onPress: () => void creer() },
+        { text: 'En créer un autre', style: 'destructive', onPress: () => void creer() },
         { text: 'Annuler', style: 'cancel' },
       ],
     );
@@ -379,7 +379,7 @@ export default function ListeInventaires() {
           <Text style={sl.centreTitre}>La liste n&apos;a pas pu etre lue</Text>
           <Text style={sl.centreTexte}>{etat.message}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger(false)}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       ) : (
@@ -398,7 +398,7 @@ export default function ListeInventaires() {
                   <Icone nom="stock" taille={28} couleur={C.accent} />
                 </View>
                 <View style={sl.introTextes}>
-                  <Text style={sl.introTitre}>Inventaire general</Text>
+                  <Text style={sl.introTitre}>Inventaire général</Text>
                   <Text style={sl.introAide}>
                     Verifiez les quantites reelles pour comparer avec le stock theorique.
                   </Text>
@@ -458,7 +458,7 @@ export default function ListeInventaires() {
               ) : (
                 <>
                   <Text style={sl.centreTitre}>Aucun resultat</Text>
-                  <Text style={sl.centreTexte}>Aucun inventaire ne correspond a ce filtre.</Text>
+                  <Text style={sl.centreTexte}>Aucun inventaire ne correspond à ce filtre.</Text>
                   <Pressable
                     style={s.boutonSecondaire}
                     onPress={() => {
@@ -484,7 +484,7 @@ export default function ListeInventaires() {
         accessibilityRole="button">
         <Icone nom="codeBarres" taille={23} couleur="#FFFFFF" />
         <Text style={sl.boutonFlottantTexte}>
-          {creation ? 'Preparation...' : 'Scanner un produit'}
+          {creation ? 'Préparation...' : 'Scanner un produit'}
         </Text>
       </Pressable>
     </View>

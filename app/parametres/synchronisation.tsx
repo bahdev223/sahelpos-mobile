@@ -64,13 +64,13 @@ export default function EcranSynchronisation() {
       </View>
 
       <Carte titre="Profil commerce">
-        <Ligne titre="Secteur" valeur={commerce?.secteur_libelle || 'A verifier'} />
+        <Ligne titre="Secteur" valeur={commerce?.secteur_libelle || 'A vérifier'} />
         {commerce ? <>
           <Ligne titre="Vente" valeur={MODES_VENTE.find(item => item.code === commerce.mode_vente)?.titre || '-'} />
           <Ligne titre="Approvisionnement" valeur={MODES_APPROVISIONNEMENT.find(item => item.code === commerce.mode_approvisionnement)?.titre || '-'} />
           <Ligne titre="Catalogue" valeur={commerce.mode_catalogue === 'SIMPLE' ? 'Simple' : 'Avance'} />
         </> : null}
-        <Ligne titre="Acces mobile" valeur={abonnement?.peutEcrire ? 'Lecture et ecriture' : 'Consultation uniquement'} />
+        <Ligne titre="Accès mobile" valeur={abonnement?.peutEcrire ? 'Lecture et ecriture' : 'Consultation uniquement'} />
         {abonnement?.message ? <Text style={styles.erreurTexte}>{abonnement.message}</Text> : null}
       </Carte>
 

@@ -33,10 +33,11 @@ import {
 } from '../../src/ui/components';
 import { listerAchats, type AchatResume, type StatutAchat } from '../../src/services/achat';
 import { detteTotale } from '../../src/db/repositories/fournisseur';
+import { useAccent, useStylesAccent } from '../../src/ui/accent';
 
 const LIBELLE_STATUT: Record<StatutAchat, string> = {
   BROUILLON: 'A recevoir',
-  RECU: 'Recu',
+  RECU: 'Reçu',
   ANNULE: 'Annule',
 };
 
@@ -54,6 +55,8 @@ function dateCourte(iso: string): string {
 }
 
 export default function EcranAchats() {
+  const A = useStylesAccent();
+  const accentCouleur = useAccent().primaire;
   const router = useRouter();
   const { boutique, synchroniserMaintenant, profilCommerce } = useSession();
   const profilUI = resoudreProfilUIMobile(profilCommerce);
@@ -98,7 +101,7 @@ export default function EcranAchats() {
 
   return (
     <SafeAreaView style={styles.page} edges={['bottom']}>
-      <Stack.Screen options={{ headerShown: true, title: profilUI.libelles.achats }} />
+      <Stack.Screen options={{ headerShown: true, title: profilUI.libelles.achats === 'Appro.' ? 'Approvisionnements' : profilUI.libelles.achats }} />
 
       {erreur ? (
         <Erreur message={erreur} onReessayer={charger} />
@@ -106,9 +109,7 @@ export default function EcranAchats() {
         <FlatList
           data={achats}
           keyExtractor={(a) => String(a.id)}
-          contentContainerStyle={
-            achats.length === 0 ? styles.videConteneur : styles.liste
-          }
+          contentContainerStyle={[styles.liste, achats.length === 0 && styles.videConteneur]}
           refreshControl={
             <RefreshControl
               refreshing={rafraichit}
@@ -119,28 +120,19 @@ export default function EcranAchats() {
             <>
               <Carte style={styles.resume}>
                 <Text style={styles.resumeLibelle}>
-                  {dette > 0 ? 'Vous devez a vos fournisseurs' : 'Aucune dette fournisseur'}
+                  {dette > 0 ? 'Vous devez à vos fournisseurs' : 'Aucune dette fournisseur'}
                 </Text>
-                <Montant valeur={dette} devise={boutique.devise} taille="grand" couleur={dette > 0 ? couleurs.danger : couleurs.primaire} />
-                <Pressable onPress={() => router.push('/fournisseurs')}><Text style={styles.lien}>Voir les fournisseurs</Text></Pressable>
+                <Montant valeur={dette} devise={boutique.devise} taille="grand" couleur={dette > 0 ? couleurs.danger : accentCouleur} />
+                <Pressable onPress={() => router.push('/fournisseurs')}><Text style={[styles.lien, A.texte]}>Voir les fournisseurs</Text></Pressable>
               </Carte>
               <TextInput value={recherche} onChangeText={setRecherche} placeholder="Rechercher une commande..." placeholderTextColor={couleurs.texteFaible} style={styles.recherche} returnKeyType="search" />
               <View style={styles.filtres}>
-                {([['TOUS', 'Toutes'], ['BROUILLON', 'À recevoir'], ['RECU', 'Reçus'], ['ANNULE', 'Annulés']] as const).map(([valeur, libelle]) => <Pressable key={valeur} onPress={() => setFiltre(valeur)} style={[styles.filtre, filtre === valeur && styles.filtreActif]}><Text style={[styles.filtreTexte, filtre === valeur && styles.filtreTexteActif]}>{libelle}</Text></Pressable>)}
+                {([['TOUS', 'Toutes'], ['BROUILLON', 'À recevoir'], ['RECU', 'Reçus'], ['ANNULE', 'Annulés']] as const).map(([valeur, libelle]) => <Pressable key={valeur} onPress={() => setFiltre(valeur)} style={[styles.filtre, filtre === valeur && styles.filtreActif, filtre === valeur && A.actif]}><Text style={[styles.filtreTexte, filtre === valeur && styles.filtreTexteActif]}>{libelle}</Text></Pressable>)}
               </View>
             </>
           }
           ListEmptyComponent={
-            <ListeVide
-              titre="Aucun achat"
-              message={profilUI.code === 'HABILLEMENT'
-                ? "Enregistrez vos approvisionnements par modèle, taille et couleur."
-                : approvisionnementSpecialise
-                  ? "Enregistrez vos approvisionnements par référence et caractéristiques."
-                  : "Enregistrez vos achats fournisseur pour faire entrer la marchandise en stock et suivre ce que vous devez."}
-              actionTitre={approvisionnementSpecialise ? "Nouvel approvisionnement" : "Enregistrer un achat"}
-              onAction={() => router.push('/achats/nouveau')}
-            />
+            <ListeVide titre="Aucun achat" />
           }
           renderItem={({ item }) => {
             const reste = Math.max(0, item.total - item.montantPaye);
@@ -187,7 +179,7 @@ export default function EcranAchats() {
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: couleurs.fond },
   liste: { padding: espaces.l },
-  videConteneur: { flexGrow: 1, justifyContent: 'center' },
+  videConteneur: { flexGrow: 1 },
 
   resume: { marginBottom: espaces.m },
   resumeLibelle: { fontSize: 13, color: couleurs.texteFaible, marginBottom: 4 },

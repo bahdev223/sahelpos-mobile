@@ -6,6 +6,7 @@ import { obtenirBase } from '../../src/db/database';
 import { BandeauEtat, couleurs, espaces, rayons } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
+import { comparerTailles, estDimensionTaille } from '../../src/domain/tailles';
 
 interface Ligne {
   dimension_code: string;
@@ -41,6 +42,9 @@ export default function ReferentielHabillement() {
     courant.valeurs.push(ligne);
     dimensions.set(ligne.dimension_code, courant);
   }
+  for (const [code, dimension] of dimensions) {
+    if (estDimensionTaille(code)) dimension.valeurs.sort((a, b) => comparerTailles(a.valeur_nom, b.valeur_nom));
+  }
 
   return (
     <View style={s.page}>
@@ -51,7 +55,6 @@ export default function ReferentielHabillement() {
         </Pressable>
         <View>
           <Text style={s.titre}>Tailles & couleurs</Text>
-          <Text style={s.sousTitre}>Référentiel Habillement synchronisé</Text>
         </View>
       </View>
       <ScrollView contentContainerStyle={s.contenu}>

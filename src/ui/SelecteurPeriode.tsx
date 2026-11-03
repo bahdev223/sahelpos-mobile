@@ -2,16 +2,19 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MODES_PERIODE, type ModePeriode } from '../domain/periodes';
 import { couleurs } from './theme';
 import { Icone } from './icones';
+import { useAccent } from './accent';
 
 export function SelecteurPeriode({ mode, decalage, libelle, onMode, onDecalage }: {
   mode: ModePeriode; decalage: number; libelle: string;
   onMode: (mode: ModePeriode) => void; onDecalage: (valeur: number) => void;
 }) {
+  const accent = useAccent();
+  const actif = { backgroundColor: accent.primaire, borderColor: accent.primaire };
   return <View style={s.bloc}>
-    <View style={s.modes}>{MODES_PERIODE.map((p) => <Pressable key={p.mode} accessibilityRole="button" accessibilityState={{ selected: mode === p.mode }} onPress={() => onMode(p.mode)} style={[s.mode, mode === p.mode && s.actif]}><Text style={[s.texte, mode === p.mode && s.texteActif]}>{p.libelle}</Text></Pressable>)}</View>
+    <View style={s.modes}>{MODES_PERIODE.map((p) => <Pressable key={p.mode} accessibilityRole="button" accessibilityState={{ selected: mode === p.mode }} onPress={() => onMode(p.mode)} style={[s.mode, mode === p.mode && actif]}><Text style={[s.texte, mode === p.mode && s.texteActif]}>{p.libelle}</Text></Pressable>)}</View>
     <View style={s.navigation}>
       <Pressable style={s.fleche} accessibilityRole="button" accessibilityLabel="Période précédente" onPress={() => onDecalage(decalage - 1)}><Icone nom="retour" taille={20} /></Pressable>
-      <View style={s.centre}><Text style={s.libelle}>{libelle}</Text>{decalage !== 0 && <Pressable onPress={() => onDecalage(0)} accessibilityRole="button"><Text style={s.retour}>Période actuelle</Text></Pressable>}</View>
+      <View style={s.centre}><Text style={s.libelle}>{libelle}</Text>{decalage !== 0 && <Pressable onPress={() => onDecalage(0)} accessibilityRole="button"><Text style={[s.retour, { color: accent.primaire }]}>Période actuelle</Text></Pressable>}</View>
       <Pressable style={s.fleche} accessibilityRole="button" accessibilityLabel="Période suivante" disabled={decalage >= 0} accessibilityState={{ disabled: decalage >= 0 }} onPress={() => onDecalage(Math.min(0, decalage + 1))}><Icone nom="chevron" taille={20} couleur={decalage >= 0 ? couleurs.texteEteint : couleurs.texte} /></Pressable>
     </View>
   </View>;
