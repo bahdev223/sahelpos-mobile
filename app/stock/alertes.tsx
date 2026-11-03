@@ -264,7 +264,6 @@ export default function Alertes() {
                       <LigneVarianteAlerte
                         key={variante.id}
                         variante={variante}
-                        onCommande={() => router.push('/achats/nouveau')}
                         onJournal={() => router.push({
                           pathname: '/stock/mouvements',
                           params: {
@@ -378,7 +377,6 @@ function LigneAlerte(p: {
 
 function LigneVarianteAlerte(p: {
   variante: VarianteAlerte;
-  onCommande: () => void;
   onJournal: () => void;
 }) {
   const A = useStylesAccent();
@@ -408,10 +406,6 @@ function LigneVarianteAlerte(p: {
       <View style={sl.carteBas}>
         <Pressable style={sl.lien} onPress={p.onJournal} hitSlop={6}>
           <Text style={[sl.lienTexte, A.texte]}>Journal</Text>
-        </Pressable>
-        <Pressable style={[sl.boutonEntree, A.actif]} onPress={p.onCommande}>
-          <Icone nom="plus" taille={17} couleur="#FFFFFF" />
-          <Text style={sl.boutonEntreeTexte}>Approvisionner</Text>
         </Pressable>
       </View>
     </View>
