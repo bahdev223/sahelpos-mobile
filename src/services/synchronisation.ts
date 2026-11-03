@@ -1440,6 +1440,19 @@ async function appliquerVente(v: VenteSync): Promise<void> {
     'SELECT id FROM vente WHERE id_local = ?',
     v.id_local,
   );
+  if (existe) {
+    // Un pull ne doit pas ecraser un encaissement/une annulation qui attend
+    // encore son ACK, meme si la boutique ou le role est devenu non inscriptible.
+    const attente = await lirePremier<{ id: number }>(
+      `SELECT id FROM sync_outbox
+        WHERE (type_objet = 'vente' AND id_local = ?)
+           OR (type_objet = 'operation_vente' AND id_local IN
+               (SELECT id_local FROM operation_vente_mobile WHERE vente_id = ?))
+        LIMIT 1`,
+      v.id_local, existe.id,
+    );
+    if (attente) return;
+  }
   if (v.supprime_le) {
     if (existe) await executer('DELETE FROM vente WHERE id = ?', existe.id);
     return;
