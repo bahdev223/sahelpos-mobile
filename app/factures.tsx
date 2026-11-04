@@ -20,10 +20,10 @@ import { ActionsDocument } from '../src/ui/ActionsDocument';
 import { preparerDocumentVente } from '../src/services/document-vente';
 
 const STATUTS: Record<StatutVente, string> = {
-  payee: 'Payee',
+  payee: 'Payée',
   partielle: 'Partielle',
-  impayee: 'Impayee',
-  annulee: 'Annulee',
+  impayee: 'Impayée',
+  annulee: 'Annulée',
 };
 
 const COULEURS_STATUT: Record<StatutVente, string> = {

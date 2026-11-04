@@ -121,7 +121,7 @@ export default function EcranFournisseurs() {
               titre={recherche ? 'Aucun resultat' : 'Aucun fournisseur'}
               message={
                 recherche
-                  ? 'Aucun fournisseur ne correspond a cette recherche.'
+                  ? 'Aucun fournisseur ne correspond à cette recherche.'
                   : 'Ajoutez vos fournisseurs pour suivre vos achats et vos dettes.'
               }
               actionTitre="Ajouter un fournisseur"
@@ -163,7 +163,7 @@ export default function EcranFournisseurs() {
             <Champ
               valeur={telephone}
               onChangeText={setTelephone}
-              label="Telephone"
+              label="Téléphone"
               placeholder="Facultatif"
               clavier="phone-pad"
             />

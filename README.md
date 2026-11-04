@@ -1,8 +1,12 @@
 # SahelPOS Mobile
 
+État du 4 novembre : [stabilisation, matrice des 11 profils et recette restante](docs/agents/STABILISATION_ANDROID_2026-11-04.md). Correctifs développés et testés automatiquement ; livraison commerciale non validée.
+
 Caisse Android **offline-first** de SahelPOS, en React Native / Expo.
 
-Version source actuelle : **1.3.0** (`versionCode 9`).
+Version source actuelle : **1.3.1** (`versionCode 10`).
+
+Refonte d'inscription du 1er novembre 2026 : [état, tests et captures](docs/inscription-mobile-2026-11-01.md). Intégrée à la candidate Android, avec les corrections métier : [livraison courante](docs/agents/LIVRAISON_ANDROID_2026-11-01.md). [Index de consolidation](docs/agents/ETAT_CONSOLIDATION.md).
 
 ## Ce que fait l'application
 
@@ -139,7 +143,35 @@ La recette finale sur téléphone réel doit couvrir Google, QR, PIN/biométrie,
 vente offline, reprise réseau, deux appareils, variantes/conditionnements et
 imprimante thermique.
 
-Le build APK/AAB ne doit être lancé qu'après ce gate.
+La publication d'un APK/AAB stable reste conditionnée par cette recette.
+Un APK interne peut être préparé et installé à la demande explicite du
+propriétaire pour lui permettre de réaliser les essais, sans être présenté
+comme une release commerciale validée.
+
+## Candidate Android du 1er novembre 2026
+
+La branche `codex/android-harmonisation-20261101` réunit la consolidation
+métier du 31 octobre et l'inscription illustrée du 1er novembre, en version
+**1.3.1 / code 10**. Le [rapport courant](docs/agents/LIVRAISON_ANDROID_2026-11-01.md)
+précise les sources, les contrôles, la compilation et les limites de recette.
+
+[Télécharger la préversion de test 1.3.1/code 10](https://github.com/bahdev223/sahelpos-mobile/releases/download/mobile-v1.3.1-rc.1/SahelPOS-1.3.1-code10.apk),
+publiée séparément le 2 novembre. Elle ne remplace pas la version stable ni
+le téléchargement principal du site ; la recette sur appareil reste à faire.
+
+## Livraison Android du 9 octobre 2026
+
+La version **1.3.0 / code 9** a été compilée avec la signature existante et
+installée en mise à jour sur le TECNO KL5, sans désinstallation. Les 107 tests
+et le contrôle TypeScript ont réussi ; les parcours Google, PIN, biométrie,
+synchronisation réelle et impression restent à recetter par l'utilisateur.
+
+Le [rapport de livraison](docs/agents/LIVRAISON_ANDROID_2026-10-09.md)
+décrit les sources, les modifications, les commandes reproductibles, les
+empreintes du binaire et du certificat, l'installation et les limites de
+validation. Le travail est poussé sur `codex/sahelpos-consolidation-20261008`
+dans la [PR 5](https://github.com/bahdev223/sahelpos-mobile/pull/5), encore
+brouillon. Il n'est ni fusionné dans master ni publié en téléchargement public.
 
 <!-- saheltech-consolidation-2026-10-08 -->
 ## Directives de consolidation — 8 octobre 2026
@@ -147,3 +179,13 @@ Le build APK/AAB ne doit être lancé qu'après ce gate.
 Les agents qui reprennent ce dépôt doivent lire les [directives de consolidation](docs/agents/CONSOLIDATION_2026-10-08.md) et `AGENTS.md` avant le travail. Le lot prioritaire couvre **SahelPOS, Fournea et École**, avec prospection visée le **9 octobre 2026**. Les directives précisent le travail, les guides à produire, les preuves de recette et la préparation du déplacement futur.
 
 Cette mise à jour concerne la documentation ; elle ne certifie pas le déploiement ni un binaire mobile.
+
+### Dossier de recette du 8 octobre
+
+- [État et versions vérifiées](docs/agents/ETAT_CONSOLIDATION.md)
+- [Prise en main](docs/agents/PRISE_EN_MAIN.md)
+- [Mobile et synchronisation](docs/agents/MOBILE_ET_SYNCHRONISATION.md)
+- [Recette et démonstration](docs/agents/RECETTE_ET_DEMONSTRATION.md)
+- [Fiche service](docs/agents/FICHE_SERVICE.md)
+- [Exploitation et déplacement futur](docs/agents/EXPLOITATION_ET_DEPLACEMENT.md)
+- [Sécurité des dépendances](docs/agents/SECURITE_DEPENDANCES_2026-10-08.md)

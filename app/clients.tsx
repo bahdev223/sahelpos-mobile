@@ -137,7 +137,7 @@ export default function EcranClients() {
   const choisirPhoto = useCallback(async () => {
     const permission = await SelecteurImage.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      Alert.alert('Acces aux photos', "Autorisez l'acces aux photos pour choisir le profil du client.");
+      Alert.alert('Accès aux photos', "Autorisez l'accès aux photos pour choisir le profil du client.");
       return;
     }
     const resultat = await SelecteurImage.launchImageLibraryAsync({
@@ -160,7 +160,7 @@ export default function EcranClients() {
         <Champ
           valeur={recherche}
           onChangeText={setRecherche}
-          placeholder="Chercher un nom ou un telephone"
+          placeholder="Chercher un nom ou un téléphone"
         />
       </View>
 
@@ -178,7 +178,7 @@ export default function EcranClients() {
               titre={recherche ? 'Aucun resultat' : 'Aucun client'}
               message={
                 recherche
-                  ? 'Aucun client ne correspond a cette recherche.'
+                  ? 'Aucun client ne correspond à cette recherche.'
                   : 'Ajoutez un client pour suivre ses achats et son ardoise.'
               }
               actionTitre="Ajouter un client"
@@ -238,7 +238,7 @@ export default function EcranClients() {
             <Champ
               valeur={nouveauTelephone}
               onChangeText={setNouveauTelephone}
-              label="Telephone"
+              label="Téléphone"
               placeholder="Facultatif"
               clavier="phone-pad"
             />

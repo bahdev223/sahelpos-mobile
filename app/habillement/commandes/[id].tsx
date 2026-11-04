@@ -24,7 +24,7 @@ const LABELS:Record<string,string>={
 export default function DetailCommandeHabillement(){
   const router=useRouter();
   const{id}=useLocalSearchParams<{id:string}>();
-  const{boutique,synchroniserMaintenant}=useSession();
+  const{boutique,synchroniserMaintenant,utilisateur}=useSession();
   const[commande,setCommande]=useState<CommandeClientDetail|null>(null);
   const[enCours,setEnCours]=useState(false);
   const[conversionOuverte,setConversionOuverte]=useState(false);
@@ -99,7 +99,7 @@ export default function DetailCommandeHabillement(){
             grand
           />
         </>:null}
-        {!['TERMINEE','ANNULEE'].includes(commande.statut)?<Bouton titre="Annuler la commande" variante="secondaire" onPress={()=>
+        {utilisateur?.role !== 'vendeur' && !['TERMINEE','ANNULEE'].includes(commande.statut)?<Bouton titre="Annuler la commande" variante="secondaire" onPress={()=>
           Alert.alert('Annuler la commande','La réservation sera libérée côté serveur.',[
             {text:'Retour',style:'cancel'},{text:'Annuler la commande',style:'destructive',onPress:()=>void action(()=>annulerCommandeClient(commande.id),'Commande annulée.')}
           ])} />:null}

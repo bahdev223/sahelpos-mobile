@@ -27,6 +27,7 @@ import { useSession } from '../_layout';
 import { BandeauEtat, Bouton, couleurs, espaces, rayons } from '../../src/ui/components';
 import { Icone } from '../../src/ui/icones';
 import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
+import { libelleUnite } from '../../src/domain/unites';
 
 function dateCourte(iso: string): string {
   const date = new Date(iso);
@@ -74,7 +75,6 @@ export default function EchangesHabillement() {
         </Pressable>
         <View style={s.enteteTextes}>
           <Text style={s.titre}>Échanges taille / couleur</Text>
-          <Text style={s.sousTitre}>Ventes synchronisées uniquement</Text>
         </View>
       </View>
 
@@ -105,7 +105,7 @@ export default function EchangesHabillement() {
             <Text style={s.variante}>{item.varianteNom}</Text>
             <View style={s.carteBas}>
               <Text style={s.quantite}>
-                {item.quantite} {item.unite}
+                {item.quantite} {libelleUnite(item.unite, item.quantite)}
               </Text>
               <Text style={s.prix}>
                 {Math.round(item.prixUnitaire).toLocaleString('fr-FR')} F
@@ -207,7 +207,7 @@ function ModaleEchange({
             <Text style={s.resumeLabel}>Variante rapportée</Text>
             <Text style={s.resumeValeur}>{ligne.varianteNom}</Text>
             <Text style={s.resumeMeta}>
-              {ligne.quantite} {ligne.unite} vendu(s) · ligne serveur #{ligne.ligneServeurId}
+              {ligne.quantite} {libelleUnite(ligne.unite, ligne.quantite)} vendu(s)
             </Text>
           </View>
 
@@ -252,7 +252,7 @@ function ModaleEchange({
             keyboardType="decimal-pad"
             style={s.champ}
           />
-          <Text style={s.aide}>Maximum : {ligne.quantite} {ligne.unite}</Text>
+          <Text style={s.aide}>Maximum : {ligne.quantite} {libelleUnite(ligne.unite, ligne.quantite)}</Text>
 
           <Text style={s.sectionTitre}>Note</Text>
           <TextInput

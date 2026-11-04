@@ -3,15 +3,14 @@
  *
  * POURQUOI CINQ ONGLETS
  * ---------------------------
- * L'achat est une action quotidienne de stock : il doit etre atteignable sans
- * ouvrir le tiroir. Les cinq libelles restent courts et conservent une cible
- * tactile de 48 points sur le plus petit telephone pris en charge.
+ * La caisse et le catalogue restent directs. Le cinquième onglet "Menu" ouvre
+ * les rubriques de chaque rôle sans imposer un défilement du tiroir.
  *
  * POURQUOI CET ORDRE
  * ------------------
  * Accueil d'abord parce qu'on ouvre l'application pour savoir ou on en est,
- * puis la caisse, le catalogue, les achats et le stock. Les ventes et tout le
- * reste sont dans le tiroir.
+ * puis la caisse, le catalogue, le stock et le menu. Ventes et achats restent
+ * accessibles depuis ce menu et depuis les raccourcis métiers.
  *
  * POURQUOI LES PICTOGRAMMES NE SONT PLUS DESSINES ICI
  * --------------------------------------------------
@@ -19,11 +18,12 @@
  * n'en avait aucun. Ils vivent desormais dans `src/ui/icones.tsx`, ou tous les
  * ecrans peuvent les reprendre.
  *
- * `href: null` sur l'ecran des ventes conserve la route /ventes — le tiroir et
- * l'accueil y renvoient — sans lui donner d'onglet.
+ * `href: null` garde les routes Achats et Ventes actives sans les afficher
+ * comme onglets supplémentaires.
  */
 import { Tabs } from 'expo-router';
 import type { ColorValue } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { couleurs } from '../../src/ui/components';
@@ -47,6 +47,7 @@ function icone(nom: NomIcone) {
 
 export default function DispositionOnglets() {
   const marges = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
   const { profilCommerce, utilisateur } = useSession();
   const profilUI = resoudreProfilUIMobile(profilCommerce);
   const l = profilUI.libelles;
@@ -71,11 +72,12 @@ export default function DispositionOnglets() {
           // Hauteur imposee pour garder des cibles confortables : la valeur par
           // defaut de React Navigation descend sous les 48 points utiles des
           // que le systeme reserve une barre de gestes.
-          height: 62 + marges.bottom,
+          height: 62 + Math.max(0, fontScale - 1) * 44 + marges.bottom,
           paddingTop: 6,
           paddingBottom: marges.bottom + 6,
         },
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '600' },
+        tabBarLabelPosition: 'below-icon',
+        tabBarLabelStyle: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
       }}
     >
       <Tabs.Screen name="accueil" options={{ title: l.accueil, tabBarIcon: icone('accueil') }} />
@@ -84,8 +86,9 @@ export default function DispositionOnglets() {
         name="catalogue"
         options={{ title: l.catalogue, tabBarIcon: icone('catalogue'), href: onglets.catalogue ? undefined : null }}
       />
-      <Tabs.Screen name="achats" options={{ title: l.achats, tabBarIcon: icone('achats'), href: onglets.achats ? undefined : null }} />
-      <Tabs.Screen name="stock" options={{ title: l.stock, tabBarIcon: icone('stock'), href: onglets.stock ? undefined : null }} />
+      <Tabs.Screen name="stock" options={{ title: 'Stock', tabBarAccessibilityLabel: l.stock, tabBarIcon: icone('stock'), href: onglets.stock ? undefined : null }} />
+      <Tabs.Screen name="menu" options={{ title: 'Menu', tabBarIcon: icone('menu') }} />
+      <Tabs.Screen name="achats" options={{ href: null }} />
       <Tabs.Screen name="ventes" options={{ href: null }} />
     </Tabs>
   );

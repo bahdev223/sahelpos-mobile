@@ -45,6 +45,7 @@ import {
 } from 'react-native';
 
 import { obtenirBase } from '../../src/db/database';
+import { validerInventaire as validerInventaireMetier } from '../../src/services/inventaire';
 import { useSession } from '../_layout';
 import { C, analyserNombre, formaterQuantite, s } from '../produit/nouveau';
 import {
@@ -153,150 +154,19 @@ async function enregistrerComptage(
   const db = await obtenirBase();
   if (stockPhysique === null) {
     await db.runAsync(
-      'UPDATE ligne_inventaire SET stock_physique = NULL, ecart = NULL, valeur_ecart = NULL WHERE id = ?',
+      "UPDATE ligne_inventaire SET stock_physique = NULL, ecart = NULL, valeur_ecart = NULL WHERE id = ? AND inventaire_id IN (SELECT id FROM inventaire WHERE statut = 'BROUILLON')",
       ligneId,
     );
     return;
   }
   const ecart = stockPhysique - stockTheorique;
   await db.runAsync(
-    'UPDATE ligne_inventaire SET stock_physique = ?, ecart = ?, valeur_ecart = ? WHERE id = ?',
+    "UPDATE ligne_inventaire SET stock_physique = ?, ecart = ?, valeur_ecart = ? WHERE id = ? AND inventaire_id IN (SELECT id FROM inventaire WHERE statut = 'BROUILLON')",
     stockPhysique,
     ecart,
     Math.round(ecart * prixAchat),
     ligneId,
   );
-}
-
-interface Comptage {
-  ligneId: number;
-  produitId: number;
-  nom: string;
-  uniteBase: string;
-  stockTheorique: number;
-  prixAchat: number;
-  stockPhysique: number | null;
-}
-
-interface ResultatValidation {
-  nbComptes: number;
-  nbEcarts: number;
-  valeurEcarts: number;
-}
-
-/**
- * Valide l'inventaire : ecrit les lignes, corrige les stocks, journalise.
- *
- * Tout tient dans une seule transaction. Un ajustement ecrit sans que
- * l'inventaire passe en valide laisserait un stock corrige que l'on pourrait
- * corriger une seconde fois en revalidant.
- */
-async function validerInventaire(
-  inventaireId: number,
-  comptages: Comptage[],
-  utilisateurNom: string | null,
-): Promise<ResultatValidation> {
-  const db = await obtenirBase();
-  const maintenant = new Date().toISOString();
-
-  let nbComptes = 0;
-  let nbEcarts = 0;
-  let valeurEcarts = 0;
-
-  await db.withTransactionAsync(async () => {
-    nbComptes = 0;
-    nbEcarts = 0;
-    valeurEcarts = 0;
-
-    const entete = await db.getFirstAsync<{ statut: string; numero: string }>(
-      'SELECT statut, numero FROM inventaire WHERE id = ?',
-      inventaireId,
-    );
-    if (!entete) throw new Error('Cet inventaire a disparu.');
-    // Revalider un inventaire deja valide rejouerait ses ajustements et
-    // doublerait la correction. Le bureau le permettait.
-    if (enStatut(entete.statut) !== 'BROUILLON') {
-      throw new Error(
-        `${entete.numero} est deja ${libelleStatut(enStatut(entete.statut)).toLowerCase()} : il ne peut plus etre valide.`,
-      );
-    }
-
-    for (const c of comptages) {
-      if (c.stockPhysique === null) {
-        await db.runAsync(
-          'UPDATE ligne_inventaire SET stock_physique = NULL, ecart = NULL, valeur_ecart = NULL WHERE id = ?',
-          c.ligneId,
-        );
-        continue;
-      }
-
-      nbComptes++;
-      const ecart = c.stockPhysique - c.stockTheorique;
-      const valeurEcart = Math.round(ecart * c.prixAchat);
-      await db.runAsync(
-        'UPDATE ligne_inventaire SET stock_physique = ?, ecart = ?, valeur_ecart = ? WHERE id = ?',
-        c.stockPhysique,
-        ecart,
-        valeurEcart,
-        c.ligneId,
-      );
-
-      if (Math.abs(ecart) <= SEUIL_ECART) continue;
-
-      nbEcarts++;
-      valeurEcarts += valeurEcart;
-
-      const produit = await db.getFirstAsync<{ quantite_base: number }>(
-        'SELECT quantite_base FROM produit WHERE id = ?',
-        c.produitId,
-      );
-      if (!produit) throw new Error(`Le produit ${c.nom} a disparu du catalogue.`);
-
-      const avant = produit.quantite_base;
-      const apres = avant + ecart;
-
-      await db.runAsync(
-        'UPDATE produit SET quantite_base = ?, date_modification = ? WHERE id = ?',
-        apres,
-        maintenant,
-        c.produitId,
-      );
-      // Sur un ajustement, `quantite` porte ce qui a ete COMPTE, pas l'ecart :
-      // c'est la convention que lit le journal de stock. L'ecart, lui, se lit
-      // entre stock_avant et stock_apres, qui sont donc obligatoires ici -
-      // sans eux la ligne du journal serait indechiffrable.
-      await db.runAsync(
-        `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
-                                      unite, quantite_base, stock_avant, stock_apres,
-                                      prix_unitaire, reference, motif, utilisateur,
-                                      date_mouvement)
-         VALUES (lower(hex(randomblob(16))), ?, 'AJUSTEMENT', 'INVENTAIRE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        c.produitId,
-        c.stockPhysique,
-        c.uniteBase,
-        c.stockPhysique,
-        avant,
-        apres,
-        c.prixAchat,
-        entete.numero,
-        `Inventaire ${entete.numero}`,
-        utilisateurNom,
-        maintenant,
-      );
-    }
-
-    await db.runAsync(
-      `UPDATE inventaire
-          SET statut = 'VALIDE', date_validation = ?, nb_ecarts = ?, valeur_ecarts = ?
-        WHERE id = ?`,
-      maintenant,
-      nbEcarts,
-      valeurEcarts,
-      inventaireId,
-    );
-  });
-
-  return { nbComptes, nbEcarts, valeurEcarts };
 }
 
 /** Abandon d'un comptage : rien n'est efface, rien n'est corrige. */
@@ -374,7 +244,7 @@ const FILTRES: { cle: Filtre; libelle: string }[] = [
   { cle: 'tous', libelle: 'Tous' },
   { cle: 'restants', libelle: 'A compter' },
   { cle: 'comptes', libelle: 'Comptes' },
-  { cle: 'ecarts', libelle: 'Ecarts' },
+  { cle: 'ecarts', libelle: 'Écarts' },
 ];
 
 type Etat =
@@ -576,7 +446,7 @@ export default function EcranInventaire() {
     if (bilan.comptes === 0) {
       Alert.alert(
         'Rien a valider',
-        "Aucun produit n'a encore ete compte. Saisissez au moins une quantite reelle.",
+        "Aucun produit n'a encore ete compte. Saisissez au moins une quantité réelle.",
       );
       return;
     }
@@ -587,7 +457,7 @@ export default function EcranInventaire() {
         ? `${bilan.restants} produit(s) non compte(s) : leur stock ne sera pas touche.`
         : null,
       bilan.ecarts === 0
-        ? 'Aucun ecart : les stocks comptes sont conformes.'
+        ? 'Aucun écart : les stocks comptes sont conformes.'
         : `${bilan.ecarts} ecart(s), soit ${formaterEcartFrancs(bilan.valeur)} au prix d'achat.`,
       bilan.ecarts > 0 ? 'Les stocks concernes seront corriges. Cette action est definitive.' : null,
     ]
@@ -601,16 +471,12 @@ export default function EcranInventaire() {
         style: 'destructive',
         onPress: () => {
           setTravail(true);
-          const comptages: Comptage[] = analyses.map((a) => ({
+          const comptages = analyses.map((a) => ({
             ligneId: a.ligne.id,
             produitId: a.ligne.produit_id,
-            nom: a.ligne.nom,
-            uniteBase: a.ligne.unite_base,
-            stockTheorique: a.ligne.stock_theorique,
-            prixAchat: a.ligne.prix_achat,
             stockPhysique: a.physique,
           }));
-          validerInventaire(fiche.entete.id, comptages, session.utilisateur?.nom ?? null)
+          validerInventaireMetier(fiche.entete.id, session.utilisateur?.nom ?? undefined, comptages)
             .then((resultat) => {
               Alert.alert(
                 'Inventaire valide',
@@ -675,7 +541,7 @@ export default function EcranInventaire() {
             Il a peut-etre ete supprime depuis une autre fenetre.
           </Text>
           <Pressable style={s.boutonSecondaire} onPress={() => router.back()}>
-            <Text style={s.boutonSecondaireTexte}>Retour a la liste</Text>
+            <Text style={s.boutonSecondaireTexte}>Retour à la liste</Text>
           </Pressable>
         </View>
       </View>
@@ -690,7 +556,7 @@ export default function EcranInventaire() {
           <Text style={sl.centreTitre}>Le comptage n&apos;a pas pu etre lu</Text>
           <Text style={sl.centreTexte}>{etat.message}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger()}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       </View>
@@ -740,7 +606,7 @@ export default function EcranInventaire() {
                   setRecherche(texte);
                   setCible(null);
                 }}
-                placeholder="Nom, categorie ou code-barres"
+                placeholder="Nom, catégorie ou code-barres"
                 placeholderTextColor={C.texteFaible}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -802,7 +668,7 @@ export default function EcranInventaire() {
             <Text style={sl.centreTexte}>
               {analyses.length === 0
                 ? "Cet inventaire ne porte sur aucun produit. Il a sans doute ete ouvert alors que le catalogue etait vide."
-                : 'Aucun produit ne correspond a cette recherche.'}
+                : 'Aucun produit ne correspond à cette recherche.'}
             </Text>
             {analyses.length > 0 ? (
               <Pressable
@@ -838,7 +704,7 @@ export default function EcranInventaire() {
             couleur={bilan.restants > 0 ? C.orange : C.vert}
           />
           <BlocBilan
-            titre="Ecarts"
+            titre="Écarts"
             valeur={String(bilan.ecarts)}
             couleur={bilan.ecarts > 0 ? C.orange : C.vert}
           />
@@ -885,7 +751,7 @@ export default function EcranInventaire() {
           </View>
         ) : (
           <Pressable style={s.boutonSecondaire} onPress={() => router.back()}>
-            <Text style={s.boutonSecondaireTexte}>Retour a la liste</Text>
+            <Text style={s.boutonSecondaireTexte}>Retour à la liste</Text>
           </Pressable>
         )}
       </View>
@@ -960,7 +826,7 @@ function LigneInventaire(p: {
   let libelleEcart = 'Pas encore compte';
   if (analyse.invalide) {
     couleurEcart = C.rouge;
-    libelleEcart = 'Quantite illisible';
+    libelleEcart = 'Quantité illisible';
   } else if (compte && ecart !== null) {
     if (Math.abs(ecart) <= SEUIL_ECART) {
       couleurEcart = C.vert;
@@ -1130,7 +996,7 @@ function ModaleScanner(p: {
               <Text style={s.boutonClairTexte}>Autoriser la camera</Text>
             </Pressable>
             <Pressable style={s.boutonFantome} onPress={p.onFermer}>
-              <Text style={s.boutonFantomeTexte}>Chercher a la main</Text>
+              <Text style={s.boutonFantomeTexte}>Chercher à la main</Text>
             </Pressable>
           </View>
         ) : (

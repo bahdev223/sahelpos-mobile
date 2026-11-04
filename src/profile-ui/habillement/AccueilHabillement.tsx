@@ -71,7 +71,7 @@ function montant(v:number, devise:string):string {
 
 export function AccueilHabillement() {
   const router=useRouter();
-  const {boutique,utilisateur,revisionSynchronisation}=useSession();
+  const {boutique,utilisateur,revisionSynchronisation,profilCommerce}=useSession();
   const [d,setD]=useState<Donnees>({
     ca:0,nbVentes:0,nbModeles:0,nbVariantes:0,stockTotal:0,ruptures:0,dernieres:[],
   });
@@ -95,7 +95,6 @@ export function AccueilHabillement() {
       <ScrollView contentContainerStyle={s.contenu}>
         <View style={s.bienvenue}>
           <Text style={s.salut}>Bonjour {utilisateur?.nom||utilisateur?.login||''}</Text>
-          <Text style={s.sousSalut}>Prêt-à-porter · tailles · couleurs · variantes</Text>
         </View>
 
         <View style={s.caCarte}>
@@ -132,6 +131,15 @@ export function AccueilHabillement() {
             onPress={()=>router.push('/habillement/inventaire')}/>
           <Action titre="Échanges" icone="mouvements"
             onPress={()=>router.push('/habillement/echanges')}/>
+          {(profilCommerce?.capabilities_effectives.includes('ARRIVAL_MANAGEMENT') ||
+            profilCommerce?.capabilities_effectives.includes('ARRIVALS')) ? (
+            <Action titre="Arrivages & transit" icone="achats"
+              onPress={()=>router.push('/habillement/arrivages')}/>
+          ) : null}
+          {profilCommerce?.capabilities_effectives.includes('LOT_TRACKING') ? (
+            <Action titre="Lots & péremptions" icone="etiquette"
+              onPress={()=>router.push('/habillement/lots')}/>
+          ) : null}
         </View>
 
         <View style={s.sectionEntete}>

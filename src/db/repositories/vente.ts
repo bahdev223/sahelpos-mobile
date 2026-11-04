@@ -6,12 +6,13 @@
  * parce qu'il touche aussi le stock et doit rester une seule transaction.
  */
 import type { LigneVente, ModePaiement, StatutVente } from '../../domain/types';
-import { dansTransaction, executer, lirePremier, lireTout, maintenant } from './base';
+import { dansTransaction, executer, genererIdLocal, lirePremier, lireTout, maintenant } from './base';
 
 export interface VenteResume {
   id: number;
   numero: string;
   dateVente: string;
+  utilisateurId?: number | null;
   clientId: number | null;
   clientNom: string | null;
   total: number;
@@ -74,7 +75,7 @@ export async function listerVentes(filtre: FiltreVente = {}): Promise<VenteResum
 
   const ou = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
   return lireTout<VenteResume>(
-    `SELECT v.id, v.numero, v.date_vente AS dateVente, v.client_id AS clientId,
+    `SELECT v.id, v.numero, v.date_vente AS dateVente, v.utilisateur_id AS utilisateurId, v.client_id AS clientId,
             c.nom AS clientNom, v.total, v.montant_paye AS montantPaye,
             v.mode_paiement AS modePaiement, v.statut,
             v.benefice_total AS beneficeTotal
@@ -87,7 +88,7 @@ export async function listerVentes(filtre: FiltreVente = {}): Promise<VenteResum
 
 export async function obtenirVente(id: number): Promise<VenteResume | null> {
   return lirePremier<VenteResume>(
-    `SELECT v.id, v.numero, v.date_vente AS dateVente, v.client_id AS clientId,
+    `SELECT v.id, v.numero, v.date_vente AS dateVente, v.utilisateur_id AS utilisateurId, v.client_id AS clientId,
             c.nom AS clientNom, v.total, v.montant_paye AS montantPaye,
             v.mode_paiement AS modePaiement, v.statut,
             v.benefice_total AS beneficeTotal
@@ -200,31 +201,72 @@ export async function regrouperVentes(debut: string, fin: string, mensuel: boole
  * Le statut est recalcule a partir des montants, jamais passe en parametre :
  * c'est la seule facon qu'il ne mente pas sur ce qui a reellement ete paye.
  */
-export async function encaisser(venteId: number, montant: number): Promise<void> {
-  const arrondi = Math.round(montant);
-  if (arrondi <= 0) throw new Error('Le montant encaisse doit etre positif.');
-
-  await dansTransaction(async () => {
-    const v = await lirePremier<{ total: number; montant_paye: number; statut: string }>(
-      'SELECT total, montant_paye, statut FROM vente WHERE id = ?',
-      venteId,
+export async function encaisser(venteId: number, montant: number, cleIdempotence?: string): Promise<void> {
+  if (!Number.isSafeInteger(venteId) || venteId <= 0) throw new Error('Vente invalide.');
+  if (!Number.isSafeInteger(montant) || montant <= 0) {
+    throw new Error('Le montant encaisse doit etre un entier positif valide.');
+  }
+  const arrondi = montant;
+  const operationId = cleIdempotence ?? genererIdLocal();
+  const dejaEncaisse = async () => {
+    const operation = await lirePremier<{ vente_id: number; nature: string; montant: number }>(
+      'SELECT vente_id, nature, montant FROM operation_vente_mobile WHERE id_local = ?', operationId,
     );
-    if (!v) throw new Error('Vente introuvable.');
-    if (v.statut === 'annulee') {
-      throw new Error('Cette vente est annulee : elle ne peut plus etre encaissee.');
+    if (!operation) return false;
+    if (operation.vente_id !== venteId || operation.nature !== 'REGLEMENT' || operation.montant !== arrondi) {
+      throw new Error('Ce règlement existe déjà avec un contenu différent. Consultez son historique.');
     }
+    return true;
+  };
 
-    const paye = Math.round(v.montant_paye) + arrondi;
-    const statut: StatutVente =
-      paye >= Math.round(v.total) ? 'payee' : paye > 0 ? 'partielle' : 'impayee';
+  try {
+    await dansTransaction(async () => {
+      if (await dejaEncaisse()) return;
+      const v = await lirePremier<{ total: number; montant_paye: number; statut: string; id_local: string }>(
+        'SELECT total, montant_paye, statut, id_local FROM vente WHERE id = ?',
+        venteId,
+      );
+      if (!v) throw new Error('Vente introuvable.');
+      if (v.statut === 'annulee') {
+        throw new Error('Cette vente est annulee : elle ne peut plus etre encaissee.');
+      }
 
-    await executer(
-      'UPDATE vente SET montant_paye = ?, statut = ? WHERE id = ?',
-      paye,
-      statut,
-      venteId,
-    );
-  });
+      if (!Number.isSafeInteger(v.total) || !Number.isSafeInteger(v.montant_paye)
+        || v.total < 0 || v.montant_paye < 0 || v.montant_paye > v.total) {
+        throw new Error('Les montants de cette vente sont incoherents. Verifiez son historique.');
+      }
+      const reste = v.total - v.montant_paye;
+      if (arrondi > reste) {
+        throw new Error(`Le reste a payer est de ${reste}. Le montant saisi le depasse.`);
+      }
+      const paye = v.montant_paye + arrondi;
+      const statut: StatutVente =
+        paye >= Math.round(v.total) ? 'payee' : paye > 0 ? 'partielle' : 'impayee';
+
+      await executer(
+        'UPDATE vente SET montant_paye = ?, statut = ? WHERE id = ?',
+        paye,
+        statut,
+        venteId,
+      );
+      await executer(
+        `INSERT INTO operation_vente_mobile
+           (id_local, vente_id, nature, montant, mode_paiement, date_creation)
+         VALUES (?, ?, 'REGLEMENT', ?, 'especes', ?)`,
+        operationId, venteId, arrondi, maintenant(),
+      );
+      await executer(
+        `INSERT INTO sync_outbox (type_objet, id_local, operation, date_creation)
+         VALUES ('operation_vente', ?, 'upsert', ?)`,
+        operationId, maintenant(),
+      );
+    });
+  } catch (error) {
+    // Un COMMIT peut réussir sans que le pont natif rende sa réponse.
+    // Rapprocher l'identité durable, sans rejouer une mutation incertaine.
+    if (await dansTransaction(dejaEncaisse)) return;
+    throw error;
+  }
 }
 
 /**
@@ -236,8 +278,8 @@ export async function encaisser(venteId: number, montant: number): Promise<void>
  */
 export async function annulerVente(venteId: number, motif = ''): Promise<void> {
   await dansTransaction(async () => {
-    const v = await lirePremier<{ numero: string; statut: string }>(
-      'SELECT numero, statut FROM vente WHERE id = ?',
+    const v = await lirePremier<{ numero: string; statut: string; id_local: string }>(
+      'SELECT numero, statut, id_local FROM vente WHERE id = ?',
       venteId,
     );
     if (!v) throw new Error('Vente introuvable.');
@@ -245,11 +287,12 @@ export async function annulerVente(venteId: number, motif = ''): Promise<void> {
 
     const lignes = await lireTout<{
       produit_id: number;
+      variante_id: number | null;
       quantite: number;
       unite: string;
       quantite_base: number;
     }>(
-      'SELECT produit_id, quantite, unite, quantite_base FROM ligne_vente WHERE vente_id = ?',
+      'SELECT produit_id, variante_id, quantite, unite, quantite_base FROM ligne_vente WHERE vente_id = ?',
       venteId,
     );
 
@@ -259,9 +302,28 @@ export async function annulerVente(venteId: number, motif = ''): Promise<void> {
         'SELECT quantite_base, gestion_stock FROM produit WHERE id = ?',
         l.produit_id,
       );
-      if (!p || !p.gestion_stock) continue;
+      if (!p) throw new Error('Un produit de cette vente est introuvable. Annulation interrompue.');
+      if (!p.gestion_stock) continue;
+      if (!Number.isFinite(l.quantite_base) || l.quantite_base <= 0) {
+        throw new Error('La quantite retournee de cette vente est invalide.');
+      }
 
       const apres = p.quantite_base + l.quantite_base;
+      let stockAvant = p.quantite_base;
+      let stockApres = apres;
+      if (l.variante_id !== null) {
+        const variante = await lirePremier<{ stock_actuel: number }>(
+          'SELECT stock_actuel FROM variante_produit WHERE id = ? AND produit_id = ?',
+          l.variante_id, l.produit_id,
+        );
+        if (!variante) throw new Error('Une variante de cette vente est introuvable. Annulation interrompue.');
+        stockAvant = variante.stock_actuel;
+        stockApres = stockAvant + l.quantite_base;
+        await executer(
+          'UPDATE variante_produit SET stock_actuel = ?, date_modification = ? WHERE id = ?',
+          stockApres, date, l.variante_id,
+        );
+      }
       await executer(
         'UPDATE produit SET quantite_base = ?, date_modification = ? WHERE id = ?',
         apres,
@@ -269,16 +331,17 @@ export async function annulerVente(venteId: number, motif = ''): Promise<void> {
         l.produit_id,
       );
       await executer(
-        `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
+        `INSERT INTO mouvement_stock (id_local, produit_id, variante_id, nature, source_operation, quantite,
                                       unite, quantite_base, stock_avant, stock_apres,
                                       reference, motif, date_mouvement)
-         VALUES (lower(hex(randomblob(16))), ?, 'ENTREE', 'RETOUR', ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (lower(hex(randomblob(16))), ?, ?, 'ENTREE', 'RETOUR', ?, ?, ?, ?, ?, ?, ?, ?)`,
         l.produit_id,
+        l.variante_id,
         l.quantite,
         l.unite,
         l.quantite_base,
-        p.quantite_base,
-        apres,
+        stockAvant,
+        stockApres,
         v.numero,
         motif || 'Annulation de vente',
         date,
@@ -286,5 +349,17 @@ export async function annulerVente(venteId: number, motif = ''): Promise<void> {
     }
 
     await executer("UPDATE vente SET statut = 'annulee' WHERE id = ?", venteId);
+    const operationId = genererIdLocal();
+    await executer(
+      `INSERT INTO operation_vente_mobile
+         (id_local, vente_id, nature, montant, motif, date_creation)
+       VALUES (?, ?, 'ANNULATION', 0, ?, ?)`,
+      operationId, venteId, motif, maintenant(),
+    );
+    await executer(
+      `INSERT INTO sync_outbox (type_objet, id_local, operation, date_creation)
+       VALUES ('operation_vente', ?, 'upsert', ?)`,
+      operationId, maintenant(),
+    );
   });
 }

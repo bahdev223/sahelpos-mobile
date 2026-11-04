@@ -21,6 +21,9 @@
  *    le ticket imprime ne correspond pas a ce qu'affiche l'ecran.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { raisonEcritureFermee } from '../../src/services/abonnement';
+import { useAccent } from '../../src/ui/accent';
+import { SelecteurVariantes } from '../../src/ui/SelecteurVariantes';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -38,6 +41,7 @@ import type { BarcodeScanningResult } from 'expo-camera';
 import { useFocusEffect } from 'expo-router';
 
 import { obtenirBase } from '../../src/db/database';
+import { genererIdLocal } from '../../src/db/repositories/base';
 import { obtenirProduit } from '../../src/db/repositories/produit';
 import {
   libelleVariante,
@@ -86,6 +90,7 @@ import {
 
 import { useSession } from '../_layout';
 import { Icone } from '../../src/ui/icones';
+import { libelleUnite } from '../../src/domain/unites';
 import { BoutonMenu } from '../../src/ui/tiroir';
 import { HABILLEMENT_MOBILE_THEME as H } from '../../src/profile-ui/habillement/theme';
 
@@ -282,8 +287,15 @@ interface VenteTerminee {
 type EtatListe = 'chargement' | 'pret' | 'erreur';
 
 export default function EcranCaisse() {
-  const { boutique, utilisateur, revisionSynchronisation, profilCommerce } = useSession();
+  const { boutique, utilisateur, revisionSynchronisation, revisionSession, profilCommerce } = useSession();
   const habillement = profilCommerce?.secteur === 'HABILLEMENT';
+  // Une vente refusee seulement a « Valider » fait tout ressaisir : on le dit avant.
+  const [venteFermee, setVenteFermee] = useState<string | null>(null);
+  useEffect(() => {
+    let actif = true;
+    void raisonEcritureFermee('ventes').then((raison) => { if (actif) setVenteFermee(raison); });
+    return () => { actif = false; };
+  }, [revisionSession, revisionSynchronisation, profilCommerce]);
   const referenceTechnique = estReferenceTechnique(profilCommerce);
   const grosAutorise = tarifGrosDisponible(profilCommerce);
   const variantesActives = profilCommerce?.capabilities_effectives.includes('PRODUCT_VARIANTS') ?? false;
@@ -598,18 +610,13 @@ export default function EcranCaisse() {
           ]}>
             {habillement ? 'Caisse Mode' : 'Caisse'}
           </Text>
-          {habillement ? (
-            <Text style={{ color: H.primaireClair, fontSize: 10, marginTop: 1 }}>
-              Modèles · tailles · couleurs
-            </Text>
-          ) : null}
         </View>
       </View>
       <View style={styles.barreRecherche}>
         <Champ
           valeur={recherche}
           onChangeText={setRecherche}
-          placeholder="Nom, categorie ou code-barres"
+          placeholder="Nom, catégorie ou code-barres"
           retourClavier="search"
           style={styles.champRecherche}
         />
@@ -630,7 +637,13 @@ export default function EcranCaisse() {
 
       {rendu()}
 
+      {venteFermee ? (
+        <View style={styles.venteFermee}>
+          <Text style={styles.venteFermeeTexte} numberOfLines={3}>Vente indisponible sur ce téléphone. {venteFermee}</Text>
+        </View>
+      ) : null}
       <BarrePanier
+        venteFermee={Boolean(venteFermee)}
         nbArticles={nbArticles}
         total={totalPanier}
         devise={boutique.devise}
@@ -714,6 +727,7 @@ function FiltresCategorie({
   active: string | null;
   onChoisir: (categorie: string | null) => void;
 }) {
+  const M = useStylesMode();
   return (
     <ScrollView
       horizontal
@@ -724,7 +738,7 @@ function FiltresCategorie({
     >
       <Pressable
         onPress={() => onChoisir(null)}
-        style={[styles.puceRayon, active === null && styles.puceRayonActive]}
+        style={[styles.puceRayon, active === null && styles.puceRayonActive, active === null && M.actif]}
       >
         <Text style={[styles.puceRayonTexte, active === null && styles.puceRayonTexteActive]}>
           Toutes
@@ -734,7 +748,7 @@ function FiltresCategorie({
         <Pressable
           key={nom}
           onPress={() => onChoisir(nom)}
-          style={[styles.puceRayon, active === nom && styles.puceRayonActive]}
+          style={[styles.puceRayon, active === nom && styles.puceRayonActive, active === nom && M.actif]}
         >
           <Text style={[styles.puceRayonTexte, active === nom && styles.puceRayonTexteActive]}>
             {nom}
@@ -786,7 +800,7 @@ function CarteProduit({
       ]}
     >
       <View style={styles.cartePhoto}>
-        <Vignette chemin={produit.cheminImage} nom={produit.nom} taille={72} />
+        <Vignette chemin={produit.cheminImage} nom={produit.nom} taille={72} categorie={habillement ? produit.categorie : undefined} />
         {rupture ? (
           <View style={[styles.pastille, styles.pastilleRupture]}>
             <Text style={styles.pastilleTexte}>Rupture</Text>
@@ -813,6 +827,7 @@ function CarteProduit({
 // --- Barre basse ------------------------------------------------------------
 
 function BarrePanier({
+  venteFermee,
   nbArticles,
   total,
   devise,
@@ -820,6 +835,7 @@ function BarrePanier({
   onVoirPanier,
   onEncaisser,
 }: {
+  venteFermee: boolean;
   nbArticles: number;
   total: number;
   devise: string;
@@ -850,7 +866,7 @@ function BarrePanier({
       <Bouton
         titre="Encaisser"
         onPress={onEncaisser}
-        desactive={vide}
+        desactive={vide || venteFermee}
         style={styles.boutonEncaisser}
       />
     </View>
@@ -903,6 +919,7 @@ function ModaleUnite({
     variante?: VarianteMobile | null,
   ) => void;
 }) {
+  const M = useStylesMode();
   const indexInitial = choix.varianteInitialeId
     ? choix.variantes.findIndex((v) => v.id === choix.varianteInitialeId)
     : -1;
@@ -951,11 +968,11 @@ function ModaleUnite({
       ? 'Choisissez les caractéristiques techniques avant d ajouter au panier.'
       : 'Choisissez la taille et la couleur avant d ajouter au panier.';
   } else if (quantite <= 0) {
-    refus = 'Indiquez une quantite superieure a zero.';
+    refus = 'Indiquez une quantité superieure a zero.';
   } else if (prixUnitaire <= 0) {
     refus = referenceTechnique
       ? "Cette référence n'a pas de prix de vente pour cette variante."
-      : "Ce modele n'a pas de prix de vente pour cette variante.";
+      : "Ce modèle n'a pas de prix de vente pour cette variante.";
   } else if (produit.gestionStock && quantite > resteApresPanier) {
     refus = `Stock insuffisant : ${formaterQuantite(
       Math.max(0, Math.round(resteApresPanier * 1000) / 1000),
@@ -975,7 +992,7 @@ function ModaleUnite({
             {grosAutorise ? (
               <View style={styles.tarifs}>
                 <Pressable
-                  style={[styles.tarifChoix, tarif === 'detail' && styles.tarifChoixActif]}
+                  style={[styles.tarifChoix, tarif === 'detail' && styles.tarifChoixActif, tarif === 'detail' && M.actif]}
                   onPress={() => {
                     setTarif('detail');
                     setPrixTexte(String(prixDetail));
@@ -990,6 +1007,7 @@ function ModaleUnite({
                   style={[
                     styles.tarifChoix,
                     tarif === 'gros' && styles.tarifChoixActif,
+                    tarif === 'gros' && M.actif,
                     prixGros <= 0 && styles.tarifChoixInactif,
                   ]}
                   onPress={() => {
@@ -1009,61 +1027,20 @@ function ModaleUnite({
                 <Text style={styles.sousLabel}>
                   {referenceTechnique ? 'Caractéristiques / variante' : 'Taille / couleur'}
                 </Text>
-                <View style={styles.grilleVariantes}>
-                  {choix.variantes.map((option, index) => {
-                    const actif = index === indexVariante;
-                    const couleur = option.valeurs.find((v) => v.codeHex)?.codeHex ?? null;
-                    return (
-                      <Pressable
-                        key={option.idLocal}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: actif }}
-                        onPress={() => {
-                          setIndexVariante(index);
-                          const u = choix.unites[indexUnite] ?? choix.unites[0];
-                          const detail = prixDetailVariante(u.prix, u.facteur, option.prixOverride);
-                          const gros = u?.prixGros ?? 0;
-                          setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));
-                        }}
-                        style={[
-                          styles.varianteChoix,
-                          habillement && {
-                            borderColor: H.bordure,
-                            backgroundColor: H.surface,
-                          },
-                          actif && [
-                            styles.varianteChoixActive,
-                            habillement && { backgroundColor: H.primaire, borderColor: H.primaire },
-                          ],
-                          option.stockActuel <= 0 && styles.varianteChoixRupture,
-                        ]}
-                      >
-                        <View style={styles.varianteChoixHaut}>
-                          {couleur ? (
-                            <View style={[styles.pastilleCouleur, { backgroundColor: couleur }]} />
-                          ) : null}
-                          <Text
-                            style={[styles.varianteChoixNom, actif && styles.puceNomActive]}
-                            numberOfLines={2}
-                          >
-                            {libelleVariante(option)}
-                          </Text>
-                        </View>
-                        <Text style={[styles.varianteChoixStock, actif && styles.puceDetailActive]}>
-                          {option.stockActuel > 0
-                            ? `Stock ${formaterQuantite(option.stockActuel)}`
-                            : 'Rupture'}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <SelecteurVariantes variantes={choix.variantes} selection={variante?.id ?? null}
+                  onSelection={(option) => {
+                    setIndexVariante(option ? choix.variantes.findIndex(v => v.id === option.id) : -1);
+                    const u = choix.unites[indexUnite] ?? choix.unites[0];
+                    const detail = prixDetailVariante(u.prix, u.facteur, option?.prixOverride);
+                    const gros = u?.prixGros ?? 0;
+                    setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));
+                  }} />
               </View>
             ) : null}
 
             {choix.unites.length > 1 ? (
               <View>
-                <Text style={styles.sousLabel}>Unite de vente</Text>
+                <Text style={styles.sousLabel}>Unité de vente</Text>
                 <View style={styles.grilleChoix}>
                   {choix.unites.map((option, index) => {
                     const actif = index === indexUnite;
@@ -1079,7 +1056,7 @@ function ModaleUnite({
                           if (tarif === 'gros' && gros <= 0) setTarif('detail');
                           setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));
                         }}
-                        style={[styles.puce, actif && styles.puceActive]}
+                        style={[styles.puce, actif && styles.puceActive, actif && M.actif]}
                       >
                         <Text style={[styles.puceNom, actif && styles.puceNomActive]}>
                           {option.nom}
@@ -1097,7 +1074,7 @@ function ModaleUnite({
               </View>
             ) : null}
 
-            <Text style={styles.sousLabel}>Quantite</Text>
+            <Text style={styles.sousLabel}>Quantité</Text>
             <View style={styles.compteur}>
               <Pressable
                 accessibilityRole="button"
@@ -1149,7 +1126,7 @@ function ModaleUnite({
                 libelle="Disponible"
                 valeur={
                   produit.gestionStock
-                    ? `${formaterQuantite(Math.round(disponible * 1000) / 1000)} ${unite.nom}`
+                    ? `${formaterQuantite(Math.round(disponible * 1000) / 1000)} ${libelleUnite(unite.nom, disponible)}`
                     : 'Stock non suivi'
                 }
               />
@@ -1193,10 +1170,11 @@ function LigneResume({
   valeur: string;
   fort?: boolean;
 }) {
+  const M = useStylesMode();
   return (
     <View style={styles.ligneResume}>
       <Text style={styles.ligneResumeLibelle}>{libelle}</Text>
-      <Text style={[styles.ligneResumeValeur, fort && styles.ligneResumeValeurForte]}>
+      <Text style={[styles.ligneResumeValeur, fort && styles.ligneResumeValeurForte, fort && M.texte]}>
         {valeur}
       </Text>
     </View>
@@ -1260,7 +1238,7 @@ function ModalePanier({
                   <View style={styles.lignePanierActions}>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Diminuer la quantite"
+                      accessibilityLabel="Diminuer la quantité"
                       disabled={item.quantite <= 1}
                       onPress={() => onModifier(index, -1)}
                       style={({ pressed }) => [
@@ -1276,7 +1254,7 @@ function ModalePanier({
                     </Text>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityLabel="Augmenter la quantite"
+                      accessibilityLabel="Augmenter la quantité"
                       onPress={() => onModifier(index, 1)}
                       style={({ pressed }) => [styles.pas, pressed && styles.presse]}
                     >
@@ -1398,7 +1376,7 @@ function ModaleScan({
         </View>
 
         {!permission ? (
-          <Chargement message="Verification de la camera..." />
+          <Chargement message="Vérification de la camera..." />
         ) : !permission.granted ? (
           <View style={styles.blocPermission}>
             <Text style={styles.textePermission}>
@@ -1411,7 +1389,7 @@ function ModaleScan({
               grand
             />
             <Bouton
-              titre="Saisir le code a la main"
+              titre="Saisir le code à la main"
               variante="secondaire"
               onPress={onFermer}
               style={styles.boutonSecours}
@@ -1455,9 +1433,9 @@ function ModaleScan({
 // --- Encaissement -----------------------------------------------------------
 
 const MODES: { valeur: ModePaiement; libelle: string }[] = [
-  { valeur: 'especes', libelle: 'Especes' },
+  { valeur: 'especes', libelle: 'Espèces' },
   { valeur: 'mobile_money', libelle: 'Mobile Money' },
-  { valeur: 'credit', libelle: 'Credit' },
+  { valeur: 'credit', libelle: 'Crédit' },
 ];
 
 function ModalePaiement({
@@ -1477,6 +1455,9 @@ function ModalePaiement({
   onFermer: () => void;
   onTerminee: (terminee: VenteTerminee) => void;
 }) {
+  const M = useStylesMode();
+  const validationEnCours = useRef(false);
+  const cleEncaissement = useRef('');
   const [mode, setMode] = useState<ModePaiement>('especes');
   const [recuTexte, setRecuTexte] = useState(String(total));
   const [clients, setClients] = useState<Client[]>([]);
@@ -1486,6 +1467,10 @@ function ModalePaiement({
 
   useEffect(() => {
     if (!visible) return;
+    // Une fermeture après erreur ne crée pas une nouvelle opération.
+    // Conserver aussi le paiement/client de la tentative à rapprocher.
+    if (cleEncaissement.current) return;
+    validationEnCours.current = false;
     setMode('especes');
     setRecuTexte(String(total));
     setRefus(null);
@@ -1504,7 +1489,7 @@ function ModalePaiement({
 
   let blocage: string | null = null;
   if (mode === 'especes' && recu < total) {
-    blocage = 'Le montant recu est inferieur au total.';
+    blocage = 'Le montant reçu est inferieur au total.';
   } else if (mode === 'credit' && clientId === null) {
     blocage = 'Choisissez un client : une dette sans nom est introuvable ensuite.';
   } else if (mode === 'credit' && recu > total) {
@@ -1512,16 +1497,21 @@ function ModalePaiement({
   }
 
   const valider = useCallback(async () => {
+    if (validationEnCours.current || blocage || panier.length === 0) return;
+    validationEnCours.current = true;
     setEnCours(true);
     setRefus(null);
     try {
+      if (!cleEncaissement.current) cleEncaissement.current = genererIdLocal();
       const resultat = await enregistrerVente({
+        cleIdempotence: cleEncaissement.current,
         articles: panier,
         modePaiement: mode,
         montantPaye,
         clientId,
         utilisateurId,
       });
+      cleEncaissement.current = '';
       onTerminee({
         resultat,
         modePaiement: mode,
@@ -1531,21 +1521,24 @@ function ModalePaiement({
         dateVente: new Date().toISOString(),
       });
     } catch (erreur) {
+      validationEnCours.current = false;
       setRefus(
         erreur instanceof StockInsuffisant
           ? erreur.message
           : erreur instanceof Error
             ? erreur.message
-            : "La vente n'a pas pu etre enregistree.",
+            : "La vente n'a pas pu etre enregistrée.",
       );
       setEnCours(false);
     }
-  }, [panier, mode, montantPaye, recu, clientId, utilisateurId, onTerminee]);
+  }, [blocage, panier, mode, montantPaye, recu, clientId, utilisateurId, onTerminee]);
+
+  const fermer = () => { if (!validationEnCours.current) onFermer(); };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onFermer}>
+    <Modal visible={visible} animationType="slide" onRequestClose={fermer}>
       <SafeAreaView style={styles.ecran} edges={['top', 'bottom']}>
-        <EnteteModale titre="Encaissement" onFermer={onFermer} />
+        <EnteteModale titre="Encaissement" onFermer={fermer} />
         <KeyboardAvoidingView
           style={styles.ecran}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1555,7 +1548,7 @@ function ModalePaiement({
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.blocTotal}>
-              <Text style={styles.zoneTotalLibelle}>Total a payer</Text>
+              <Text style={styles.zoneTotalLibelle}>Total à payer</Text>
               <Montant valeur={total} devise={devise} taille="grand" />
             </View>
 
@@ -1566,6 +1559,7 @@ function ModalePaiement({
                 return (
                   <Pressable
                     key={option.valeur}
+                    disabled={enCours}
                     accessibilityRole="button"
                     accessibilityState={{ selected: actif }}
                     onPress={() => {
@@ -1573,7 +1567,7 @@ function ModalePaiement({
                       setRefus(null);
                       setRecuTexte(option.valeur === 'credit' ? '0' : String(total));
                     }}
-                    style={[styles.puce, actif && styles.puceActive]}
+                    style={[styles.puce, actif && styles.puceActive, actif && M.actif]}
                   >
                     <Text style={[styles.puceNom, actif && styles.puceNomActive]}>
                       {option.libelle}
@@ -1586,20 +1580,21 @@ function ModalePaiement({
             {mode === 'especes' ? (
               <View>
                 <Champ
-                  label="Montant recu"
+                  label="Montant reçu"
                   valeur={recuTexte}
                   onChangeText={setRecuTexte}
                   clavier="number-pad"
+                  editable={!enCours}
                   alignerADroite
                   style={styles.champEspace}
                 />
-                <View style={styles.blocMonnaie}>
-                  <Text style={styles.blocMonnaieLibelle}>Monnaie a rendre</Text>
+                <View style={[styles.blocMonnaie, M.fondDoux]}>
+                  <Text style={[styles.blocMonnaieLibelle, M.texteFonce]}>Monnaie à rendre</Text>
                   <Montant
                     valeur={monnaie}
                     devise={devise}
                     taille="grand"
-                    couleur={couleurs.primaire}
+                    couleur={M.couleur ?? couleurs.primaire}
                   />
                 </View>
               </View>
@@ -1626,12 +1621,13 @@ function ModalePaiement({
                   valeur={recuTexte}
                   onChangeText={setRecuTexte}
                   clavier="number-pad"
+                  editable={!enCours}
                   alignerADroite
                   aide="Laissez 0 si le client ne verse rien aujourd'hui."
                   style={styles.champEspace}
                 />
                 <LigneResume
-                  libelle="Reste a payer"
+                  libelle="Reste à payer"
                   valeur={formaterMontant(reste, devise)}
                   fort
                 />
@@ -1642,15 +1638,16 @@ function ModalePaiement({
             {clients.length === 0 ? (
               <Text style={styles.note}>
                 Aucun client enregistre. Les ventes a credit demandent un client
-                nomme : creez-le depuis l'onglet Plus.
+                nommé : créez-le depuis le Menu.
               </Text>
             ) : (
               <View style={styles.grilleChoix}>
                 <Pressable
-                  accessibilityRole="button"
+                  disabled={enCours}
+                    accessibilityRole="button"
                   accessibilityState={{ selected: clientId === null }}
                   onPress={() => setClientId(null)}
-                  style={[styles.puce, clientId === null && styles.puceActive]}
+                  style={[styles.puce, clientId === null && styles.puceActive, clientId === null && M.actif]}
                 >
                   <Text
                     style={[styles.puceNom, clientId === null && styles.puceNomActive]}
@@ -1663,10 +1660,11 @@ function ModalePaiement({
                   return (
                     <Pressable
                       key={client.id}
-                      accessibilityRole="button"
+                      disabled={enCours}
+                    accessibilityRole="button"
                       accessibilityState={{ selected: actif }}
                       onPress={() => setClientId(client.id)}
-                      style={[styles.puce, actif && styles.puceActive]}
+                      style={[styles.puce, actif && styles.puceActive, actif && M.actif]}
                     >
                       <Text style={[styles.puceNom, actif && styles.puceNomActive]}>
                         {client.nom}
@@ -1705,6 +1703,7 @@ function ModaleRecu({
   terminee: VenteTerminee;
   onFermer: () => void;
 }) {
+  const M = useStylesMode();
   const { boutique, utilisateur } = useSession();
   const [impression, setImpression] = useState(false);
   const [messageImpression, setMessageImpression] = useState<string | null>(null);
@@ -1760,12 +1759,12 @@ function ModaleRecu({
         boutique.largeurPapier,
       );
       await serviceImpression.imprimer(ticketAvecLogo);
-      setMessageImpression('Recu envoye a l imprimante.');
+      setMessageImpression('Reçu envoye a l imprimante.');
     } catch (erreur) {
       setMessageImpression(
         erreur instanceof Error
           ? erreur.message
-          : "L'impression a echoue. La vente reste enregistree.",
+          : "L'impression a echoue. La vente reste enregistrée.",
       );
     } finally {
       setImpression(false);
@@ -1776,10 +1775,10 @@ function ModaleRecu({
     <Modal visible animationType="slide" onRequestClose={onFermer}>
       <SafeAreaView style={styles.ecran} edges={['top', 'bottom']}>
         <ScrollView contentContainerStyle={styles.contenuFeuille}>
-          <View style={styles.pastilleSucces}>
-            <Text style={styles.signeSucces}>OK</Text>
+          <View style={[styles.pastilleSucces, M.fondDoux]}>
+            <Text style={[styles.signeSucces, M.texte]}>OK</Text>
           </View>
-          <Text style={styles.titreSucces}>Vente enregistree</Text>
+          <Text style={styles.titreSucces}>Vente enregistrée</Text>
           <Text style={styles.numeroVente}>{terminee.resultat.numero}</Text>
 
           <Carte style={styles.resume}>
@@ -1788,18 +1787,18 @@ function ModaleRecu({
               valeur={formaterMontant(terminee.resultat.total, boutique.devise)}
             />
             <LigneResume
-              libelle="Recu du client"
+              libelle="Reçu du client"
               valeur={formaterMontant(terminee.montantRecu, boutique.devise)}
             />
             {reste > 0 ? (
               <LigneResume
-                libelle="Reste a payer"
+                libelle="Reste à payer"
                 valeur={formaterMontant(reste, boutique.devise)}
                 fort
               />
             ) : (
               <LigneResume
-                libelle="Monnaie a rendre"
+                libelle="Monnaie à rendre"
                 valeur={formaterMontant(monnaie, boutique.devise)}
                 fort
               />
@@ -1807,13 +1806,13 @@ function ModaleRecu({
           </Carte>
 
           {monnaie > 0 ? (
-            <View style={styles.blocMonnaie}>
-              <Text style={styles.blocMonnaieLibelle}>A rendre au client</Text>
+            <View style={[styles.blocMonnaie, M.fondDoux]}>
+              <Text style={[styles.blocMonnaieLibelle, M.texteFonce]}>A rendre au client</Text>
               <Montant
                 valeur={monnaie}
                 devise={boutique.devise}
                 taille="geant"
-                couleur={couleurs.primaire}
+                couleur={M.couleur ?? couleurs.primaire}
               />
             </View>
           ) : null}
@@ -1823,7 +1822,7 @@ function ModaleRecu({
           ) : null}
 
           {apercu ? (
-            <Carte titre="Apercu du recu" style={styles.resume}>
+            <Carte titre="Aperçu du reçu" style={styles.resume}>
               <ScrollView horizontal
           style={BARRE_HORIZONTALE}>
                 <Text style={styles.apercu}>{apercu}</Text>
@@ -1832,13 +1831,13 @@ function ModaleRecu({
           ) : null}
 
           <Bouton
-            titre="Imprimer le recu"
+            titre="Imprimer le reçu"
             onPress={() => void imprimer()}
             enCours={impression}
             style={styles.champEspace}
           />
           <Bouton
-            titre={apercu ? "Masquer l'apercu" : 'Voir le recu sans imprimer'}
+            titre={apercu ? "Masquer l'aperçu" : 'Voir le reçu sans imprimer'}
             variante="secondaire"
             onPress={() => setApercu(apercu ? null : ticket.apercu())}
             style={styles.champEspace}
@@ -1859,6 +1858,20 @@ function ModaleRecu({
 function lireNombre(texte: string): number {
   const valeur = Number(texte.replace(',', '.').trim());
   return Number.isFinite(valeur) ? valeur : 0;
+}
+
+const STYLES_MODE = {
+  actif: { backgroundColor: H.primaire, borderColor: H.primaire },
+  texte: { color: H.primaire },
+  texteFonce: { color: H.primaireFonce },
+  fondDoux: { backgroundColor: H.primaireClair },
+  couleur: H.primaire as string | undefined,
+};
+const STYLES_STANDARD: typeof STYLES_MODE = { actif: {} as typeof STYLES_MODE.actif, texte: {} as typeof STYLES_MODE.texte, texteFonce: {} as typeof STYLES_MODE.texteFonce, fondDoux: {} as typeof STYLES_MODE.fondDoux, couleur: undefined };
+
+/** Le mode Habillement garde son marron dans la caisse (les StyleSheet restent bleues). */
+function useStylesMode(): typeof STYLES_MODE {
+  return useAccent().mode ? STYLES_MODE : STYLES_STANDARD;
 }
 
 const styles = StyleSheet.create({
@@ -1933,6 +1946,12 @@ const styles = StyleSheet.create({
   badgeBas: { color: couleurs.avertissement, backgroundColor: couleurs.avertissementDouce },
   badgeRupture: { color: couleurs.danger, backgroundColor: couleurs.dangerDouce },
 
+  venteFermee: {
+    backgroundColor: couleurs.dangerDouce,
+    paddingHorizontal: espaces.m,
+    paddingVertical: espaces.s,
+  },
+  venteFermeeTexte: { color: couleurs.danger, fontSize: 13, fontWeight: '600' },
   barrePanier: {
     flexDirection: 'row',
     alignItems: 'center',

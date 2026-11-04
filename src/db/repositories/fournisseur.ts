@@ -7,6 +7,7 @@
  */
 import {
   executer,
+  dansTransaction,
   genererIdLocal,
   lirePremier,
   lireTout,
@@ -89,24 +90,26 @@ export interface SaisieFournisseur {
 
 export async function creerFournisseur(saisie: SaisieFournisseur): Promise<number> {
   await exigerEcriture('fournisseurs');
-  if (!saisie.nom.trim()) throw new Error('Le nom du fournisseur est requis.');
-  const idLocal = genererIdLocal();
-  const horodatage = maintenant();
-  const r = await executer(
-    `INSERT INTO fournisseur (id_local, nom, contact, telephone, email, adresse,
-                              date_creation, date_modification)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    idLocal,
-    saisie.nom.trim(),
-    saisie.contact?.trim() || null,
-    saisie.telephone?.trim() || null,
-    saisie.email?.trim() || null,
-    saisie.adresse?.trim() || null,
-    horodatage,
-    horodatage,
-  );
-  await marquerChangement('fournisseur', idLocal);
-  return r.lastInsertRowId;
+  return dansTransaction(async () => {
+    if (!saisie.nom.trim()) throw new Error('Le nom du fournisseur est requis.');
+    const idLocal = genererIdLocal();
+    const horodatage = maintenant();
+    const r = await executer(
+      `INSERT INTO fournisseur (id_local, nom, contact, telephone, email, adresse,
+                                date_creation, date_modification)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      idLocal,
+      saisie.nom.trim(),
+      saisie.contact?.trim() || null,
+      saisie.telephone?.trim() || null,
+      saisie.email?.trim() || null,
+      saisie.adresse?.trim() || null,
+      horodatage,
+      horodatage,
+    );
+    await marquerChangement('fournisseur', idLocal);
+    return r.lastInsertRowId;
+  });
 }
 
 export async function modifierFournisseur(
@@ -114,23 +117,25 @@ export async function modifierFournisseur(
   saisie: SaisieFournisseur,
 ): Promise<void> {
   await exigerEcriture('fournisseurs');
-  const existant = await lirePremier<{ id_local: string }>(
-    'SELECT id_local FROM fournisseur WHERE id = ?',
-    id,
-  );
-  await executer(
-    `UPDATE fournisseur SET nom = ?, contact = ?, telephone = ?, email = ?,
-                            adresse = ?, date_modification = ?
-     WHERE id = ?`,
-    saisie.nom.trim(),
-    saisie.contact?.trim() || null,
-    saisie.telephone?.trim() || null,
-    saisie.email?.trim() || null,
-    saisie.adresse?.trim() || null,
-    maintenant(),
-    id,
-  );
-  await marquerChangement('fournisseur', existant?.id_local ?? '');
+  return dansTransaction(async () => {
+    const existant = await lirePremier<{ id_local: string }>(
+      'SELECT id_local FROM fournisseur WHERE id = ?',
+      id,
+    );
+    await executer(
+      `UPDATE fournisseur SET nom = ?, contact = ?, telephone = ?, email = ?,
+                              adresse = ?, date_modification = ?
+       WHERE id = ?`,
+      saisie.nom.trim(),
+      saisie.contact?.trim() || null,
+      saisie.telephone?.trim() || null,
+      saisie.email?.trim() || null,
+      saisie.adresse?.trim() || null,
+      maintenant(),
+      id,
+    );
+    await marquerChangement('fournisseur', existant?.id_local ?? '');
+  });
 }
 
 /**

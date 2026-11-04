@@ -63,7 +63,7 @@ export default function CommandesClientsHabillement(){
         <View style={s.carteBas}><Text style={s.sync}>{c.syncStatut==='SYNCED'?'Synchronisée':'À synchroniser'}</Text>
           <Text style={s.total}>{Math.round(c.total).toLocaleString('fr-FR')} {boutique.devise}</Text></View>
       </Pressable>)}
-      {!visibles.length?<View style={s.vide}><Text style={s.videTitre}>Aucune commande</Text><Text style={s.videTexte}>Créez une commande client avec des modèles et variantes.</Text></View>:null}
+      {!visibles.length?<View style={s.vide}><Text style={s.videTitre}>Aucune commande</Text></View>:null}
     </ScrollView>
   </View>;
 }

@@ -58,7 +58,7 @@ function bornesJour(): { debut: string; fin: string } {
 function salutation(): string {
   const heure = new Date().getHours();
   if (heure < 12) return 'Bonjour';
-  if (heure < 18) return 'Bon apres-midi';
+  if (heure < 18) return 'Bon après-midi';
   return 'Bonsoir';
 }
 

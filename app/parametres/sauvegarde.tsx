@@ -39,9 +39,9 @@ export default function EcranSauvegarde() {
       const partage = await partagerSauvegarde(resume.chemin);
       if (!partage) {
         Alert.alert(
-          'Sauvegarde creee',
+          'Sauvegarde créée',
           `${resume.nomFichier} est enregistre dans le telephone, mais le partage ` +
-            "n'est pas disponible ici. Copiez le fichier ailleurs des que possible.",
+            "n'est pas disponible ici. Copiez le fichier ailleurs dès que possible.",
         );
       }
     } catch (e) {
@@ -57,7 +57,7 @@ export default function EcranSauvegarde() {
   const expliquerRestauration = useCallback(() => {
     Alert.alert(
       'Restaurer une sauvegarde',
-      'La restauration REMPLACE toutes les donnees actuelles par celles du ' +
+      'La restauration REMPLACE toutes les données actuelles par celles du ' +
         'fichier : ventes, produits, stock et clients enregistres depuis la ' +
         'sauvegarde seront perdus.\n\n' +
         'Faites d abord une sauvegarde de l etat actuel, puis contactez votre ' +
@@ -80,7 +80,7 @@ export default function EcranSauvegarde() {
           </Text>
         </View>
 
-        <Carte titre="Creer une sauvegarde">
+        <Carte titre="Créer une sauvegarde">
           <Text style={styles.aide}>
             Le fichier est copie puis propose au partage : envoyez-le vous par
             WhatsApp, par mail, ou copiez-le sur un ordinateur.
@@ -94,7 +94,7 @@ export default function EcranSauvegarde() {
 
           {derniere ? (
             <View style={styles.resume}>
-              <Text style={styles.resumeTitre}>Derniere sauvegarde</Text>
+              <Text style={styles.resumeTitre}>Dernière sauvegarde</Text>
               <Ligne libelle="Fichier" valeur={derniere.nomFichier} />
               <Ligne libelle="Taille" valeur={tailleLisible(derniere.tailleOctets)} />
               <Ligne libelle="Produits" valeur={String(derniere.nbProduits)} />

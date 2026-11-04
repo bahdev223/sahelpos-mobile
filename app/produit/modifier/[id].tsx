@@ -155,23 +155,25 @@ async function mettreAJourProduit(identifiant: number, valide: ProduitValide): P
         su.prixGros,
       );
     }
+    await marquerChangement('produit', existant.id_local);
   });
-  await marquerChangement('produit', existant.id_local);
 }
 
 export async function desactiverProduit(identifiant: number): Promise<void> {
   const db = await obtenirBase();
-  const existant = await db.getFirstAsync<{ id_local: string }>(
-    'SELECT id_local FROM produit WHERE id = ?',
-    identifiant,
-  );
-  if (!existant) throw new Error('Produit introuvable.');
-  await db.runAsync(
-    'UPDATE produit SET actif = 0, date_modification = ? WHERE id = ?',
-    new Date().toISOString(),
-    identifiant,
-  );
-  await marquerChangement('produit', existant.id_local);
+  await db.withTransactionAsync(async () => {
+    const existant = await db.getFirstAsync<{ id_local: string }>(
+      'SELECT id_local FROM produit WHERE id = ?',
+      identifiant,
+    );
+    if (!existant) throw new Error('Produit introuvable.');
+    await db.runAsync(
+      'UPDATE produit SET actif = 0, date_modification = ? WHERE id = ?',
+      new Date().toISOString(),
+      identifiant,
+    );
+    await marquerChangement('produit', existant.id_local);
+  });
 }
 
 /** Suppression definitive : emporte les sous-unites et tout l'historique de stock. */
@@ -277,12 +279,12 @@ export default function FicheProduitEcran() {
           'Suppression impossible',
           `${fiche.produit.nom} apparait dans ${fiche.nbLignesVente} ligne(s) de vente et ` +
             `${fiche.nbLignesInventaire} ligne(s) d'inventaire. Le supprimer effacerait ces ` +
-            'historiques. Vous pouvez le desactiver : il disparait de la caisse et les ventes ' +
+            'historiques. Vous pouvez le désactiver : il disparait de la caisse et les ventes ' +
             'passees restent lisibles.',
           [
             { text: 'Annuler', style: 'cancel' },
             {
-              text: 'Desactiver',
+              text: 'Désactiver',
               onPress: () => {
                 void desactiverProduit(fiche.produit.id)
                   .then(charger)
@@ -357,7 +359,7 @@ export default function FicheProduitEcran() {
           <Text style={sl.centreTitre}>Lecture impossible</Text>
           <Text style={sl.centreTexte}>{etat.message}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger()}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       ) : (
@@ -373,7 +375,7 @@ export default function FicheProduitEcran() {
           complement={
             <>
               <View style={s.carte}>
-                <Text style={s.titreSection}>Etat actuel</Text>
+                <Text style={s.titreSection}>État actuel</Text>
                 <Ligne
                   libelle="Stock"
                   valeur={
@@ -399,7 +401,7 @@ export default function FicheProduitEcran() {
                   )}
                 />
                 <Ligne
-                  libelle="Marge par unite"
+                  libelle="Marge par unité"
                   valeur={formaterFrancs(
                     etat.fiche.produit.prix_unitaire - etat.fiche.produit.prix_achat,
                   )}

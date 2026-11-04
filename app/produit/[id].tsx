@@ -150,15 +150,15 @@ export default function FicheProduitEcran() {
 
       if (lie) {
         Alert.alert(
-          'Ce produit a un historique',
+          'Ce produit à un historique',
           `Il apparait dans ${fiche.nbLignesVente} ligne(s) de vente et ` +
             `${fiche.nbLignesInventaire} ligne(s) d'inventaire. Le supprimer effacerait ces ` +
-            'historiques. Vous pouvez le desactiver : il disparait de la caisse et les ventes ' +
+            'historiques. Vous pouvez le désactiver : il disparait de la caisse et les ventes ' +
             'passees restent justes.',
           [
             { text: 'Annuler', style: 'cancel' },
             {
-              text: 'Desactiver',
+              text: 'Désactiver',
               onPress: () =>
                 void desactiverProduit(fiche.produit.id)
                   .then(() => router.back())
@@ -266,7 +266,7 @@ export default function FicheProduitEcran() {
             )}
             <View style={sl.identiteTextes}>
               <Text style={sl.nom}>{p.nom}</Text>
-              <Text style={sl.categorie}>{p.categorie || 'Sans categorie'}</Text>
+              <Text style={sl.categorie}>{p.categorie || 'Sans catégorie'}</Text>
               <Text style={sl.prix}>{formaterFrancs(p.prix_unitaire)}</Text>
               {p.actif === 0 ? (
                 <View style={sl.etiquetteInactif}>
@@ -301,11 +301,11 @@ export default function FicheProduitEcran() {
           <Ligne libelle="Prix d'achat" valeur={formaterFrancs(p.prix_achat)} />
           <Ligne libelle="Prix de vente" valeur={formaterFrancs(p.prix_unitaire)} />
           <Ligne
-            libelle="Marge par unite"
+            libelle="Marge par unité"
             valeur={formaterFrancs(marge)}
             couleur={marge > 0 ? C.vert : marge < 0 ? C.rouge : undefined}
           />
-          <Ligne libelle="Unite de base" valeur={p.unite_base} />
+          <Ligne libelle="Unité de base" valeur={p.unite_base} />
           {p.code_barre ? <Ligne libelle="Code-barres" valeur={p.code_barre} /> : null}
           {p.gestion_stock === 1 ? (
             <Ligne
@@ -314,7 +314,7 @@ export default function FicheProduitEcran() {
             />
           ) : null}
           <Ligne
-            libelle="Deja vendu"
+            libelle="Déjà vendu"
             valeur={`${formaterQuantite(fiche.quantiteVendue)} ${p.unite_base}`}
             derniere
           />
@@ -362,7 +362,7 @@ export default function FicheProduitEcran() {
           <Action
             libelle="Modifier l'article"
             icone="crayon"
-            aide="Nom, prix, unites, photo"
+            aide="Nom, prix, unités, photo"
             onPress={() =>
               router.push({
                 pathname: '/produit/modifier/[id]',

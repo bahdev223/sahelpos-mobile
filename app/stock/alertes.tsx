@@ -41,6 +41,8 @@ import { Icone } from '../../src/ui/icones';
 import { obtenirBase } from '../../src/db/database';
 import { useSession } from '../_layout';
 import { resoudreProfilUIMobile } from '../../src/domain/commerce';
+import { libelleUnite } from '../../src/domain/unites';
+import { useAccent, useStylesAccent } from '../../src/ui/accent';
 
 type Etat =
   | { phase: 'chargement' }
@@ -65,6 +67,7 @@ interface VarianteAlerte {
   uniteBase: string;
   prixAchat: number;
   cheminImage: string | null;
+  categorie: string | null;
 }
 
 async function chargerVariantesAlertes(): Promise<VarianteAlerte[]> {
@@ -74,7 +77,7 @@ async function chargerVariantesAlertes(): Promise<VarianteAlerte[]> {
             vp.stock_actuel AS stock, p.stock_min AS stockMin,
             p.unite_base AS uniteBase,
             COALESCE(vp.prix_achat, p.prix_achat, 0) AS prixAchat,
-            p.chemin_image AS cheminImage,
+            p.chemin_image AS cheminImage, p.categorie AS categorie,
             COALESCE((SELECT GROUP_CONCAT(valeur_nom, ' / ') FROM (
               SELECT valeur_nom FROM variante_valeur
               WHERE variante_id = vp.id
@@ -88,6 +91,7 @@ async function chargerVariantesAlertes(): Promise<VarianteAlerte[]> {
 }
 
 export default function Alertes() {
+  const accentCouleur = useAccent().primaire;
   const router = useRouter();
   const { profilCommerce } = useSession();
   const profilUI = resoudreProfilUIMobile(profilCommerce);
@@ -95,7 +99,7 @@ export default function Alertes() {
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const [variantes, setVariantes] = useState<VarianteAlerte[]>([]);
   const [rafraichissement, setRafraichissement] = useState(false);
-  const [filtre, setFiltre] = useState<'bas' | 'rupture' | 'tous'>('bas');
+  const [filtre, setFiltre] = useState<'bas' | 'rupture' | 'tous'>('tous');
 
   const charger = useCallback(async (silencieux: boolean) => {
     if (!silencieux) setEtat({ phase: 'chargement' });
@@ -191,6 +195,10 @@ export default function Alertes() {
       ? variantesBas
       : [...variantesRupture, ...variantesBas];
 
+  const nbRuptures = ruptures.length + variantesRupture.length;
+  const nbBas = aRacheter - nbRuptures;
+  const alertesPresentes = aRacheter > 0;
+
   const sectionsAffichees = filtre === 'rupture'
     ? sections.filter((section) => section.titre.startsWith('Rupture'))
     : filtre === 'bas'
@@ -202,7 +210,7 @@ export default function Alertes() {
       <BandeauEtat />
       <View style={sl.entete}>
         <Pressable onPress={() => router.back()} style={s.retour}>
-          <Icone nom="retour" taille={17} couleur={couleurs.primaire} />
+          <Icone nom="retour" taille={17} couleur={accentCouleur} />
         </Pressable>
         <Text style={s.titre}>Alertes de stock</Text>
         <View style={sl.cloche}>
@@ -214,48 +222,41 @@ export default function Alertes() {
       {etat.phase === 'chargement' ? (
         <View style={sl.centre}>
           <ActivityIndicator color={C.accent} />
-          <Text style={sl.centreTexte}>Verification du stock...</Text>
+          <Text style={sl.centreTexte}>Vérification du stock...</Text>
         </View>
       ) : etat.phase === 'erreur' ? (
         <View style={sl.centre}>
-          <Text style={sl.centreTitre}>Les alertes n&apos;ont pas pu etre calculees</Text>
+          <Text style={sl.centreTitre}>Les alertes n&apos;ont pas pu être calculées</Text>
           <Text style={sl.centreTexte}>{etat.message}</Text>
           <Pressable style={s.boutonSecondaire} onPress={() => void charger(false)}>
-            <Text style={s.boutonSecondaireTexte}>Reessayer</Text>
+            <Text style={s.boutonSecondaireTexte}>Réessayer</Text>
           </Pressable>
         </View>
       ) : (
         <SectionList
           sections={sectionsAffichees}
           keyExtractor={(produit) => String(produit.id)}
-          contentContainerStyle={sectionsAffichees.length === 0 ? sl.listeVide : sl.liste}
+          contentContainerStyle={alertesPresentes ? sl.liste : sl.listeVide}
           stickySectionHeadersEnabled={false}
           refreshControl={
             <RefreshControl refreshing={rafraichissement} onRefresh={rafraichir} />
           }
           ListHeaderComponent={
-            sectionsAffichees.length > 0 ? (
+            alertesPresentes ? (
               <View>
                 <View style={sl.filtres}>
                   <Pressable style={[sl.filtre, filtre === 'bas' ? sl.filtreActif : null]} onPress={() => setFiltre('bas')}>
-                    <Text style={[sl.filtreTexte, filtre === 'bas' ? sl.filtreTexteActif : null]}>Stock tres bas</Text>
-                    <Text style={[sl.filtreBadge, filtre === 'bas' ? sl.filtreBadgeActif : null]}>{aRacheter}</Text>
+                    <Text style={[sl.filtreTexte, filtre === 'bas' ? sl.filtreTexteActif : null]}>Stock bas</Text>
+                    <Text style={[sl.filtreBadge, filtre === 'bas' ? sl.filtreBadgeActif : null]}>{nbBas}</Text>
                   </Pressable>
                   <Pressable style={[sl.filtre, filtre === 'rupture' ? sl.filtreActifRouge : null]} onPress={() => setFiltre('rupture')}>
                     <Text style={[sl.filtreTexte, filtre === 'rupture' ? sl.filtreTexteRouge : null]}>Rupture</Text>
-                    <Text style={sl.filtreBadgeRouge}>{ruptures.length + variantesRupture.length}</Text>
+                    <Text style={sl.filtreBadgeRouge}>{nbRuptures}</Text>
                   </Pressable>
                   <Pressable style={[sl.filtre, filtre === 'tous' ? sl.filtreActif : null]} onPress={() => setFiltre('tous')}>
                     <Text style={[sl.filtreTexte, filtre === 'tous' ? sl.filtreTexteActif : null]}>Tous</Text>
-                    <Text style={sl.filtreBadge}>{aRacheter}</Text>
+                    <Text style={[sl.filtreBadge, filtre === 'tous' ? sl.filtreBadgeActif : null]}>{aRacheter}</Text>
                   </Pressable>
-                </View>
-                <View style={sl.resume}>
-                  <View style={sl.resumeIcone}><Icone nom="alerte" taille={26} couleur={C.rouge} /></View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={sl.resumeTitre}>{profilUI.libelles.produits} à surveiller</Text>
-                    <Text style={sl.resumeAide}>Les références à variantes sont contrôlées combinaison par combinaison.</Text>
-                  </View>
                 </View>
                 {variantesAffichees.length > 0 ? (
                   <View style={{ gap: 8, marginTop: 10 }}>
@@ -263,7 +264,6 @@ export default function Alertes() {
                       <LigneVarianteAlerte
                         key={variante.id}
                         variante={variante}
-                        onCommande={() => router.push('/achats/nouveau')}
                         onJournal={() => router.push({
                           pathname: '/stock/mouvements',
                           params: {
@@ -279,13 +279,13 @@ export default function Alertes() {
             ) : null
           }
           ListEmptyComponent={
-            <View style={sl.centre}>
+            alertesPresentes ? null : <View style={sl.centre}>
               <Text style={sl.pastille}>OK</Text>
               <Text style={sl.centreTitre}>Aucune alerte</Text>
               <Text style={sl.centreTexte}>
                 {produits.length === 0
                   ? `Aucun ${profilUI.libelles.produit.toLocaleLowerCase('fr')} actif n'est suivi en stock pour l'instant.`
-                  : `Toutes les ${profilUI.libelles.produits.toLocaleLowerCase('fr')} suivies sont au-dessus de leur seuil.`}
+                  : 'Tout le stock suivi est au-dessus de son seuil.'}
               </Text>
             </View>
           }
@@ -294,10 +294,6 @@ export default function Alertes() {
               <View style={sl.note}>
                 <Text style={sl.noteTitre}>
               {sansSeuil} article(s) avec le seuil par défaut
-            </Text>
-            <Text style={sl.noteTexte}>
-              Le seuil par défaut est 10. Renseignez un autre seuil sur la fiche de la référence
-              quand son rythme de vente demande une surveillance differente.
             </Text>
               </View>
             ) : null
@@ -309,7 +305,6 @@ export default function Alertes() {
           }) => (
             <View style={sl.sectionEntete}>
               <Text style={[sl.sectionTitre, { color: section.couleur }]}>{section.titre}</Text>
-              <Text style={sl.sectionAide}>{section.aide}</Text>
             </View>
           )}
           renderItem={({ item }) => (
@@ -335,6 +330,7 @@ function LigneAlerte(p: {
   onCommande: () => void;
   onJournal: () => void;
 }) {
+  const A = useStylesAccent();
   const rupture = p.produit.quantite_base <= 0;
   const seuil = seuilAlerteStock(p.produit.stock_min);
   const manque = arrondirQuantite(seuil - p.produit.quantite_base);
@@ -349,12 +345,12 @@ function LigneAlerte(p: {
           </Text>
           <Text style={sl.meta}>
             {(p.produit.categorie ?? '').trim() === ''
-              ? 'Sans categorie'
+              ? 'Sans catégorie'
               : (p.produit.categorie ?? '').trim()}
           </Text>
           {manque > 0 ? (
             <Text style={sl.manque}>
-              Il en manque {formaterQuantite(manque)} {p.produit.unite_base} pour revenir au
+              Il en manque {formaterQuantite(manque)} {libelleUnite(p.produit.unite_base, manque)} pour revenir au
               seuil
             </Text>
           ) : null}
@@ -368,11 +364,11 @@ function LigneAlerte(p: {
 
       <View style={sl.carteBas}>
         <Pressable style={sl.lien} onPress={p.onJournal} hitSlop={6}>
-          <Text style={sl.lienTexte}>Journal</Text>
+          <Text style={[sl.lienTexte, A.texte]}>Journal</Text>
         </Pressable>
-        <Pressable style={sl.boutonEntree} onPress={p.onCommande}>
+        <Pressable style={[sl.boutonEntree, A.actif]} onPress={p.onCommande}>
           <Icone nom="plus" taille={17} couleur="#FFFFFF" />
-          <Text style={sl.boutonEntreeTexte}>Ajouter a la commande</Text>
+          <Text style={sl.boutonEntreeTexte}>Ajouter à la commande</Text>
         </Pressable>
       </View>
     </View>
@@ -381,22 +377,22 @@ function LigneAlerte(p: {
 
 function LigneVarianteAlerte(p: {
   variante: VarianteAlerte;
-  onCommande: () => void;
   onJournal: () => void;
 }) {
+  const A = useStylesAccent();
   const rupture = p.variante.stock <= 0;
   const seuil = seuilAlerteStock(p.variante.stockMin);
   const manque = arrondirQuantite(seuil - p.variante.stock);
   return (
     <View style={sl.carte}>
       <View style={sl.carteHaut}>
-        <Vignette chemin={p.variante.cheminImage} nom={p.variante.produitNom} taille={72} />
+        <Vignette chemin={p.variante.cheminImage} nom={p.variante.produitNom} taille={72} categorie={p.variante.categorie} />
         <View style={sl.carteTextes}>
           <Text style={sl.nom} numberOfLines={2}>{p.variante.produitNom}</Text>
           <Text style={sl.meta}>{p.variante.libelle} · {p.variante.sku}</Text>
           {manque > 0 ? (
             <Text style={sl.manque}>
-              Il en manque {formaterQuantite(manque)} {p.variante.uniteBase} pour revenir au seuil
+              Il en manque {formaterQuantite(manque)} {libelleUnite(p.variante.uniteBase, manque)} pour revenir au seuil
             </Text>
           ) : null}
         </View>
@@ -409,11 +405,7 @@ function LigneVarianteAlerte(p: {
       </View>
       <View style={sl.carteBas}>
         <Pressable style={sl.lien} onPress={p.onJournal} hitSlop={6}>
-          <Text style={sl.lienTexte}>Journal</Text>
-        </Pressable>
-        <Pressable style={sl.boutonEntree} onPress={p.onCommande}>
-          <Icone nom="plus" taille={17} couleur="#FFFFFF" />
-          <Text style={sl.boutonEntreeTexte}>Approvisionner</Text>
+          <Text style={[sl.lienTexte, A.texte]}>Journal</Text>
         </Pressable>
       </View>
     </View>

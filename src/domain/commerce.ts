@@ -6,16 +6,16 @@ export const SECTEURS_COMMERCE = [
   { code: 'ELECTRICITE', titre: 'Électricité', icone: 'stock' },
   { code: 'QUINCAILLERIE', titre: 'Quincaillerie', icone: 'stock' },
   { code: 'COSMETIQUE', titre: 'Cosmetique', icone: 'image' },
-  { code: 'PIECES_DETACHEES', titre: 'Pieces detachees', icone: 'mouvements' },
+  { code: 'PIECES_DETACHEES', titre: 'Pièces détachées', icone: 'mouvements' },
   { code: 'CEREALES_VRAC', titre: 'Céréales & Vrac', icone: 'stock' },
-  { code: 'COMMERCE_GENERAL', titre: 'Commerce general', icone: 'boutique' },
+  { code: 'COMMERCE_GENERAL', titre: 'Commerce général', icone: 'boutique' },
   { code: 'AUTRE', titre: 'Autre', icone: 'catalogue' },
 ] as const;
 
 export const MODES_VENTE = [
-  { code: 'DETAIL', titre: 'Detail' },
+  { code: 'DETAIL', titre: 'Détail' },
   { code: 'GROS', titre: 'Gros' },
-  { code: 'MIXTE', titre: 'Detail et gros' },
+  { code: 'MIXTE', titre: 'Détail et gros' },
 ] as const;
 
 export const MODES_APPROVISIONNEMENT = [
@@ -43,7 +43,8 @@ const ECRITURES_SOCLE_SURES: TypeEcritureCommerce[] = [
 const CAPABILITIES_MOBILE = new Set([
   'STOCK_SIMPLE', 'MULTI_UNIT', 'BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT',
   'PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION', 'PURCHASE_MATRIX', 'VARIANT_EXCHANGE',
-  'TECHNICAL_DIMENSIONS', 'WHOLESALE', 'BULK_WEIGHT',
+  'ARRIVAL_MANAGEMENT', 'ARRIVALS', 'LOT_TRACKING', 'LANDED_COST',
+  'TECHNICAL_DIMENSIONS', 'WHOLESALE', 'BULK_WEIGHT', 'MULTI_WAREHOUSE',
 ]);
 
 export interface ProfilCommerceMobile {
@@ -92,7 +93,7 @@ export function lireProfilCommerce(value: unknown): ProfilCommerceMobile | null 
   // compatible reste un indicateur de parite COMPLETE. Il ne sert plus de
   // coupe-circuit global pour les mutations compatibles.
   const compatible = profil.compatible
-    && profil.mode_catalogue === 'SIMPLE'
+    && (profil.mode_catalogue === 'SIMPLE' || profil.secteur === 'HABILLEMENT' || profil.secteur === 'QUINCAILLERIE')
     && profil.capabilities_non_supportees.length === 0
     && profil.capabilities_effectives.every(code => CAPABILITIES_MOBILE.has(code));
 
@@ -152,7 +153,7 @@ const LIBELLES_STANDARD: LibellesProfilMobile = {
   produit: 'Produit',
   nouveauProduit: 'Nouveau produit',
   inventaire: 'Inventaire',
-  categories: 'Categories',
+  categories: 'Catégories',
 };
 
 const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'code'>>> = {
@@ -200,19 +201,23 @@ const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'c
     ],
   },
   HABILLEMENT: {
-    nom: 'Pret-a-porter & Habillement',
+    nom: 'Prêt-à-porter & Habillement',
     libelles: {
       ...LIBELLES_STANDARD,
-      catalogue: 'Modeles',
+      catalogue: 'Modèles',
       achats: 'Appro.',
       stock: 'Stock',
-      produits: 'Modeles',
-      produit: 'Modele',
-      nouveauProduit: 'Nouveau modele',
+      produits: 'Modèles',
+      produit: 'Modèle',
+      nouveauProduit: 'Nouveau modèle',
       inventaire: 'Inventaire',
       categories: 'Collections',
     },
-    capabilities: ['PRODUCT_IMAGES', 'BARCODE', 'INVENTORY', 'LOW_STOCK_ALERT'],
+    capabilities: [
+      'PRODUCT_IMAGES', 'BARCODE', 'INVENTORY', 'LOW_STOCK_ALERT',
+      'PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION', 'PURCHASE_MATRIX',
+      'VARIANT_EXCHANGE', 'ARRIVAL_MANAGEMENT', 'ARRIVALS', 'LOT_TRACKING', 'LANDED_COST',
+    ],
   },
   FRIPERIE: {
     nom: 'Friperie',
@@ -223,7 +228,7 @@ const PROFILS_UI_MOBILE: Partial<Record<SecteurCommerce, Omit<ProfilUIMobile, 'c
       produits: 'Articles',
       produit: 'Article',
       nouveauProduit: 'Nouvel article',
-      categories: 'Lots / categories',
+      categories: 'Lots / catégories',
     },
     capabilities: ['PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT'],
   },
@@ -266,14 +271,11 @@ export function resoudreProfilUIMobile(
   if (specifique) {
     // Le vocabulaire d'un profil ne crée jamais de droits : seules les
     // capacités accordées par le contrat signé deviennent effectives.
-    if (code === 'ELECTRICITE' || code === 'COMMERCE_GENERAL' || code === 'CEREALES_VRAC') {
-      return {
-        code, ...specifique,
-        capabilities: specifique.capabilities.filter((capability) =>
-          profil?.capabilities_effectives.includes(capability)),
-      };
-    }
-    return { code, ...specifique };
+    return {
+      code, ...specifique,
+      capabilities: specifique.capabilities.filter((capability) =>
+        profil?.capabilities_effectives.includes(capability)),
+    };
   }
   return {
     code,

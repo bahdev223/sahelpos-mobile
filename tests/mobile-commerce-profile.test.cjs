@@ -71,8 +71,8 @@ test('habillement core profile is supported and resolves dedicated mobile labels
   assert.equal(habillement?.compatible, true);
   const ui = resoudreProfilUIMobile(habillement);
   assert.equal(ui.code, 'HABILLEMENT');
-  assert.equal(ui.libelles.catalogue, 'Modeles');
-  assert.equal(ui.libelles.produits, 'Modeles');
+  assert.equal(ui.libelles.catalogue, 'Modèles');
+  assert.equal(ui.libelles.produits, 'Modèles');
   assert.equal(ui.libelles.categories, 'Collections');
 });
 
@@ -94,4 +94,21 @@ test('quincaillerie profile is compatible and exposes technical labels', () => {
   assert.equal(ui.libelles.catalogue, 'Références');
   assert.equal(ui.libelles.categories, 'Rayons');
   assert.equal(ui.libelles.achats, 'Appro.');
+});
+
+test('server supported advanced catalogues and default warehouse keep their compatibility', () => {
+  const { lireProfilCommerce } = charger();
+  for (const secteur of ['HABILLEMENT', 'QUINCAILLERIE']) {
+    const profil = lireProfilCommerce({ ...contrat, secteur, mode_catalogue: 'ADVANCED',
+      capabilities_effectives: ['PRODUCT_VARIANTS', 'MULTI_WAREHOUSE'] });
+    assert.equal(profil.compatible, true, secteur);
+  }
+});
+
+test('none of the eleven UI profiles invents capabilities absent from the signed licence', () => {
+  const { SECTEURS_COMMERCE, lireProfilCommerce, resoudreProfilUIMobile } = charger();
+  for (const { code } of SECTEURS_COMMERCE) {
+    const profil = lireProfilCommerce({ ...contrat, secteur: code, capabilities_effectives: [] });
+    assert.deepEqual(resoudreProfilUIMobile(profil).capabilities, [], code);
+  }
 });

@@ -6,7 +6,7 @@ import AccesAccounts from '../src/ui/AccesAccounts';
  * l'autorite : au premier lancement, le commercant se connecte ou cree son
  * compte Web, puis le serveur remet un droit signe utilisable hors ligne.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Image,
   KeyboardAvoidingView,
@@ -24,7 +24,6 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
-  SECTEURS_COMMERCE, MODES_VENTE, MODES_APPROVISIONNEMENT,
   type SecteurCommerce, type ModeVenteCommerce, type ModeApprovisionnementCommerce,
 } from '../src/domain/commerce';
 import {
@@ -47,6 +46,8 @@ import {
   rayons,
 } from '../src/ui/components';
 import { Icone } from '../src/ui/icones';
+import InscriptionMobile from '../src/ui/inscription/InscriptionMobile';
+import type { DonneesBoutique } from '../src/domain/inscription';
 
 import { CLES_PARAMETRES, ecrireParametres, lireParametres, useSession } from './_layout';
 
@@ -59,6 +60,7 @@ export function EcranDemarrage() {
   const [etape, setEtape] = useState(0);
   const [vueDepart, setVueDepart] = useState<VueDepart>('accueil');
   const [enCours, setEnCours] = useState(false);
+  const connexionEnCours = useRef(false);
   const [erreurGenerale, setErreurGenerale] = useState<string | null>(null);
   const [droit, setDroit] = useState<Droit | null>(null);
   const [mode, setMode] = useState<ModeConnexion>('connexion');
@@ -88,10 +90,10 @@ export function EcranDemarrage() {
   const sousTitreEtape = useMemo(() => {
     if (etape === 0) {
       return mode === 'connexion'
-        ? 'Accedez a votre espace SahelPOS'
+        ? 'Accédez à votre espace SahelPOS'
         : 'Configurez votre espace SahelPOS';
     }
-    return 'Protegez la caisse sur ce telephone.';
+    return 'Protégez la caisse sur ce téléphone.';
   }, [etape, mode]);
 
   const validerEtape = useCallback((): boolean => {
@@ -143,13 +145,14 @@ export function EcranDemarrage() {
   ]);
 
   const connecterBoutique = useCallback(async () => {
-    if (!validerEtape()) return;
+    if (connexionEnCours.current || !validerEtape()) return;
+    connexionEnCours.current = true;
     setEnCours(true);
     setErreurGenerale(null);
     try {
       const etat =
         mode === 'connexion'
-          ? await connecterCompteMobile(login, motDePasseWeb, 'Telephone principal')
+          ? await connecterCompteMobile(login, motDePasseWeb, 'Téléphone principal')
           : await creerBoutiqueMobile(
               {
                 nomBoutique,
@@ -164,7 +167,7 @@ export function EcranDemarrage() {
                 devise,
                 plan: 'START',
               },
-              'Telephone principal',
+              'Téléphone principal',
             );
       if (!etat.droit) throw new Error("Le serveur n'a pas renvoye l'espace SahelPOS.");
       if (!etat.droit.peutEntrer) throw new Error(etat.droit.raison || "Cet espace SahelPOS n'est pas actif.");
@@ -182,9 +185,10 @@ export function EcranDemarrage() {
       setErreurGenerale(
         erreur instanceof Error
           ? erreur.message
-          : 'Connexion impossible. Verifiez Internet et reessayez.',
+          : 'Connexion impossible. Vérifiez Internet et réessayez.',
       );
     } finally {
+      connexionEnCours.current = false;
       setEnCours(false);
     }
   }, [devise, login, mode, motDePasseWeb, nomAdmin, nomBoutique, telephone, ville,
@@ -224,7 +228,7 @@ export function EcranDemarrage() {
       await recharger();
       ouvrirSession(compte);
     } catch (erreur) {
-      const message = erreur instanceof Error ? erreur.message : "L'acces local n'a pas pu etre enregistre.";
+      const message = erreur instanceof Error ? erreur.message : "L'accès local n'a pas pu etre enregistre.";
       if (/deja utilise/i.test(message)) {
         setErreurs({ login: message });
       } else {
@@ -260,6 +264,26 @@ export function EcranDemarrage() {
     setErreurGenerale(null);
   }, []);
 
+  const boutiqueCreation: DonneesBoutique = {
+    nom_boutique: nomBoutique, telephone, ville, devise, secteur: typeCommerce,
+    mode_vente: modeVente, mode_approvisionnement: modeApprovisionnement, plan: 'START',
+  };
+  if (etape === 0 && vueDepart === 'formulaire' && mode === 'creation') {
+    return <InscriptionMobile boutique={boutiqueCreation}
+      onBoutique={(v) => {
+        setNomBoutique(v.nom_boutique); setTelephone(v.telephone); setVille(v.ville); setDevise(v.devise);
+        if (v.secteur) setTypeCommerce(v.secteur);
+        setModeVente(v.mode_vente); setModeApprovisionnement(v.mode_approvisionnement);
+      }}
+      compte={{nom:nomAdmin,login,motDePasse:motDePasseWeb,confirmation:motDePasseWebConfirme}}
+      onCompte={(v) => { setNomAdmin(v.nom); setLogin(v.login); setMotDePasseWeb(v.motDePasse); setMotDePasseWebConfirme(v.confirmation); }}
+      surCreer={() => void connecterBoutique()} surRetour={() => setVueDepart('accueil')}
+      surConnexion={() => afficherFormulaire('connexion')} enCours={enCours} erreur={erreurGenerale}
+      erreurs={{...erreurs,nom_boutique:erreurs.nomBoutique}}
+      actionsAccounts={<AccesAccounts boutiqueInitiale={boutiqueCreation} inscription desactive={enCours} />}
+    />;
+  }
+
   if (etape === 0 && vueDepart === 'accueil') {
     return (
       <SafeAreaView style={styles.ecran} edges={['top', 'bottom']}>
@@ -277,12 +301,12 @@ export function EcranDemarrage() {
             <Text style={styles.heroSahel}>Sahel</Text>
             <Text style={styles.heroPos}>POS</Text>
           </Text>
-          <Text style={styles.heroTexte}>Gerez votre caisse, votre stock et vos ventes, ou que vous soyez.</Text>
+          <Text style={styles.heroTexte}>Gérez votre caisse, votre stock et vos ventes, où que vous soyez.</Text>
 
           <AccesAccounts />
           <View style={styles.fonctions}>
             <MiniFonction icone="boutique" titre="Vente" sousTitre="simple et rapide" fond="#dcfce7" couleur="#16a34a" />
-            <MiniFonction icone="stock" titre="Stock" sousTitre="en temps reel" fond="#ffedd5" couleur="#f97316" />
+            <MiniFonction icone="stock" titre="Stock" sousTitre="en temps réel" fond="#ffedd5" couleur="#f97316" />
             <MiniFonction icone="clients" titre="Clients" sousTitre="et ardoises" fond="#e0f2fe" couleur="#0b77ff" />
             <MiniFonction icone="graphique" titre="Tableau" sousTitre="clair et complet" fond="#ede9fe" couleur="#7c3aed" />
           </View>
@@ -299,7 +323,7 @@ export function EcranDemarrage() {
           </Pressable>
           <Pressable style={styles.boutonBlanc} onPress={() => afficherFormulaire('creation')}>
             <Icone nom="boutique" taille={24} couleur={couleurs.texte} />
-            <Text style={styles.boutonBlancTexte}>Creer mon espace</Text>
+            <Text style={styles.boutonBlancTexte}>Créer mon espace</Text>
           </Pressable>
           <Pressable onPress={() => afficherFormulaire('creation')}>
             <Text style={styles.essai}>Essayer gratuitement pendant 14 jours</Text>
@@ -328,7 +352,7 @@ export function EcranDemarrage() {
             <View style={styles.formBloc}>
               {mode === 'connexion' ? (
                 <View>
-                  <ChampMaquette icone="document" label="Identifiant" valeur={login} onChangeText={setLogin} placeholder="Email ou numero de telephone" erreur={erreurs.login} autoFocus />
+                  <ChampMaquette icone="document" label="Identifiant" valeur={login} onChangeText={setLogin} placeholder="Email ou numéro de téléphone" erreur={erreurs.login} autoFocus />
                   <ChampMaquette icone="caisse" label="Mot de passe" valeur={motDePasseWeb} onChangeText={setMotDePasseWeb} placeholder="Votre mot de passe" retourClavier="done" onValider={() => void connecterBoutique()} secret erreur={erreurs.motDePasseWeb} />
 
                   <View style={styles.ligneOptions}>
@@ -338,11 +362,10 @@ export function EcranDemarrage() {
                       </View>
                       <View>
                         <Text style={styles.memoireTitre}>Se souvenir de moi</Text>
-                        <Text style={styles.memoireTexte}>Restez connecte plus longtemps</Text>
                       </View>
                     </Pressable>
                     <Pressable hitSlop={8}>
-                      <Text style={styles.lienBleu}>Mot de passe oublie ?</Text>
+                      <Text style={styles.lienBleu}>Mot de passe oublié ?</Text>
                     </Pressable>
                   </View>
 
@@ -362,87 +385,13 @@ export function EcranDemarrage() {
                     <Text style={styles.googleTexte}>Continuer avec Google</Text>
                   </Pressable>
 
-                  <View style={styles.securite}>
-                    <Icone nom="coche" taille={28} couleur={couleurs.primaire} />
-                    <View style={styles.securiteTexteBloc}>
-                      <Text style={styles.securiteTitre}>Vos donnees sont securisees</Text>
-                      <Text style={styles.securiteTexte}>Chiffrement et protection de niveau professionnel</Text>
-                    </View>
-                  </View>
 
                   <Pressable onPress={() => afficherFormulaire('creation')}>
-                    <Text style={styles.creerBas}>Pas encore de compte ? <Text style={styles.creerBasLien}>Creer mon espace</Text></Text>
+                    <Text style={styles.creerBas}>Pas encore de compte ? <Text style={styles.creerBasLien}>Créer mon espace</Text></Text>
                   </Pressable>
                 </View>
               ) : (
-                <View style={styles.creationCarte}>
-                  <EtapesCreation />
-
-                  <Text style={styles.creationTitre}>Votre entreprise</Text>
-                  <Text style={styles.creationSousTitre}>
-                    Configurez votre espace de vente en quelques minutes.
-                  </Text>
-
-                  <ChampMaquette icone="boutique" label="Nom de l'entreprise" valeur={nomBoutique} onChangeText={setNomBoutique} placeholder="Diarra Commerce" erreur={erreurs.nomBoutique} autoFocus />
-                  <Text style={styles.exempleChamp}>Ex : Diarra Commerce, Alimentation Fatoumata, Quincaillerie du Marche...</Text>
-
-                  <View style={styles.ligneDeuxColonnes}>
-                    <View style={styles.colonneChamp}>
-                      <ChampMaquette icone="etiquette" label="Ville" valeur={ville} onChangeText={setVille} placeholder="Bamako" />
-                    </View>
-                    <View style={styles.colonneChamp}>
-                      <ChampMaquette icone="argent" label="Devise" valeur={devise} onChangeText={setDevise} placeholder="FCFA" />
-                    </View>
-                  </View>
-
-                  <View style={styles.infoCreation}>
-                    <View style={styles.infoPastille}>
-                      <Text style={styles.infoPastilleTexte}>i</Text>
-                    </View>
-                    <Text style={styles.infoCreationTexte}>Vous pourrez ajouter d'autres informations (adresse, logo, etc.) plus tard dans les parametres.</Text>
-                  </View>
-
-                  <Text style={styles.commerceLabel}>Votre premier point de vente</Text>
-                  <Text style={styles.pointVenteAide}>Secteur d'activite</Text>
-                  <View style={styles.commerceGrille}>
-                    {SECTEURS_COMMERCE.map((item) => (
-                      <CarteCommerce
-                        key={item.code}
-                        actif={typeCommerce === item.code}
-                        icone={item.icone}
-                        titre={item.titre}
-                        onPress={() => setTypeCommerce(item.code)}
-                      />
-                    ))}
-                  </View>
-                  <ChoixCommerce titre="Mode de vente" valeur={modeVente} choix={MODES_VENTE} onChange={setModeVente} />
-                  <ChoixCommerce titre="Approvisionnement" valeur={modeApprovisionnement} choix={MODES_APPROVISIONNEMENT} onChange={setModeApprovisionnement} />
-                  <Text style={styles.pointVenteAide}>Catalogue simple sur mobile. Les variantes, lots, numeros de serie et fonctions avancees restent disponibles sur le Web uniquement.</Text>
-
-                  <View style={styles.creationSeparateur} />
-                  <Text style={styles.creationCompteTitre}>Compte administrateur</Text>
-                  <Text style={styles.creationCompteTexte}>
-                    Ce compte servira a gerer l'entreprise, les points de vente et les vendeurs.
-                  </Text>
-
-                  <ChampMaquette icone="utilisateurs" label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Fatoumata Traore" erreur={erreurs.nomAdmin} />
-                  <ChampMaquette icone="reseau" label="Telephone" valeur={telephone} onChangeText={setTelephone} placeholder="76 00 00 00" clavier="phone-pad" />
-                  <ChampMaquette icone="document" label="Identifiant" valeur={login} onChangeText={setLogin} placeholder="fatoumata" erreur={erreurs.login} />
-                  <ChampMaquette icone="caisse" label="Mot de passe" valeur={motDePasseWeb} onChangeText={setMotDePasseWeb} placeholder="Minimum 6 caracteres" secret erreur={erreurs.motDePasseWeb} />
-                  <ChampMaquette icone="caisse" label="Confirmez le mot de passe" valeur={motDePasseWebConfirme} onChangeText={setMotDePasseWebConfirme} placeholder="Minimum 6 caracteres" secret erreur={erreurs.motDePasseWebConfirme} />
-
-                  <View style={styles.creationBasSecurise}>
-                    <Icone nom="coche" taille={24} couleur={couleurs.primaire} />
-                    <Text style={styles.creationBasTexte}>Vos donnees sont securisees et ne seront jamais partagees.</Text>
-                  </View>
-                  <Pressable style={[styles.boutonPrimaire, enCours && styles.boutonInactif]} onPress={suivant} disabled={enCours}>
-                    <Text style={styles.boutonPrimaireTexte}>{enCours ? 'Creation...' : 'Continuer'}</Text>
-                    <Icone nom="chevron" taille={22} couleur={couleurs.texteInverse} />
-                  </Pressable>
-                  <Pressable onPress={() => afficherFormulaire('connexion')}>
-                    <Text style={styles.creerBas}>Deja un compte ? <Text style={styles.creerBasLien}>Se connecter</Text></Text>
-                  </Pressable>
-                </View>
+                null
               )}
 
               {erreurGenerale ? <BandeauErreur message={erreurGenerale} /> : null}
@@ -452,18 +401,13 @@ export function EcranDemarrage() {
           {etape === 1 ? (
             <Carte style={styles.carteCode}>
               <View style={styles.boutiqueConnectee}>
-                <Text style={styles.boutiqueLibelle}>Espace connecte</Text>
+                <Text style={styles.boutiqueLibelle}>Espace connecté</Text>
                 <Text style={styles.boutiqueNom}>{droit?.nom || 'SahelPOS'}</Text>
                 <Text style={styles.boutiqueDetail}>Plan {droit?.plan || '-'} recu depuis SahelPOS Web.</Text>
-                <Text style={styles.boutiqueDetail}>{droit?.commerce?.secteur_libelle || 'Profil a verifier'}</Text>
+                <Text style={styles.boutiqueDetail}>{droit?.commerce?.secteur_libelle || 'Profil à vérifier'}</Text>
               </View>
               {!droit?.commerce || droit.commerce.ecritures_autorisees.length === 0 ? (
-                <BandeauErreur message={droit?.commerce?.raison || 'Connectez-vous pour verifier le profil commerce.'} />
-              ) : !droit.commerce.compatible && droit.commerce.raison ? (
-                <View style={styles.infoCreation}>
-                  <View style={styles.infoPastille}><Text style={styles.infoPastilleTexte}>i</Text></View>
-                  <Text style={styles.infoCreationTexte}>{droit.commerce.raison}</Text>
-                </View>
+                <BandeauErreur message={droit?.commerce?.raison || 'Connectez-vous pour vérifier le profil commerce.'} />
               ) : null}
               <Champ label="Votre nom" valeur={nomAdmin} onChangeText={setNomAdmin} placeholder="Aminata Diarra" autoFocus />
               <Champ label="Identifiant local" valeur={login} onChangeText={setLogin} placeholder="aminata" erreur={erreurs.login} />
@@ -562,95 +506,6 @@ function MiniFonction({ icone, titre, sousTitre, fond, couleur }: {
       <Text style={styles.miniSousTitre}>{sousTitre}</Text>
     </View>
   );
-}
-
-function EtapesCreation() {
-  return (
-    <View style={styles.etapes}>
-      <View style={styles.etapeItem}>
-        <View style={[styles.etapeCercle, styles.etapeCercleActive]}>
-          <Text style={[styles.etapeNumero, styles.etapeNumeroActive]}>1</Text>
-        </View>
-        <Text style={[styles.etapeTexte, styles.etapeTexteActive]}>Informations</Text>
-      </View>
-      <View style={styles.etapeTrait} />
-      <View style={styles.etapeItem}>
-        <View style={styles.etapeCercle}>
-          <Text style={styles.etapeNumero}>2</Text>
-        </View>
-        <Text style={styles.etapeTexte}>Compte</Text>
-      </View>
-      <View style={styles.etapeTrait} />
-      <View style={styles.etapeItem}>
-        <View style={styles.etapeCercle}>
-          <Text style={styles.etapeNumero}>3</Text>
-        </View>
-        <Text style={styles.etapeTexte}>C'est parti !</Text>
-      </View>
-    </View>
-  );
-}
-
-function CarteCommerce({
-  actif,
-  icone,
-  titre,
-  onPress,
-}: {
-  actif: boolean;
-  icone: Parameters<typeof Icone>[0]['nom'];
-  titre: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityState={{ selected: actif }}
-      accessibilityLabel={titre}
-      style={[styles.commerceCarte, actif && styles.commerceCarteActive]}
-    >
-      <Icone nom={icone} taille={27} couleur={actif ? couleurs.primaire : couleurs.texte} />
-      <Text style={[styles.commerceTitre, actif && styles.commerceTitreActive]}>{titre}</Text>
-    </Pressable>
-  );
-}
-
-function ChoixCommerce<T extends string>({ titre, valeur, choix, onChange }: {
-  titre: string;
-  valeur: T;
-  choix: ReadonlyArray<{ code: T; titre: string }>;
-  onChange: (code: T) => void;
-}) {
-  const [ouvert, setOuvert] = useState(false);
-  return <View style={styles.champBloc}>
-    <Text style={styles.champLabel}>{titre}</Text>
-    <Pressable style={styles.choixChamp} onPress={() => setOuvert(true)} accessibilityRole="button"
-      accessibilityLabel={`${titre} : ${choix.find(item => item.code === valeur)?.titre}`} accessibilityState={{ expanded: ouvert }}>
-      <Text style={styles.choixTexte}>{choix.find(item => item.code === valeur)?.titre}</Text>
-      <Icone nom="chevron" taille={20} />
-    </Pressable>
-    <Modal visible={ouvert} transparent animationType="fade" onRequestClose={() => setOuvert(false)}>
-      <View style={styles.choixFond}>
-        <View style={styles.choixDialogue} accessibilityViewIsModal>
-          <View style={styles.choixEntete}>
-            <Text style={styles.commerceLabel}>{titre}</Text>
-            <Pressable onPress={() => setOuvert(false)} accessibilityRole="button" accessibilityLabel="Fermer" style={styles.retour}>
-              <Icone nom="fermer" taille={22} />
-            </Pressable>
-          </View>
-          <ScrollView>
-            {choix.map(item => <Pressable key={item.code} style={styles.choixChamp}
-              accessibilityRole="radio" accessibilityState={{ selected: item.code === valeur }}
-              onPress={() => { onChange(item.code); setOuvert(false); }}>
-              <Text style={styles.choixTexte}>{item.titre}</Text>
-              {item.code === valeur ? <Icone nom="coche" couleur={couleurs.primaire} taille={22} /> : null}
-            </Pressable>)}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  </View>;
 }
 
 function BandeauErreur({ message }: { message: string }) {

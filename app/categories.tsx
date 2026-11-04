@@ -51,7 +51,7 @@ export default function EcranCategories() {
       const parNom = new Map(comptes.map((c) => [c.categorie, c.n]));
       setCategories(noms.map((nom) => ({ nom, nbProduits: parNom.get(nom) ?? 0 })));
     } catch (e) {
-      setErreur(e instanceof Error ? e.message : 'Lecture des categories impossible.');
+      setErreur(e instanceof Error ? e.message : 'Lecture des catégories impossible.');
     } finally {
       setChargement(false);
     }
@@ -66,7 +66,7 @@ export default function EcranCategories() {
   const renommer = useCallback(async () => {
     const cible = nouveauNom.trim();
     if (!ancienNom || !cible) {
-      Alert.alert('Nom manquant', 'Saisissez le nouveau nom de la categorie.');
+      Alert.alert('Nom manquant', 'Saisissez le nouveau nom de la catégorie.');
       return;
     }
     setEnCours(true);
@@ -117,11 +117,11 @@ export default function EcranCategories() {
     [charger],
   );
 
-  if (chargement) return <Chargement message="Lecture des categories..." />;
+  if (chargement) return <Chargement message="Lecture des catégories..." />;
 
   return (
     <SafeAreaView style={styles.page} edges={['bottom']}>
-      <Stack.Screen options={{ headerShown: true, title: 'Categories' }} />
+      <Stack.Screen options={{ headerShown: true, title: 'Catégories' }} />
 
       {erreur ? (
         <Erreur message={erreur} onReessayer={charger} />
@@ -142,8 +142,8 @@ export default function EcranCategories() {
           }
           ListEmptyComponent={
             <ListeVide
-              titre="Aucune categorie"
-              message="Les categories apparaissent des que vous en saisissez une sur une fiche produit."
+              titre="Aucune catégorie"
+              message="Les catégories apparaissent dès que vous en saisissez une sur une fiche produit."
               actionTitre="Aller au catalogue"
               onAction={() => router.push('/catalogue')}
             />
@@ -183,13 +183,13 @@ export default function EcranCategories() {
       >
         <View style={styles.voile}>
           <View style={styles.feuille}>
-            <Text style={styles.feuilleTitre}>Renommer la categorie</Text>
+            <Text style={styles.feuilleTitre}>Renommer la catégorie</Text>
             <Champ
               valeur={nouveauNom}
               onChangeText={setNouveauNom}
               label="Nouveau nom"
               autoFocus
-              aide="Si ce nom existe deja, les deux categories fusionnent."
+              aide="Si ce nom existe déjà, les deux catégories fusionnent."
             />
             <View style={styles.feuilleActions}>
               <Bouton
