@@ -1,5 +1,7 @@
 # État Android — 8 octobre 2026
 
+État courant du 4 novembre : [consolidation Android/API, profils et limites](STABILISATION_ANDROID_2026-11-04.md). Les relevés datés ci-dessous sont historiques.
+
 Etat courant : [candidate Android du 1er novembre](LIVRAISON_ANDROID_2026-11-01.md).
 Les sections ci-dessous conservent les releves historiques et leur perimetre.
 

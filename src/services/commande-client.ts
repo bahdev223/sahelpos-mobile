@@ -9,7 +9,7 @@ import {
 import type { Produit } from '../domain/types';
 import type { VarianteMobile } from '../db/repositories/variante';
 import { libelleVariante } from '../db/repositories/variante';
-import { exigerEcriture } from './abonnement';
+import { etatCourant, exigerEcriture } from './abonnement';
 import { marquerChangement } from './synchronisation';
 
 export type StatutCommandeClient =
@@ -72,7 +72,7 @@ export async function creerCommandeClient(
   articles: ArticleCommandeClient[],
   options: { clientId?: number | null; note?: string } = {},
 ): Promise<number> {
-  await exigerEcriture();
+  await exigerEcriture('ventes');
   if (!articles.length) throw new Error('Ajoutez au moins un article à la commande.');
 
   for (const article of articles) {
@@ -234,7 +234,7 @@ async function changerStatut(
   statut: StatutCommandeClient,
   preparationComplete = false,
 ): Promise<void> {
-  await exigerEcriture();
+  await exigerEcriture('ventes');
   const c = await lirePremier<{ id_local: string; serveur_id: number | null }>(
     'SELECT id_local, serveur_id FROM commande_client WHERE id = ?',
     id,
@@ -279,6 +279,9 @@ export async function marquerCommandePrete(id: number): Promise<void> {
 }
 
 export async function annulerCommandeClient(id: number): Promise<void> {
+  if ((await etatCourant()).droit?.membre?.role === 'vendeur') {
+    throw new Error('Seul un gestionnaire peut annuler une commande.');
+  }
   return changerStatut(id, 'ANNULEE');
 }
 
@@ -290,40 +293,42 @@ export async function demanderConversionCommandeEnVente(
   modePaiement: ModePaiementCommande,
   montantPaye: number,
 ): Promise<void> {
-  await exigerEcriture();
-  const commande = await lirePremier<{
-    id_local: string;
-    serveur_id: number | null;
-    statut: StatutCommandeClient;
-    total: number;
-  }>(
-    'SELECT id_local, serveur_id, statut, total FROM commande_client WHERE id = ?',
-    id,
-  );
-  if (!commande) throw new Error('Commande introuvable.');
-  if (!commande.serveur_id) {
-    throw new Error('Synchronisez d’abord la commande.');
-  }
-  if (commande.statut !== 'PRETE') {
-    throw new Error('La commande doit être prête avant l’encaissement.');
-  }
-  if (!Number.isFinite(montantPaye) || montantPaye < 0 || montantPaye > commande.total) {
-    throw new Error('Le montant payé est invalide.');
-  }
-  if (modePaiement === 'credit' && montantPaye >= commande.total) {
-    throw new Error('Utilisez espèces ou Mobile Money pour une vente entièrement réglée.');
-  }
+  await exigerEcriture('ventes');
+  await dansTransaction(async () => {
+    const commande = await lirePremier<{
+      id_local: string;
+      serveur_id: number | null;
+      statut: StatutCommandeClient;
+      total: number;
+    }>(
+      'SELECT id_local, serveur_id, statut, total FROM commande_client WHERE id = ?',
+      id,
+    );
+    if (!commande) throw new Error('Commande introuvable.');
+    if (!commande.serveur_id) {
+      throw new Error('Synchronisez d’abord la commande.');
+    }
+    if (commande.statut !== 'PRETE') {
+      throw new Error('La commande doit être prête avant l’encaissement.');
+    }
+    if (!Number.isSafeInteger(montantPaye) || montantPaye < 0 || montantPaye > commande.total) {
+      throw new Error('Le montant payé est invalide.');
+    }
+    if (modePaiement === 'credit' && montantPaye >= commande.total) {
+      throw new Error('Utilisez espèces ou Mobile Money pour une vente entièrement réglée.');
+    }
 
-  await executer(
-    `UPDATE commande_client
-        SET conversion_demandee = 1,
-            conversion_mode_paiement = ?,
-            conversion_montant_paye = ?,
-            sync_statut = 'PENDING'
-      WHERE id = ?`,
-    modePaiement,
-    Math.round(montantPaye),
-    id,
-  );
-  await marquerChangement('commande_client', commande.id_local);
+    await executer(
+      `UPDATE commande_client
+          SET conversion_demandee = 1,
+              conversion_mode_paiement = ?,
+              conversion_montant_paye = ?,
+              sync_statut = 'PENDING'
+        WHERE id = ?`,
+      modePaiement,
+      Math.round(montantPaye),
+      id,
+    );
+    await marquerChangement('commande_client', commande.id_local);
+  });
 }

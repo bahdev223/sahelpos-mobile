@@ -25,7 +25,7 @@ const CLE_PERIMETRE = 'sync.perimetre_membre';
 const CLE_BOUTIQUE = 'sync.boutique';
 const CLE_BOOTSTRAP = 'sync.bootstrap_effectue';
 const CLE_PROTOCOLE = 'sync.protocole';
-const VERSION_PROTOCOLE = '7';
+const VERSION_PROTOCOLE = '8';
 const CLE_DERNIERE_TENTATIVE = 'sync.derniere_tentative';
 const CLE_DERNIER_SUCCES = 'sync.dernier_succes';
 const CLE_DERNIERE_ERREUR = 'sync.derniere_erreur';
@@ -36,7 +36,7 @@ const CLE_DERNIER_NOMBRE_PULL = 'sync.dernier_nombre_pull';
 const CLE_BOUTIQUE_MODIFIEE = 'sync.boutique_modifiee';
 const TAILLE_IMAGE_SYNC_MAX = 4 * 1024 * 1024;
 
-type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'echange' | 'commande_client' | 'mouvement' | 'achat' | 'arrivage' | 'boutique' | 'utilisateur';
+type TypeObjet = 'produit' | 'variante' | 'client' | 'fournisseur' | 'vente' | 'operation_vente' | 'echange' | 'commande_client' | 'mouvement' | 'achat' | 'arrivage' | 'boutique' | 'utilisateur';
 
 const TYPE_ECRITURE_PAR_OBJET: Record<TypeObjet, TypeEcritureCommerce> = {
   produit: 'produits',
@@ -44,6 +44,7 @@ const TYPE_ECRITURE_PAR_OBJET: Record<TypeObjet, TypeEcritureCommerce> = {
   client: 'clients',
   fournisseur: 'fournisseurs',
   vente: 'ventes',
+  operation_vente: 'ventes',
   echange: 'ventes',
   commande_client: 'ventes',
   mouvement: 'mouvements',
@@ -167,6 +168,17 @@ interface VenteSync {
   date_modification?: string | null;
   supprime_le?: string | null;
   lignes: LigneVenteSync[];
+}
+
+interface OperationVenteSync {
+  id_local: string;
+  vente_id_local: string;
+  vendeur_id_local?: string | null;
+  nature: 'REGLEMENT' | 'ANNULATION';
+  montant: number | string;
+  mode_paiement: string;
+  motif?: string | null;
+  date_creation: string;
 }
 
 interface EchangeSync {
@@ -489,7 +501,19 @@ export async function lireEtatSynchronisation(): Promise<EtatSynchronisation> {
   };
 }
 
-export async function synchroniser(): Promise<ResultatSynchronisation> {
+let synchronisationEnCours: Promise<ResultatSynchronisation> | null = null;
+
+/** Tous les declencheurs partagent le meme cycle et ses ACK. */
+export function synchroniser(): Promise<ResultatSynchronisation> {
+  if (!synchronisationEnCours) {
+    synchronisationEnCours = executerSynchronisation().finally(() => {
+      synchronisationEnCours = null;
+    });
+  }
+  return synchronisationEnCours;
+}
+
+async function executerSynchronisation(): Promise<ResultatSynchronisation> {
   const jeton = await jetonAppareil();
   if (!jeton) {
     throw new Error("Activez l'application avant de synchroniser.");
@@ -515,11 +539,18 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
     const pending: LigneOutbox[] = [];
     for (const item of pendingTous) {
       if (!ecritureMobileAutorisee(abonnement, TYPE_ECRITURE_PAR_OBJET[item.type_objet])) continue;
-      if (abonnement.droit?.membre && item.type_objet === 'vente') {
+      if (membre && (item.type_objet === 'vente' ||
+          (item.type_objet === 'operation_vente' && membre.role === 'vendeur'))) {
         const sale = await lirePremier<{vendeur_id_local: string}>(
-          'SELECT u.id_local AS vendeur_id_local FROM vente v LEFT JOIN utilisateur u ON u.id = v.utilisateur_id WHERE v.id_local = ?', item.id_local,
+          item.type_objet === 'operation_vente'
+            ? `SELECT u.id_local AS vendeur_id_local FROM operation_vente_mobile o
+                 JOIN vente v ON v.id = o.vente_id
+                 LEFT JOIN utilisateur u ON u.id = v.utilisateur_id
+                WHERE o.id_local = ?`
+            : 'SELECT u.id_local AS vendeur_id_local FROM vente v LEFT JOIN utilisateur u ON u.id = v.utilisateur_id WHERE v.id_local = ?',
+          item.id_local,
         );
-        if (sale?.vendeur_id_local !== abonnement.droit.membre.id_local) continue;
+        if (sale?.vendeur_id_local !== membre.id_local) continue;
       }
       pending.push(item);
     }
@@ -539,12 +570,15 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
         method: 'POST',
         body: JSON.stringify(await construirePayload(pending)),
       });
-      const traites = [...(push.appliques ?? []), ...(push.ignores ?? [])];
+      const envoyes = new Set(pending.map(item => `${item.type_objet}:${item.id_local}`));
+      const traites = [...(push.appliques ?? []), ...(push.ignores ?? [])]
+        .filter(item => envoyes.has(`${item.type}:${item.id_local}`));
       await dansTransaction(async () => {
         const confirmes = new Set(traites.map((item) => `${item.type}:${item.id_local}`));
         for (const item of traites) {
           await executer(
-            'DELETE FROM sync_outbox WHERE type_objet = ? AND id_local = ?',
+            // marquerChangement remet PENDING si une edition a eu lieu pendant HTTP.
+            "DELETE FROM sync_outbox WHERE type_objet = ? AND id_local = ? AND statut = 'SENDING'",
             item.type,
             item.id_local,
           );
@@ -557,7 +591,7 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
           await executer(
             `UPDATE sync_outbox
                 SET statut = 'FAILED', derniere_erreur = ?
-              WHERE type_objet = ? AND id_local = ?`,
+              WHERE type_objet = ? AND id_local = ? AND statut = 'SENDING'`,
             'Aucun accuse de reception du serveur.',
             item.type_objet,
             item.id_local,
@@ -571,6 +605,7 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
     let cursor = await lireParam(CLE_CURSOR);
     let recus = 0;
     let aSuivre = false;
+    let attenteLocale = 0;
     do {
       const cursorAvant = cursor;
       const chemin = cursor
@@ -580,17 +615,22 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
       if (!pull.cursor || (pull.has_more && pull.cursor === cursorAvant)) {
         throw new SynchronisationImpossible('Le serveur a renvoye un curseur de synchronisation invalide.');
       }
-      recus += await appliquerPull(pull);
+      const application = await appliquerPull(pull);
+      attenteLocale = application.enAttente;
+      if (attenteLocale > 0) break;
+      recus += application.recus;
       cursor = pull.cursor;
       aSuivre = Boolean(pull.has_more);
     } while (aSuivre);
-    await ecrireParam(CLE_DERNIER_PULL, maintenant());
+    if (!attenteLocale) await ecrireParam(CLE_DERNIER_PULL, maintenant());
     await ecrireParam(CLE_DERNIER_NOMBRE_PUSH, String(pousses));
     await ecrireParam(CLE_DERNIER_NOMBRE_PULL, String(recus));
-    await ecrireParam(CLE_DERNIER_SUCCES, maintenant());
+    if (!attenteLocale) await ecrireParam(CLE_DERNIER_SUCCES, maintenant());
     await ecrireParam(
       CLE_DERNIERE_ERREUR,
-      bloquees > 0
+      attenteLocale > 0
+        ? `${attenteLocale} operation(s) en attente. Les donnees locales sont conservees jusqu'a confirmation du serveur.`
+        : bloquees > 0
         ? `${bloquees} operation(s) restent en attente : leur fonction metier n'est pas encore modifiable sur cette version mobile.`
         : '',
     );
@@ -685,6 +725,7 @@ async function construirePayload(pending: LigneOutbox[]) {
     clients: await lireClients(ids('client')),
     fournisseurs: await lireFournisseurs(ids('fournisseur')),
     ventes: await lireVentes(ids('vente')),
+    operations_vente: await lireOperationsVente(ids('operation_vente')),
     echanges: await lireEchanges(ids('echange')),
     mouvements: await lireMouvements(ids('mouvement')),
     achats: await lireAchats(ids('achat')),
@@ -869,33 +910,64 @@ async function lireFournisseurs(ids: string[]): Promise<FournisseurSync[]> {
   );
 }
 
-async function lireVentes(ids: string[]): Promise<VenteSync[]> {
+async function lireOperationsVente(ids: string[]): Promise<OperationVenteSync[]> {
   if (ids.length === 0) return [];
-  const ventes = await lireTout<VenteSync & { id: number }>(
-    `SELECT v.id, v.id_local, v.numero, c.id_local AS client_id_local,
-            u.id_local AS vendeur_id_local,
-            v.date_vente, v.total, v.montant_paye, v.mode_paiement,
-            v.statut, v.benefice_total
-       FROM vente v
-       LEFT JOIN client c ON c.id = v.client_id
+  return lireTout<OperationVenteSync>(
+    `SELECT o.id_local, v.id_local AS vente_id_local,
+            u.id_local AS vendeur_id_local, o.nature, o.montant,
+            o.mode_paiement, o.motif, o.date_creation
+       FROM operation_vente_mobile o
+       JOIN vente v ON v.id = o.vente_id
        LEFT JOIN utilisateur u ON u.id = v.utilisateur_id
-      WHERE v.id_local IN (${placeholders(ids)})`,
+      WHERE o.id_local IN (${placeholders(ids)})
+      ORDER BY o.date_creation, o.rowid`,
     ...ids,
   );
-  for (const vente of ventes) {
-    vente.lignes = await lireTout<LigneVenteSync>(
-      `SELECT l.ligne_serveur_id,
-              p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
-              l.libelle, l.unite, l.facteur, l.quantite, l.quantite_base,
-              l.prix_unitaire, l.cout_unitaire, l.total, l.benefice_total
-         FROM ligne_vente l
-         JOIN produit p ON p.id = l.produit_id
-         LEFT JOIN variante_produit vp ON vp.id = l.variante_id
-        WHERE l.vente_id = ?`,
-      vente.id,
+}
+
+/** Envoi initial fige : les paiements ulterieurs voyagent en evenements distincts. */
+async function lireVentes(ids: string[]): Promise<VenteSync[]> {
+  if (ids.length === 0) return [];
+  // Le solde, son journal et les lignes doivent provenir du même état validé.
+  return dansTransaction(async () => {
+    const ventes = await lireTout<VenteSync & { id: number }>(
+      `SELECT v.id, v.id_local, v.numero, c.id_local AS client_id_local,
+              u.id_local AS vendeur_id_local,
+              v.date_vente, v.total, v.montant_paye, v.mode_paiement,
+              v.statut, v.benefice_total
+         FROM vente v
+         LEFT JOIN client c ON c.id = v.client_id
+         LEFT JOIN utilisateur u ON u.id = v.utilisateur_id
+        WHERE v.id_local IN (${placeholders(ids)})`,
+      ...ids,
     );
-  }
-  return ventes;
+    for (const vente of ventes) {
+      const reglements = await lirePremier<{ total_reglements: number | null }>(
+        `SELECT SUM(montant) AS total_reglements
+           FROM operation_vente_mobile WHERE vente_id = ? AND nature = 'REGLEMENT'`,
+        vente.id,
+      );
+      const payeInitial = nombre(vente.montant_paye) - (reglements?.total_reglements ?? 0);
+      if (!Number.isSafeInteger(payeInitial) || payeInitial < 0 || payeInitial > nombre(vente.total)) {
+        throw new SynchronisationImpossible('Le paiement initial de la vente est incoherent.');
+      }
+      vente.montant_paye = payeInitial;
+      vente.statut = payeInitial >= nombre(vente.total) ? 'payee'
+        : payeInitial > 0 ? 'partielle' : 'impayee';
+      vente.lignes = await lireTout<LigneVenteSync>(
+        `SELECT l.ligne_serveur_id,
+                p.id_local AS produit_id_local, vp.id_local AS variante_id_local,
+                l.libelle, l.unite, l.facteur, l.quantite, l.quantite_base,
+                l.prix_unitaire, l.cout_unitaire, l.total, l.benefice_total
+           FROM ligne_vente l
+           JOIN produit p ON p.id = l.produit_id
+           LEFT JOIN variante_produit vp ON vp.id = l.variante_id
+          WHERE l.vente_id = ?`,
+        vente.id,
+      );
+    }
+    return ventes;
+  });
 }
 
 async function lireEchanges(ids: string[]): Promise<EchangeSync[]> {
@@ -1065,9 +1137,17 @@ async function lireBoutique(): Promise<BoutiqueSync> {
   };
 }
 
-async function appliquerPull(pull: PullSync): Promise<number> {
+async function appliquerPull(pull: PullSync): Promise<{ recus: number; enAttente: number }> {
   let recus = 0;
+  let enAttente = 0;
   await dansTransaction(async () => {
+    // Les stocks serveur sont des totaux absolus. Un pull avec des ecritures
+    // locales non acquittees effacerait leurs effets (vente, inventaire, etc.).
+    // Reporter tout le lot ET son curseur permet de le rejouer sans rien perdre.
+    enAttente = (await lirePremier<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM sync_outbox WHERE statut != 'SYNCED'",
+    ))?.n ?? 0;
+    if (enAttente > 0) return;
     for (const produit of pull.produits ?? []) {
       await appliquerProduit(produit);
       recus++;
@@ -1130,7 +1210,7 @@ async function appliquerPull(pull: PullSync): Promise<number> {
     // a jour : le prochain cycle reprendra exactement le meme lot.
     await ecrireParam(CLE_CURSOR, pull.cursor);
   });
-  return recus;
+  return { recus, enAttente };
 }
 
 async function appliquerReferentielVariantes(
@@ -1393,6 +1473,19 @@ async function appliquerVente(v: VenteSync): Promise<void> {
     'SELECT id FROM vente WHERE id_local = ?',
     v.id_local,
   );
+  if (existe) {
+    // Un pull ne doit pas ecraser un encaissement/une annulation qui attend
+    // encore son ACK, meme si la boutique ou le role est devenu non inscriptible.
+    const attente = await lirePremier<{ id: number }>(
+      `SELECT id FROM sync_outbox
+        WHERE (type_objet = 'vente' AND id_local = ?)
+           OR (type_objet = 'operation_vente' AND id_local IN
+               (SELECT id_local FROM operation_vente_mobile WHERE vente_id = ?))
+        LIMIT 1`,
+      v.id_local, existe.id,
+    );
+    if (attente) return;
+  }
   if (v.supprime_le) {
     if (existe) await executer('DELETE FROM vente WHERE id = ?', existe.id);
     return;

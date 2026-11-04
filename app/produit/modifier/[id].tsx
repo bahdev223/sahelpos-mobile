@@ -155,23 +155,25 @@ async function mettreAJourProduit(identifiant: number, valide: ProduitValide): P
         su.prixGros,
       );
     }
+    await marquerChangement('produit', existant.id_local);
   });
-  await marquerChangement('produit', existant.id_local);
 }
 
 export async function desactiverProduit(identifiant: number): Promise<void> {
   const db = await obtenirBase();
-  const existant = await db.getFirstAsync<{ id_local: string }>(
-    'SELECT id_local FROM produit WHERE id = ?',
-    identifiant,
-  );
-  if (!existant) throw new Error('Produit introuvable.');
-  await db.runAsync(
-    'UPDATE produit SET actif = 0, date_modification = ? WHERE id = ?',
-    new Date().toISOString(),
-    identifiant,
-  );
-  await marquerChangement('produit', existant.id_local);
+  await db.withTransactionAsync(async () => {
+    const existant = await db.getFirstAsync<{ id_local: string }>(
+      'SELECT id_local FROM produit WHERE id = ?',
+      identifiant,
+    );
+    if (!existant) throw new Error('Produit introuvable.');
+    await db.runAsync(
+      'UPDATE produit SET actif = 0, date_modification = ? WHERE id = ?',
+      new Date().toISOString(),
+      identifiant,
+    );
+    await marquerChangement('produit', existant.id_local);
+  });
 }
 
 /** Suppression definitive : emporte les sous-unites et tout l'historique de stock. */

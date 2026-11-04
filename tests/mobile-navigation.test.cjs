@@ -39,7 +39,7 @@ test('vendeur: ventes personnelles et clients accessibles, gestion interdite', (
 });
 test('menus de tous les secteurs: groupes métier stables et routes uniques', () => {
   for (const secteur of ['COMMERCE_GENERAL','HABILLEMENT','CEREALES_VRAC','ELECTRICITE','QUINCAILLERIE',
-    'ELECTRONIQUE','FRIPERIE','COSMETIQUE','PIECES_DETACHEES']) {
+    'ELECTRONIQUE','FRIPERIE','COSMETIQUE','PIECES_DETACHEES','ALIMENTATION','AUTRE']) {
     for (const role of ['admin','gerant','vendeur']) {
       const groupes = navigation.construireNavigationMobile(secteur, role, [
         'VARIANT_EXCHANGE', 'PURCHASE_MATRIX',
@@ -78,6 +78,19 @@ test('l’écran Menu et le tiroir consomment le même registre', () => {
   assert.match(lire('src/ui/tiroir.tsx'), /construireNavigationMobile\(/);
   assert.doesNotMatch(lire('src/ui/tiroir.tsx'), /groupe\.titre === 'Gestion'/);
   assert.match(lire('app/(tabs)/_layout.tsx'), /name="menu"/);
+});
+
+test('technical profiles open the inventory that counts exact variants', () => {
+  for (const secteur of ['ELECTRICITE', 'QUINCAILLERIE']) {
+    const all = entries(navigation.construireNavigationMobile(secteur, 'gerant', ['PRODUCT_VARIANTS']));
+    assert.equal(all.find(e => e.id === 'inventaire').chemin, `/${secteur.toLowerCase()}/inventaire`);
+  }
+});
+
+test('secondary menu omits tab duplicates but retains history and settings', () => {
+  const all = entries(navigation.navigationSecondaire(navigation.construireNavigationMobile('COMMERCE_GENERAL', 'admin', [])));
+  for (const id of ['caisse','produits','stock','nouvel-achat']) assert.ok(!all.some(e => e.id === id));
+  for (const id of ['ventes','clients','achats','imprimante','synchronisation']) assert.ok(all.some(e => e.id === id));
 });
 test('détail de vente vendeur: contrôle de propriété et bénéfice/annulation masqués', () => {
   assert.match(lire('app/vente/[id].tsx'), /v\.utilisateurId !== utilisateur\.id/);

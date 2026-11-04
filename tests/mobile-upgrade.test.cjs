@@ -86,7 +86,7 @@ function donnees(db) {
   return Object.fromEntries(['utilisateur', 'vente', 'ligne_vente', 'mouvement_stock', 'sync_outbox', 'parametre', 'produit']
     .map((table) => [table, db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all()
       .map((row) => Object.fromEntries(Object.entries(row)
-        .filter(([key]) => !['variante_id', 'ligne_serveur_id', 'marque', 'reference_fabricant', 'prix_gros'].includes(key))))]));
+        .filter(([key]) => !['empreinte_saisie', 'variante_id', 'ligne_serveur_id', 'marque', 'reference_fabricant', 'prix_gros'].includes(key))))]));
 }
 
 test('upgrade v9 preserves PIN, licence, unsynced sales, stock and durable photo paths', async () => {
@@ -98,6 +98,7 @@ test('upgrade v9 preserves PIN, licence, unsynced sales, stock and durable photo
     assert.equal(db.prepare('PRAGMA user_version').get().user_version, schema.SCHEMA_VERSION);
     assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), []);
     assert.equal(db.prepare('PRAGMA integrity_check').get().integrity_check, 'ok');
+    assert.equal(db.prepare('SELECT empreinte_saisie FROM vente').get().empreinte_saisie, '');
     db.exec(`INSERT INTO variante_produit (id_local, produit_id, sku) VALUES ('variant-upgrade', 1, 'RECETTE-M');
       UPDATE ligne_vente SET variante_id = 1 WHERE vente_id = 1;`);
     assert.equal(db.prepare('SELECT variante_id FROM ligne_vente').get().variante_id, 1);

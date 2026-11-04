@@ -106,6 +106,7 @@ export function Bouton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={sousTitre ? `${titre}. ${sousTitre}` : titre}
       accessibilityState={{ disabled: inactif, busy: enCours }}
       disabled={inactif}
       onPress={onPress}
@@ -123,11 +124,10 @@ export function Bouton({
       {enCours ? (
         <ActivityIndicator color={teinte} />
       ) : (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, maxWidth: '100%' }}>
           {icone}
-          <View>
+          <View style={{ flexShrink: 1, minWidth: 0 }}>
           <Text
-            numberOfLines={1}
             style={[
               stylesBouton.titre,
               grand && stylesBouton.titreGrand,
@@ -229,6 +229,8 @@ export function Champ({
       {label ? <Text style={stylesChamp.label}>{label}</Text> : null}
       <View>
         <TextInput
+          accessibilityLabel={label || placeholder}
+          accessibilityHint={erreur || aide}
           value={valeur}
           onChangeText={onChangeText}
           placeholder={placeholder}
@@ -271,7 +273,7 @@ export function Champ({
         ) : null}
       </View>
       {erreur ? (
-        <Text style={stylesChamp.erreur}>{erreur}</Text>
+        <Text accessibilityLiveRegion="polite" accessibilityRole="alert" style={stylesChamp.erreur}>{erreur}</Text>
       ) : aide ? (
         <Text style={stylesChamp.aide}>{aide}</Text>
       ) : null}
@@ -387,9 +389,10 @@ export function ListeVide({
 }
 
 export function Chargement({ message = 'Chargement...' }: { message?: string }) {
+  const accent = useAccent();
   return (
-    <View style={stylesEtat.bloc}>
-      <ActivityIndicator size="large" color={couleurs.primaire} />
+    <View accessibilityState={{ busy: true }} accessibilityLiveRegion="polite" style={stylesEtat.bloc}>
+      <ActivityIndicator size="large" color={accent.primaire} />
       <Text style={[stylesEtat.message, stylesEtat.messageChargement]}>
         {message}
       </Text>
@@ -406,12 +409,12 @@ export interface ProprietesErreur {
 
 export function Erreur({
   message,
-  titre = 'Quelque chose a echoue',
+  titre = 'Chargement impossible',
   onReessayer,
   style,
 }: ProprietesErreur) {
   return (
-    <View style={[stylesEtat.bloc, style]}>
+    <View accessibilityLiveRegion="polite" style={[stylesEtat.bloc, style]}>
       <View style={stylesEtat.pastilleErreur}>
         <Text style={stylesEtat.signeErreur}>!</Text>
       </View>

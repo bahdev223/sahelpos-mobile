@@ -32,6 +32,8 @@ export interface ArticlePanier {
 }
 
 export interface DemandeVente {
+  /** Stable pendant toute tentative/reprise du meme encaissement. */
+  cleIdempotence?: string;
   articles: ArticlePanier[];
   modePaiement: ModePaiement;
   montantPaye: number;
@@ -120,126 +122,162 @@ export async function enregistrerVente(demande: DemandeVente): Promise<ResultatV
   }
   const beneficeTotal = lignes.reduce((s, l) => s + l.beneficeTotal, 0);
   const maintenant = new Date().toISOString();
+  const idLocal = demande.cleIdempotence ?? genererIdLocal();
+  const empreinte = JSON.stringify([
+    demande.utilisateurId ?? null, demande.clientId ?? null,
+    demande.modePaiement, demande.montantPaye,
+    lignes.map((ligne, index) => [ligne.produitId, demande.articles[index].variante?.id ?? null,
+      ligne.unite, ligne.facteur, ligne.quantite, ligne.prixUnitaire, ligne.coutUnitaire, ligne.libelle]),
+  ]);
 
   let resultat: ResultatVente | null = null;
 
-  await db.withTransactionAsync(async () => {
-    // Le stock est relu DANS la transaction : le lire avant laisserait une
-    // fenetre ou deux ventes simultanees passeraient le meme article.
-    const demandesParProduit = new Map<number, number>();
-    const demandesParVariante = new Map<number, { quantite: number; nom: string }>();
-    for (let i = 0; i < lignes.length; i++) {
-      const ligne = lignes[i];
-      const article = demande.articles[i];
-      if (article.variante) {
-        const courant = demandesParVariante.get(article.variante.id);
-        demandesParVariante.set(article.variante.id, {
-          quantite: (courant?.quantite ?? 0) + ligne.quantiteBase,
-          nom: ligne.libelle,
-        });
-      } else {
-        demandesParProduit.set(
-          ligne.produitId,
-          (demandesParProduit.get(ligne.produitId) ?? 0) + ligne.quantiteBase,
+  try {
+    await db.withTransactionAsync(async () => {
+      if (demande.cleIdempotence) {
+        const existante = await db.getFirstAsync<{
+          id: number; numero: string; total: number; empreinte_saisie: string; statut: string;
+        }>('SELECT id, numero, total, empreinte_saisie, statut FROM vente WHERE id_local = ?', idLocal);
+        if (existante) {
+          if (existante.empreinte_saisie !== empreinte) {
+            throw new Error('Cet encaissement existe déjà avec un contenu différent. Consultez son reçu.');
+          }
+          if (existante.statut === 'annulee') throw new Error('Cette vente a déjà été annulée.');
+          resultat = { venteId: existante.id, numero: existante.numero, total: existante.total, lignes };
+          return;
+        }
+      }
+      // Le stock est relu DANS la transaction : le lire avant laisserait une
+      // fenetre ou deux ventes simultanees passeraient le meme article.
+      const demandesParProduit = new Map<number, number>();
+      const demandesParVariante = new Map<number, { quantite: number; nom: string }>();
+      for (let i = 0; i < lignes.length; i++) {
+        const ligne = lignes[i];
+        const article = demande.articles[i];
+        if (article.variante) {
+          const courant = demandesParVariante.get(article.variante.id);
+          demandesParVariante.set(article.variante.id, {
+            quantite: (courant?.quantite ?? 0) + ligne.quantiteBase,
+            nom: ligne.libelle,
+          });
+        } else {
+          demandesParProduit.set(
+            ligne.produitId,
+            (demandesParProduit.get(ligne.produitId) ?? 0) + ligne.quantiteBase,
+          );
+        }
+      }
+      for (const [produitId, quantiteDemandee] of demandesParProduit) {
+        const p = await db.getFirstAsync<{ nom: string; quantite_base: number; gestion_stock: number }>(
+          'SELECT nom, quantite_base, gestion_stock FROM produit WHERE id = ?',
+          produitId,
         );
+        if (!p) throw new Error(`Produit ${produitId} introuvable.`);
+        if (p.gestion_stock && p.quantite_base < quantiteDemandee) {
+          throw new StockInsuffisant(p.nom, quantiteDemandee, p.quantite_base);
+        }
       }
-    }
-    for (const [produitId, quantiteDemandee] of demandesParProduit) {
-      const p = await db.getFirstAsync<{ nom: string; quantite_base: number; gestion_stock: number }>(
-        'SELECT nom, quantite_base, gestion_stock FROM produit WHERE id = ?',
-        produitId,
-      );
-      if (!p) throw new Error(`Produit ${produitId} introuvable.`);
-      if (p.gestion_stock && p.quantite_base < quantiteDemandee) {
-        throw new StockInsuffisant(p.nom, quantiteDemandee, p.quantite_base);
+      for (const [varianteId, demandeVariante] of demandesParVariante) {
+        const v = await db.getFirstAsync<{ stock_actuel: number; actif: number }>(
+          'SELECT stock_actuel, actif FROM variante_produit WHERE id = ?',
+          varianteId,
+        );
+        if (!v || v.actif !== 1) throw new Error(`Variante introuvable : ${demandeVariante.nom}.`);
+        if (v.stock_actuel < demandeVariante.quantite) {
+          throw new StockInsuffisant(demandeVariante.nom, demandeVariante.quantite, v.stock_actuel);
+        }
       }
-    }
-    for (const [varianteId, demandeVariante] of demandesParVariante) {
-      const v = await db.getFirstAsync<{ stock_actuel: number; actif: number }>(
-        'SELECT stock_actuel, actif FROM variante_produit WHERE id = ?',
-        varianteId,
+
+      const numero = await genererNumero(db);
+      const vendeur = demande.utilisateurId
+        ? await db.getFirstAsync<{ nom: string | null; login: string }>(
+            'SELECT nom, login FROM utilisateur WHERE id = ?',
+            demande.utilisateurId,
+          )
+        : null;
+      const nomVendeur = vendeur ? (vendeur.nom || vendeur.login) : null;
+      const reste = total - demande.montantPaye;
+      const statut = reste <= 0 ? 'payee' : demande.montantPaye > 0 ? 'partielle' : 'impayee';
+
+      const vente = await db.runAsync(
+        `INSERT INTO vente (id_local, numero, client_id, utilisateur_id, date_vente,
+                            total, montant_paye, mode_paiement, statut, benefice_total, empreinte_saisie)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        idLocal,
+        numero,
+        demande.clientId ?? null,
+        demande.utilisateurId ?? null,
+        maintenant,
+        total,
+        demande.montantPaye,
+        demande.modePaiement,
+        statut,
+        beneficeTotal,
+        empreinte,
       );
-      if (!v || v.actif !== 1) throw new Error(`Variante introuvable : ${demandeVariante.nom}.`);
-      if (v.stock_actuel < demandeVariante.quantite) {
-        throw new StockInsuffisant(demandeVariante.nom, demandeVariante.quantite, v.stock_actuel);
-      }
-    }
+      const venteId = vente.lastInsertRowId;
 
-    const numero = await genererNumero(db);
-    const idLocal = genererIdLocal();
-    const vendeur = demande.utilisateurId
-      ? await db.getFirstAsync<{ nom: string | null; login: string }>(
-          'SELECT nom, login FROM utilisateur WHERE id = ?',
-          demande.utilisateurId,
-        )
-      : null;
-    const nomVendeur = vendeur ? (vendeur.nom || vendeur.login) : null;
-    const reste = total - demande.montantPaye;
-    const statut = reste <= 0 ? 'payee' : demande.montantPaye > 0 ? 'partielle' : 'impayee';
-
-    const vente = await db.runAsync(
-      `INSERT INTO vente (id_local, numero, client_id, utilisateur_id, date_vente,
-                          total, montant_paye, mode_paiement, statut, benefice_total)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      idLocal,
-      numero,
-      demande.clientId ?? null,
-      demande.utilisateurId ?? null,
-      maintenant,
-      total,
-      demande.montantPaye,
-      demande.modePaiement,
-      statut,
-      beneficeTotal,
-    );
-    const venteId = vente.lastInsertRowId;
-
-    for (let i = 0; i < lignes.length; i++) {
-      const l = lignes[i];
-      const article = demande.articles[i];
-      await db.runAsync(
-        `INSERT INTO ligne_vente (vente_id, produit_id, variante_id, libelle, unite, facteur,
-                                  quantite, quantite_base, prix_unitaire,
-                                  cout_unitaire, total, benefice_total)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        venteId, l.produitId, article.variante?.id ?? null, l.libelle, l.unite, l.facteur,
-        l.quantite, l.quantiteBase, l.prixUnitaire,
-        l.coutUnitaire, l.total, l.beneficeTotal,
-      );
-
-      const avant = await db.getFirstAsync<{ quantite_base: number; gestion_stock: number }>(
-        'SELECT quantite_base, gestion_stock FROM produit WHERE id = ?',
-        l.produitId,
-      );
-      if (!avant?.gestion_stock) continue;
-
-      const apres = avant.quantite_base - l.quantiteBase;
-      await db.runAsync(
-        'UPDATE produit SET quantite_base = ?, date_modification = ? WHERE id = ?',
-        apres, maintenant, l.produitId,
-      );
-      if (article.variante) {
+      for (let i = 0; i < lignes.length; i++) {
+        const l = lignes[i];
+        const article = demande.articles[i];
         await db.runAsync(
-          'UPDATE variante_produit SET stock_actuel = stock_actuel - ?, date_modification = ? WHERE id = ?',
-          l.quantiteBase, maintenant, article.variante.id,
+          `INSERT INTO ligne_vente (vente_id, produit_id, variante_id, libelle, unite, facteur,
+                                    quantite, quantite_base, prix_unitaire,
+                                    cout_unitaire, total, benefice_total)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          venteId, l.produitId, article.variante?.id ?? null, l.libelle, l.unite, l.facteur,
+          l.quantite, l.quantiteBase, l.prixUnitaire,
+          l.coutUnitaire, l.total, l.beneficeTotal,
+        );
+
+        const avant = await db.getFirstAsync<{ quantite_base: number; gestion_stock: number }>(
+          'SELECT quantite_base, gestion_stock FROM produit WHERE id = ?',
+          l.produitId,
+        );
+        if (!avant?.gestion_stock) continue;
+
+        const apres = avant.quantite_base - l.quantiteBase;
+        const stockVarianteAvant = article.variante
+          ? (await db.getFirstAsync<{ stock_actuel: number }>(
+              'SELECT stock_actuel FROM variante_produit WHERE id = ?', article.variante.id,
+            ))!.stock_actuel
+          : null;
+        await db.runAsync(
+          'UPDATE produit SET quantite_base = ?, date_modification = ? WHERE id = ?',
+          apres, maintenant, l.produitId,
+        );
+        if (article.variante) {
+          await db.runAsync(
+            'UPDATE variante_produit SET stock_actuel = stock_actuel - ?, date_modification = ? WHERE id = ?',
+            l.quantiteBase, maintenant, article.variante.id,
+          );
+        }
+        await db.runAsync(
+          `INSERT INTO mouvement_stock (id_local, produit_id, variante_id, nature, source_operation, quantite,
+                                        unite, quantite_base, stock_avant, stock_apres,
+                                        prix_unitaire, reference, motif, utilisateur, date_mouvement)
+           VALUES (lower(hex(randomblob(16))), ?, ?, 'SORTIE', 'VENTE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          l.produitId, article.variante?.id ?? null, l.quantite, l.unite, -l.quantiteBase,
+          stockVarianteAvant ?? avant.quantite_base,
+          stockVarianteAvant !== null ? stockVarianteAvant - l.quantiteBase : apres,
+          l.prixUnitaire, numero, `Vente ${numero}`, nomVendeur, maintenant,
         );
       }
-      await db.runAsync(
-        `INSERT INTO mouvement_stock (id_local, produit_id, variante_id, nature, source_operation, quantite,
-                                      unite, quantite_base, stock_avant, stock_apres,
-                                      prix_unitaire, reference, motif, utilisateur, date_mouvement)
-         VALUES (lower(hex(randomblob(16))), ?, ?, 'SORTIE', 'VENTE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        l.produitId, article.variante?.id ?? null, l.quantite, l.unite, l.quantiteBase,
-        article.variante ? article.variante.stockActuel : avant.quantite_base,
-        article.variante ? article.variante.stockActuel - l.quantiteBase : apres,
-        l.prixUnitaire, numero, `Vente ${numero}`, nomVendeur, maintenant,
-      );
-    }
 
-    resultat = { venteId, numero, total, lignes };
-    await marquerChangement('vente', idLocal);
-  });
-
+      resultat = { venteId, numero, total, lignes };
+      await marquerChangement('vente', idLocal);
+    });
+  } catch (error) {
+    await db.withTransactionAsync(async () => {
+      const enregistree = await db.getFirstAsync<{
+        id: number; numero: string; total: number; empreinte_saisie: string; statut: string;
+      }>('SELECT id, numero, total, empreinte_saisie, statut FROM vente WHERE id_local = ?', idLocal);
+      if (!enregistree || enregistree.empreinte_saisie !== empreinte || enregistree.statut === 'annulee') {
+        throw error;
+      }
+      resultat = { venteId: enregistree.id, numero: enregistree.numero, total: enregistree.total, lignes };
+    });
+  }
   if (!resultat) throw new Error("La vente n'a pas pu etre enregistree.");
 
   // Le type est reaffirme ici : `resultat` est affecte DANS la transaction,

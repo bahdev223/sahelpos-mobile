@@ -16,6 +16,8 @@ let base: SQLite.SQLiteDatabase | null = null;
 let baseNative: SQLite.SQLiteDatabase | null = null;
 let ouverture: Promise<SQLite.SQLiteDatabase> | null = null;
 let reprise: Promise<void> | null = null;
+let transactionsActives = 0;
+let fileTransactions: Promise<unknown> = Promise.resolve();
 
 /** Retourne la base, en l'ouvrant et en la migrant au premier appel. */
 export async function obtenirBase(): Promise<SQLite.SQLiteDatabase> {
@@ -58,8 +60,8 @@ async function ouvrirNativeEtMigrer(): Promise<SQLite.SQLiteDatabase> {
 
 /** Certaines versions Android peuvent perdre le handle natif apres une mise
  * en veille ou une pression memoire. Cette erreur du bridge ne signifie pas
- * que les donnees SQLite sont perdues : on rouvre le handle et on rejoue UNE
- * fois la requete. Les autres erreurs SQL restent visibles normalement. */
+ * que les donnees SQLite sont perdues. Seules les lectures peuvent etre
+ * rejouees : le bridge peut echouer apres validation d'une ecriture. */
 function erreurHandleNatif(erreur: unknown): boolean {
   const texte = erreur instanceof Error ? `${erreur.name} ${erreur.message}` : String(erreur);
   return /NativeDatabase|prepareAsync|NullPointerException/i.test(texte);
@@ -90,18 +92,49 @@ function facadeResiliente(): SQLite.SQLiteDatabase {
     get(_cible, propriete) {
       const native = baseNative as unknown as Record<PropertyKey, unknown> | null;
       const valeur = native?.[propriete];
-      if (typeof valeur !== 'function') return valeur;
+      const methodeConnue = ['runAsync', 'execAsync', 'getFirstAsync', 'getAllAsync',
+        'withTransactionAsync', 'withExclusiveTransactionAsync'].includes(String(propriete));
+      if (typeof valeur !== 'function' && !methodeConnue) return valeur;
 
-      return async (...argumentsMethode: unknown[]) => {
+      const executerMethode = async (argumentsMethode: unknown[]) => {
+        if (reprise) await reprise;
+        if (!baseNative) await reparerHandleNatif();
+        const methode = (baseNative as unknown as Record<PropertyKey, unknown>)[propriete];
+        if (typeof methode !== 'function') throw new Error('La base locale est indisponible. Réessayez.');
+        const transaction = propriete === 'withTransactionAsync' || propriete === 'withExclusiveTransactionAsync';
+        if (transaction) transactionsActives++;
+        let erreurNative: unknown;
         try {
-          return await Reflect.apply(valeur, baseNative, argumentsMethode);
+          return await Reflect.apply(methode, baseNative, argumentsMethode);
         } catch (erreur) {
           if (!erreurHandleNatif(erreur)) throw erreur;
-          await reparerHandleNatif();
-          const remplacee = (baseNative as unknown as Record<PropertyKey, unknown>)[propriete];
-          if (typeof remplacee !== 'function') throw erreur;
-          return Reflect.apply(remplacee, baseNative, argumentsMethode);
+          erreurNative = erreur;
+        } finally {
+          if (transaction) transactionsActives--;
         }
+        // Laisser la transaction native terminer son rollback avant de fermer
+        // son handle. Aucune requete de cette transaction ne repart seule.
+        if (transactionsActives > 0) throw erreurNative;
+        await reparerHandleNatif().catch(() => {});
+        const lecture = propriete === 'getFirstAsync' || propriete === 'getAllAsync';
+        // Meme une API de lecture peut executer UPDATE ... RETURNING : limiter
+        // la reprise aux SELECT, jamais aux mutations ou callbacks financiers.
+        const sql = argumentsMethode[0];
+        if (!lecture || typeof sql !== 'string' || !/^\s*SELECT\b/i.test(sql)) throw erreurNative;
+        const remplacee = (baseNative as unknown as Record<PropertyKey, unknown> | null)?.[propriete];
+        if (typeof remplacee !== 'function') throw erreurNative;
+        return Reflect.apply(remplacee, baseNative, argumentsMethode);
+      };
+      return (...argumentsMethode: unknown[]) => {
+        if (propriete !== 'withTransactionAsync' && propriete !== 'withExclusiveTransactionAsync') {
+          return executerMethode(argumentsMethode);
+        }
+        // Expo partage une connexion : BEGIN/ROLLBACK concurrents ne doivent
+        // jamais s'entremeler. Le rejet d'un lot libere aussi la file.
+        // Les callbacks ne doivent pas imbriquer une autre transaction.
+        const operation = fileTransactions.then(() => executerMethode(argumentsMethode));
+        fileTransactions = operation.catch(() => {});
+        return operation;
       };
     },
   });

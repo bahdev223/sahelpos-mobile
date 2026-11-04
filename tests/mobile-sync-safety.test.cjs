@@ -18,7 +18,7 @@ function chargerSynchronisation(options = {}) {
     lirePremier: async (sql, ...args) => {
       const cle = args[0];
       if (sql.includes('FROM parametre')) return { valeur: parametres.get(cle) ?? null };
-      if (sql.includes('FROM sync_outbox')) return { n: 2 };
+      if (sql.includes('FROM sync_outbox')) return { n: options.pendingCount ?? 0 };
       if (sql.includes('FROM vente WHERE id_local')) return null;
       if (sql.includes('FROM produit WHERE id_local')) return options.produit ?? null;
       if (sql.includes('FROM mouvement_stock WHERE id_local')) return null;
@@ -67,9 +67,10 @@ test('a linked phone never clears local data to switch to another shop', async (
   assert.equal(mutations.some(({ sql }) => /DELETE FROM (sync_outbox|vente|utilisateur)/i.test(sql)), false);
 });
 
-test('a changed commerce profile keeps blocked writes pending while allowing pull', async () => {
+test('a changed commerce profile keeps blocked writes pending without applying remote stock', async () => {
   const { synchroniser, mutations } = chargerSynchronisation({
     jeton: 'test-token',
+    pendingCount: 1,
     abonnement: {
       peutEcrire: true,
       message: 'Profil partiel.',

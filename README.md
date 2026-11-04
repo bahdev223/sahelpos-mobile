@@ -1,5 +1,7 @@
 # SahelPOS Mobile
 
+État du 4 novembre : [stabilisation, matrice des 11 profils et recette restante](docs/agents/STABILISATION_ANDROID_2026-11-04.md). Correctifs développés et testés automatiquement ; livraison commerciale non validée.
+
 Caisse Android **offline-first** de SahelPOS, en React Native / Expo.
 
 Version source actuelle : **1.3.1** (`versionCode 10`).

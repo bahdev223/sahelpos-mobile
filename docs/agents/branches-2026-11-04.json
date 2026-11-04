@@ -1,0 +1,263 @@
+{
+  "date": "2026-11-04",
+  "sahelpos_mobile": [
+    {
+      "name": "codex/accounts-qr-stable-20261007",
+      "sha": "56f2390b2133b577d07e5de379f2a58e92d8fa5f"
+    },
+    {
+      "name": "codex/android-harmonisation-20261101",
+      "sha": "41e167f6ec57a5d2983f64d656c3391c362d0bc8"
+    },
+    {
+      "name": "codex/inscription-mobile-deux-etapes",
+      "sha": "97bd716ca1c69da5ed0fe14ca14c7efa8a48668e"
+    },
+    {
+      "name": "codex/sahelpos-consolidation-20261008",
+      "sha": "d0f77201fda02362d72ae2cdd090b585b83f3204"
+    },
+    {
+      "name": "feat/cereales-vrac",
+      "sha": "4b13e5fdfbffdff738c9f318507d2e8f93b6f33c"
+    },
+    {
+      "name": "feat/electricite-commerce-general",
+      "sha": "db3b5f29ea3114a9886ea7c12a62b1b00633891a"
+    },
+    {
+      "name": "feat/habillement-android-100",
+      "sha": "9e2a1ee60782a8ec7db71d88fc98c50e568f1bfa"
+    },
+    {
+      "name": "feat/habillement-mobile-foundations",
+      "sha": "33472104ce364d9d941010d8e6219fa262d728db"
+    },
+    {
+      "name": "feat/mobile-commerce-profiles",
+      "sha": "eb545f8a4ffaf0c825e4ad53d2cc0968cde9ae79"
+    },
+    {
+      "name": "feat/navigation-unifiee-mobile-20261009",
+      "sha": "380c73686684fe053fd758d9612205500e5de88f"
+    },
+    {
+      "name": "feat/quincaillerie-profile",
+      "sha": "cdbde6119c592f3f3b8192ad715bd14f64177052"
+    },
+    {
+      "name": "fix/habillement-mobile-integrity",
+      "sha": "e8d0d53bb0eba396d921c5ad787320e79f9de98f"
+    },
+    {
+      "name": "fix/mobile-131-habillement",
+      "sha": "9e389bc88f188c8e8e37e76b50ace2e6d8f5bb1c"
+    },
+    {
+      "name": "fix/mobile-stock-integrity-20261103",
+      "sha": "a0f098698b9fad3f24527edc3d5a59d62881d514"
+    },
+    {
+      "name": "master",
+      "sha": "c9409c8a39e1409e04ba5c72b86b1082c70b5ed1"
+    },
+    {
+      "name": "release/consolidation-sahelpos-20261031",
+      "sha": "b289f72fceb38192a229ebf5afdc13fe32ad8d1a"
+    },
+    {
+      "name": "release/harmonisation-commerciale-20261013",
+      "sha": "38a83d4fcf644bf93a9cc379a36ab44d276892ac"
+    },
+    {
+      "name": "release/stable-accounts-qr-20261007",
+      "sha": "eb31eade5b91b749a8f29bf63b1c0720a0c3c689"
+    }
+  ],
+  "sahelpos_web": [
+    {
+      "name": "ci/validate-quincaillerie-main",
+      "sha": "7e1f783e70411559d851eac8effe1cd2de2ba6bc"
+    },
+    {
+      "name": "ci/validate-quincaillerie-main-v2",
+      "sha": "d695c1d0514504e6251f589cdfd9e79e5aed5a63"
+    },
+    {
+      "name": "ci/validate-quincaillerie-main-v3",
+      "sha": "c496616601d463c31c593bf44ea9a0e99685884a"
+    },
+    {
+      "name": "claude/caisse-prix-modifiable",
+      "sha": "29d4829e463c47946abf1457dcee39fb58636588"
+    },
+    {
+      "name": "claude/habillement-commande-page",
+      "sha": "96f773c0e9359e3af86ae8752f431784e3d9e68b"
+    },
+    {
+      "name": "claude/habillement-densite",
+      "sha": "44a8bed64aaffb89d144e78186fba8085bd735af"
+    },
+    {
+      "name": "claude/habillement-mouvements",
+      "sha": "46afe3b59308dd2404902952abde876ab98bba7e"
+    },
+    {
+      "name": "claude/icones-categories",
+      "sha": "1951e15f125b855f7d209a8a3bcef1f35c4b53ee"
+    },
+    {
+      "name": "claude/sahelpos-conditionnements-yl4kyk",
+      "sha": "fb361abd4806e829e0028f2827b0acb7faa74469"
+    },
+    {
+      "name": "claude/tableau-de-bord-habillement",
+      "sha": "19b9aedcbbb193f9cb2180a869b7549625ab33e1"
+    },
+    {
+      "name": "codex/accounts-qr-stable-20261007",
+      "sha": "f0da86824aa92e81ce598dcc6f1c51feff6edead"
+    },
+    {
+      "name": "codex/commerce-capability-activation",
+      "sha": "517b8759276112c13f596bebd5503f2ca41afb5e"
+    },
+    {
+      "name": "codex/ecosystem-operator-role-20261009",
+      "sha": "9275977fd03f937c88108ec9714ec860ead21395"
+    },
+    {
+      "name": "codex/inscription-deux-etapes",
+      "sha": "9f85aa4677cfe48a47cc334b1f2489dae97c7a5c"
+    },
+    {
+      "name": "codex/invitations-consentement-20261009",
+      "sha": "651faa4eb74c3417b72a734d28952d64ab1f9a49"
+    },
+    {
+      "name": "codex/parametres-saas",
+      "sha": "1ae4a62af85e83e5b16a273111b65ec0432027b1"
+    },
+    {
+      "name": "codex/sahelpos-consolidation-20261008",
+      "sha": "31c217c551201719742ac3a1eb5eb5516d170861"
+    },
+    {
+      "name": "codex/sahelpos-payments-central-20261102",
+      "sha": "d88974301cfa973d4879f4252de628bb2dde97b5"
+    },
+    {
+      "name": "commercial/control-center-v1-20261009",
+      "sha": "0b13b2c4e7305725f2cdafba1d9a76c4be310752"
+    },
+    {
+      "name": "feat/cereales-vrac",
+      "sha": "7861ec87c1beb86ebacbf8940e44fee286841e7b"
+    },
+    {
+      "name": "feat/electricite-commerce-general",
+      "sha": "2c4f1338b9470de6918c2dd90a102a80a16435d4"
+    },
+    {
+      "name": "feat/habillement-android-100",
+      "sha": "0f3b22d610621ae7fd039d4b9c63e5586dc88cb6"
+    },
+    {
+      "name": "feat/habillement-cycle-vie-variantes",
+      "sha": "c5255690564d087d3d724042a0bba41a8f49e194"
+    },
+    {
+      "name": "feat/habillement-menu-metier-compact-20261101",
+      "sha": "70b021eb2dd980a52481fb0d19c94c5a6ef833f0"
+    },
+    {
+      "name": "feat/habillement-mobile-foundations",
+      "sha": "4f28abcdabaeca30d5a7a25d74f5483987ead38c"
+    },
+    {
+      "name": "feat/habillement-ui-suite",
+      "sha": "c71c41f9794997aa2ff06e089746389193046feb"
+    },
+    {
+      "name": "feat/invitations-liens-vitrine-20261009",
+      "sha": "1cb8b93c1dd2fa5efc7a52684c7783d7205a5997"
+    },
+    {
+      "name": "feat/mobile-habillement-sync",
+      "sha": "142406741fae719d8222bb94e849d751321529b7"
+    },
+    {
+      "name": "feat/navigation-unifiee-sahelpos-20261009",
+      "sha": "4185209e7a5be9805cdc2580a4c64d46b561924c"
+    },
+    {
+      "name": "feat/pilotage-sahelpos-outbox-20261102",
+      "sha": "68cb22102b036f435dbf36dc3ef9b500d0147be7"
+    },
+    {
+      "name": "feat/quincaillerie-profile",
+      "sha": "89f66952957499e21d63252cf47b737fd8b7351b"
+    },
+    {
+      "name": "feat/ux-concours-onboarding-nav-commandes-20261011",
+      "sha": "86aa6d0f18ff43e31b2bbb0494655d8e869d28c3"
+    },
+    {
+      "name": "fix/auth-onboarding-invitations-30m-20261011",
+      "sha": "9095526a5dc3886df5eb6343a60510e6be83f1c1"
+    },
+    {
+      "name": "fix/caisse-habillement-dialogue-compact-20261101",
+      "sha": "412514c2745d231a79d8e98545844a886822e4f2"
+    },
+    {
+      "name": "fix/habillement-compact-20261101",
+      "sha": "14ed7a30ab636e06e68d2b7324481f626f474ae4"
+    },
+    {
+      "name": "fix/habillement-compact-pages-20261101",
+      "sha": "188a2c090e7697e55c2ddd84fe898159785f396b"
+    },
+    {
+      "name": "fix/habillement-edition-navigation-caisse",
+      "sha": "c30587accf4f2daa7b38a7821691e2030949ad5f"
+    },
+    {
+      "name": "fix/habillement-navigation-v2",
+      "sha": "9311f87ab0178b4eb4abd2886296d380d257f5d9"
+    },
+    {
+      "name": "fix/habillement-sync-integrity",
+      "sha": "5aa51496e42acdf8db352b3b476a831c3920bc85"
+    },
+    {
+      "name": "fix/habillement-workflows-complets",
+      "sha": "06c2649f8c0522e4924c263e95c80ce75048a4ac"
+    },
+    {
+      "name": "fix/mobile-inventory-replay-20261103",
+      "sha": "7156d51cadca3a918681447686c09ce1c28cfbff"
+    },
+    {
+      "name": "fix/mobile-multi-depots",
+      "sha": "aaf8215e60f9e4a2c35b1a87e371ccd13b50f277"
+    },
+    {
+      "name": "fix/textes-saheldigital-20261101",
+      "sha": "d97a1ab6b827978c5081f09e195ab5ba9e5b9a95"
+    },
+    {
+      "name": "main",
+      "sha": "eee7048705a8a47f815ff05e3355cf0c0852c45c"
+    },
+    {
+      "name": "release/consolidation-sahelpos-20261031",
+      "sha": "4d43fd85790d712b15d85624f51016872bade206"
+    },
+    {
+      "name": "release/stable-accounts-qr-20261007",
+      "sha": "57a9154432fb0e2e110319dec9ccbb12753c4184"
+    }
+  ]
+}

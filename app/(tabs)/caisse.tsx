@@ -23,6 +23,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { raisonEcritureFermee } from '../../src/services/abonnement';
 import { useAccent } from '../../src/ui/accent';
+import { SelecteurVariantes } from '../../src/ui/SelecteurVariantes';
 import {
   FlatList,
   KeyboardAvoidingView,
@@ -40,6 +41,7 @@ import type { BarcodeScanningResult } from 'expo-camera';
 import { useFocusEffect } from 'expo-router';
 
 import { obtenirBase } from '../../src/db/database';
+import { genererIdLocal } from '../../src/db/repositories/base';
 import { obtenirProduit } from '../../src/db/repositories/produit';
 import {
   libelleVariante,
@@ -1025,55 +1027,14 @@ function ModaleUnite({
                 <Text style={styles.sousLabel}>
                   {referenceTechnique ? 'Caractéristiques / variante' : 'Taille / couleur'}
                 </Text>
-                <View style={styles.grilleVariantes}>
-                  {choix.variantes.map((option, index) => {
-                    const actif = index === indexVariante;
-                    const couleur = option.valeurs.find((v) => v.codeHex)?.codeHex ?? null;
-                    return (
-                      <Pressable
-                        key={option.idLocal}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: actif }}
-                        onPress={() => {
-                          setIndexVariante(index);
-                          const u = choix.unites[indexUnite] ?? choix.unites[0];
-                          const detail = prixDetailVariante(u.prix, u.facteur, option.prixOverride);
-                          const gros = u?.prixGros ?? 0;
-                          setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));
-                        }}
-                        style={[
-                          styles.varianteChoix,
-                          habillement && {
-                            borderColor: H.bordure,
-                            backgroundColor: H.surface,
-                          },
-                          actif && [
-                            styles.varianteChoixActive,
-                            habillement && { backgroundColor: H.primaire, borderColor: H.primaire },
-                          ],
-                          option.stockActuel <= 0 && styles.varianteChoixRupture,
-                        ]}
-                      >
-                        <View style={styles.varianteChoixHaut}>
-                          {couleur ? (
-                            <View style={[styles.pastilleCouleur, { backgroundColor: couleur }]} />
-                          ) : null}
-                          <Text
-                            style={[styles.varianteChoixNom, actif && styles.puceNomActive]}
-                            numberOfLines={2}
-                          >
-                            {libelleVariante(option)}
-                          </Text>
-                        </View>
-                        <Text style={[styles.varianteChoixStock, actif && styles.puceDetailActive]}>
-                          {option.stockActuel > 0
-                            ? `Stock ${formaterQuantite(option.stockActuel)}`
-                            : 'Rupture'}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                <SelecteurVariantes variantes={choix.variantes} selection={variante?.id ?? null}
+                  onSelection={(option) => {
+                    setIndexVariante(option ? choix.variantes.findIndex(v => v.id === option.id) : -1);
+                    const u = choix.unites[indexUnite] ?? choix.unites[0];
+                    const detail = prixDetailVariante(u.prix, u.facteur, option?.prixOverride);
+                    const gros = u?.prixGros ?? 0;
+                    setPrixTexte(String(tarif === 'gros' && gros > 0 ? gros : detail));
+                  }} />
               </View>
             ) : null}
 
@@ -1495,6 +1456,8 @@ function ModalePaiement({
   onTerminee: (terminee: VenteTerminee) => void;
 }) {
   const M = useStylesMode();
+  const validationEnCours = useRef(false);
+  const cleEncaissement = useRef('');
   const [mode, setMode] = useState<ModePaiement>('especes');
   const [recuTexte, setRecuTexte] = useState(String(total));
   const [clients, setClients] = useState<Client[]>([]);
@@ -1504,6 +1467,10 @@ function ModalePaiement({
 
   useEffect(() => {
     if (!visible) return;
+    // Une fermeture après erreur ne crée pas une nouvelle opération.
+    // Conserver aussi le paiement/client de la tentative à rapprocher.
+    if (cleEncaissement.current) return;
+    validationEnCours.current = false;
     setMode('especes');
     setRecuTexte(String(total));
     setRefus(null);
@@ -1530,16 +1497,21 @@ function ModalePaiement({
   }
 
   const valider = useCallback(async () => {
+    if (validationEnCours.current || blocage || panier.length === 0) return;
+    validationEnCours.current = true;
     setEnCours(true);
     setRefus(null);
     try {
+      if (!cleEncaissement.current) cleEncaissement.current = genererIdLocal();
       const resultat = await enregistrerVente({
+        cleIdempotence: cleEncaissement.current,
         articles: panier,
         modePaiement: mode,
         montantPaye,
         clientId,
         utilisateurId,
       });
+      cleEncaissement.current = '';
       onTerminee({
         resultat,
         modePaiement: mode,
@@ -1549,6 +1521,7 @@ function ModalePaiement({
         dateVente: new Date().toISOString(),
       });
     } catch (erreur) {
+      validationEnCours.current = false;
       setRefus(
         erreur instanceof StockInsuffisant
           ? erreur.message
@@ -1558,12 +1531,14 @@ function ModalePaiement({
       );
       setEnCours(false);
     }
-  }, [panier, mode, montantPaye, recu, clientId, utilisateurId, onTerminee]);
+  }, [blocage, panier, mode, montantPaye, recu, clientId, utilisateurId, onTerminee]);
+
+  const fermer = () => { if (!validationEnCours.current) onFermer(); };
 
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onFermer}>
+    <Modal visible={visible} animationType="slide" onRequestClose={fermer}>
       <SafeAreaView style={styles.ecran} edges={['top', 'bottom']}>
-        <EnteteModale titre="Encaissement" onFermer={onFermer} />
+        <EnteteModale titre="Encaissement" onFermer={fermer} />
         <KeyboardAvoidingView
           style={styles.ecran}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -1584,6 +1559,7 @@ function ModalePaiement({
                 return (
                   <Pressable
                     key={option.valeur}
+                    disabled={enCours}
                     accessibilityRole="button"
                     accessibilityState={{ selected: actif }}
                     onPress={() => {
@@ -1608,6 +1584,7 @@ function ModalePaiement({
                   valeur={recuTexte}
                   onChangeText={setRecuTexte}
                   clavier="number-pad"
+                  editable={!enCours}
                   alignerADroite
                   style={styles.champEspace}
                 />
@@ -1644,6 +1621,7 @@ function ModalePaiement({
                   valeur={recuTexte}
                   onChangeText={setRecuTexte}
                   clavier="number-pad"
+                  editable={!enCours}
                   alignerADroite
                   aide="Laissez 0 si le client ne verse rien aujourd'hui."
                   style={styles.champEspace}
@@ -1660,12 +1638,13 @@ function ModalePaiement({
             {clients.length === 0 ? (
               <Text style={styles.note}>
                 Aucun client enregistre. Les ventes a credit demandent un client
-                nomme : creez-le depuis l'onglet Plus.
+                nommé : créez-le depuis le Menu.
               </Text>
             ) : (
               <View style={styles.grilleChoix}>
                 <Pressable
-                  accessibilityRole="button"
+                  disabled={enCours}
+                    accessibilityRole="button"
                   accessibilityState={{ selected: clientId === null }}
                   onPress={() => setClientId(null)}
                   style={[styles.puce, clientId === null && styles.puceActive, clientId === null && M.actif]}
@@ -1681,7 +1660,8 @@ function ModalePaiement({
                   return (
                     <Pressable
                       key={client.id}
-                      accessibilityRole="button"
+                      disabled={enCours}
+                    accessibilityRole="button"
                       accessibilityState={{ selected: actif }}
                       onPress={() => setClientId(client.id)}
                       style={[styles.puce, actif && styles.puceActive, actif && M.actif]}

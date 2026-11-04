@@ -4,9 +4,8 @@ const { readFileSync, existsSync } = require('node:fs');
 const { resolve } = require('node:path');
 const ts = require('typescript');
 
-test('arrival offline schema is version 17 with durable child identities', () => {
+test('arrival offline schema retains durable child identities', () => {
   const schema = readFileSync(resolve(__dirname, '../src/db/schema.ts'), 'utf8');
-  assert.match(schema, /SCHEMA_VERSION = 17/);
   for (const table of ['arrivage', 'ligne_arrivage', 'frais_arrivage', 'arrivage_achat']) {
     assert.match(schema, new RegExp('CREATE TABLE IF NOT EXISTS ' + table));
   }
@@ -33,9 +32,8 @@ test('arrival service covers full offline lifecycle', () => {
   assert.match(source, /source_operation[\s\S]*'ACHAT'/);
 });
 
-test('arrival synchronization uses protocol 7 and carries arrivals', () => {
+test('arrival synchronization carries arrivals', () => {
   const source = readFileSync(resolve(__dirname, '../src/services/synchronisation.ts'), 'utf8');
-  assert.match(source, /VERSION_PROTOCOLE = '7'/);
   assert.match(source, /type TypeObjet =[\s\S]*'arrivage'/);
   assert.match(source, /arrivages:/);
   assert.match(source, /pull\.arrivages/);

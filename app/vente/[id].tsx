@@ -6,7 +6,7 @@
  * transaction. L'ecran ne fait que demander confirmation, car l'operation est
  * irreversible et se declenche souvent par erreur sur un telephone.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -39,6 +39,7 @@ import { preparerDocumentVente } from '../../src/services/document-vente';
 import { ActionsDocument } from '../../src/ui/ActionsDocument';
 import { useSession } from '../_layout';
 import { libelleUnite } from '../../src/domain/unites';
+import { genererIdLocal } from '../../src/db/repositories/base';
 
 const LIBELLE_STATUT: Record<StatutVente, string> = {
   payee: 'Payée',
@@ -80,6 +81,8 @@ export default function EcranDetailVente() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [saisieEncaissement, setSaisieEncaissement] = useState('');
   const [enCours, setEnCours] = useState(false);
+  const actionEnCours = useRef(false);
+  const reglementEnAttente = useRef<{ venteId: number; cle: string } | null>(null);
 
   const charger = useCallback(async () => {
     setErreur(null);
@@ -114,20 +117,26 @@ export default function EcranDetailVente() {
   const reste = vente ? Math.max(0, vente.total - vente.montantPaye) : 0;
 
   const encaisserReste = useCallback(async () => {
-    if (!vente) return;
+    if (!vente || actionEnCours.current) return;
     const montant = Number(saisieEncaissement.replace(',', '.'));
     if (!Number.isFinite(montant) || montant <= 0) {
       Alert.alert('Montant invalide', 'Saisissez le montant reçu du client.');
       return;
     }
+    actionEnCours.current = true;
+    if (reglementEnAttente.current?.venteId !== vente.id) {
+      reglementEnAttente.current = { venteId: vente.id, cle: genererIdLocal() };
+    }
     setEnCours(true);
     try {
-      await encaisser(vente.id, montant);
+      await encaisser(vente.id, montant, reglementEnAttente.current.cle);
+      reglementEnAttente.current = null;
       setSaisieEncaissement('');
       await charger();
     } catch (e) {
       Alert.alert('Encaissement refuse', e instanceof Error ? e.message : 'Erreur inconnue.');
     } finally {
+      actionEnCours.current = false;
       setEnCours(false);
     }
   }, [vente, saisieEncaissement, charger]);
@@ -143,6 +152,8 @@ export default function EcranDetailVente() {
           text: 'Oui, annuler',
           style: 'destructive',
           onPress: async () => {
+            if (actionEnCours.current) return;
+            actionEnCours.current = true;
             setEnCours(true);
             try {
               await annulerVente(vente.id, 'Annulée depuis le détail de la vente');
@@ -153,6 +164,7 @@ export default function EcranDetailVente() {
                 e instanceof Error ? e.message : 'Erreur inconnue.',
               );
             } finally {
+              actionEnCours.current = false;
               setEnCours(false);
             }
           },

@@ -1,13 +1,15 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Alert, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 
 import { obtenirBase } from '../../db/database';
-import { corrigerStockVariante } from '../../db/repositories/variante';
-import { BandeauEtat, Bouton, couleurs, espaces, rayons } from '../../ui/components';
+import { validerComptageVariantes } from '../../db/repositories/variante';
+import { BandeauEtat, Bouton, Chargement, couleurs, espaces, rayons } from '../../ui/components';
 import { Icone } from '../../ui/icones';
+import { lireStockCompte } from '../../domain/comptage';
+import { HABILLEMENT_MOBILE_THEME as H } from '../habillement/theme';
 
 interface LigneInventaireVariante {
   id: number;
@@ -33,25 +35,30 @@ async function chargerLignes(): Promise<LigneInventaireVariante[]> {
       ORDER BY p.nom COLLATE NOCASE, vp.sku COLLATE NOCASE`,
   );
 
-  const resultat: LigneInventaireVariante[] = [];
-  for (const variante of variantes) {
-    const valeurs = await db.getAllAsync<{ valeur_nom: string; code_hex: string | null }>(
-      `SELECT valeur_nom, code_hex
-         FROM variante_valeur
-        WHERE variante_id = ?
-        ORDER BY dimension_ordre, valeur_ordre, valeur_nom`,
-      variante.id,
-    );
-    resultat.push({
-      id: variante.id,
-      produit: variante.produit,
-      sku: variante.sku,
-      stock: variante.stock_actuel,
-      libelle: valeurs.map((v) => v.valeur_nom).join(' / ') || variante.sku,
-      couleurHex: valeurs.find((v) => v.code_hex)?.code_hex ?? null,
-    });
+  // Une seule lecture des valeurs, quel que soit le nombre de variantes.
+  const valeurs = await db.getAllAsync<{
+    variante_id: number; valeur_nom: string; code_hex: string | null;
+  }>(`SELECT vv.variante_id, vv.valeur_nom, vv.code_hex
+      FROM variante_valeur vv
+      JOIN variante_produit vp ON vp.id = vv.variante_id
+      JOIN produit p ON p.id = vp.produit_id
+      WHERE vp.actif = 1 AND p.actif = 1 AND p.gestion_stock = 1
+      ORDER BY vv.dimension_ordre, vv.valeur_ordre, vv.valeur_nom`);
+  const parVariante = new Map<number, typeof valeurs>();
+  for (const valeur of valeurs) {
+    const groupe = parVariante.get(valeur.variante_id) ?? [];
+    groupe.push(valeur);
+    parVariante.set(valeur.variante_id, groupe);
   }
-  return resultat;
+  return variantes.map((variante) => {
+    const groupe = parVariante.get(variante.id) ?? [];
+    return {
+      id: variante.id, produit: variante.produit, sku: variante.sku,
+      stock: variante.stock_actuel,
+      libelle: groupe.map((v) => v.valeur_nom).join(' / ') || variante.sku,
+      couleurHex: groupe.find((v) => v.code_hex)?.code_hex ?? null,
+    };
+  });
 }
 
 function vocabulaire(secteur: string) {
@@ -86,23 +93,39 @@ export function InventaireVariantes({
 }) {
   const router = useRouter();
   const mots = vocabulaire(secteur);
+  const accent = secteur === 'HABILLEMENT' ? H.primaire : couleurs.primaire;
+  const verrouValidation = useRef(false);
+  const [chargement, setChargement] = useState(true);
+  const [erreurChargement, setErreurChargement] = useState<string | null>(null);
   const [lignes, setLignes] = useState<LigneInventaireVariante[]>([]);
   const [saisies, setSaisies] = useState<Record<number, string>>({});
   const [recherche, setRecherche] = useState('');
   const [rafraichit, setRafraichit] = useState(false);
   const [enCours, setEnCours] = useState(false);
 
-  const charger = useCallback(async () => {
+  const charger = useCallback(async (reinitialiser = false) => {
     const data = await chargerLignes();
-    setLignes(data);
+    // Une synchronisation ne change pas la reference d'un comptage en cours.
+    setLignes((precedentes) => {
+      if (reinitialiser) return data;
+      const stocks = new Map(precedentes.map(ligne => [ligne.id, ligne.stock]));
+      return data.map(ligne => ({ ...ligne, stock: stocks.get(ligne.id) ?? ligne.stock }));
+    });
     setSaisies((actuel) => {
       const suivant: Record<number,string> = {};
-      for (const ligne of data) suivant[ligne.id] = actuel[ligne.id] ?? String(ligne.stock);
+      for (const ligne of data) suivant[ligne.id] = reinitialiser ? String(ligne.stock) : actuel[ligne.id] ?? String(ligne.stock);
       return suivant;
     });
+    setErreurChargement(null);
+    setChargement(false);
   }, []);
 
-  useFocusEffect(useCallback(() => { void charger(); }, [charger, revisionSynchronisation]));
+  useFocusEffect(useCallback(() => {
+    void charger().catch((erreur) => {
+      setChargement(false);
+      setErreurChargement(erreur instanceof Error ? erreur.message : String(erreur));
+    });
+  }, [charger, revisionSynchronisation]));
 
   const visibles = useMemo(() => {
     const q = recherche.trim().toLocaleLowerCase('fr');
@@ -114,45 +137,66 @@ export function InventaireVariantes({
   }, [lignes, recherche]);
 
   const ecarts = useMemo(() => lignes.filter((ligne) => {
-    const n = Number((saisies[ligne.id] ?? '').replace(',', '.'));
-    return Number.isFinite(n) && n >= 0 && Math.abs(n - ligne.stock) > 0.0001;
+    const n = lireStockCompte(saisies[ligne.id] ?? '');
+    return n !== null && Math.abs(n - ligne.stock) > 0.0001;
   }), [lignes, saisies]);
 
+  const invalides = lignes.some((ligne) => lireStockCompte(saisies[ligne.id] ?? '') === null);
+
   const valider = useCallback(async () => {
-    if (!ecarts.length || enCours) return;
+    if (!ecarts.length || invalides || verrouValidation.current) return;
+    verrouValidation.current = true;
     setEnCours(true);
     try {
-      for (const ligne of ecarts) {
-        const stock = Number((saisies[ligne.id] ?? '').replace(',', '.'));
-        await corrigerStockVariante(
-          ligne.id,
-          stock,
-          `Inventaire mobile - ${ligne.produit} - ${ligne.libelle}`,
-        );
-      }
-      await charger();
+      await validerComptageVariantes(ecarts.map((ligne) => ({
+        varianteId: ligne.id, stockTheorique: ligne.stock,
+        stockPhysique: lireStockCompte(saisies[ligne.id] ?? '')!,
+        motif: `Inventaire mobile - ${ligne.produit} - ${ligne.libelle}`,
+      })));
+      // Le lot est deja valide : une erreur de relecture ne doit pas suggerer
+      // a l'utilisateur de reencaisser ou de rejouer son comptage.
+      await charger(true).catch((erreur) => setErreurChargement(String(erreur)));
       Alert.alert('Inventaire enregistré', `${ecarts.length} variante(s) corrigée(s).`);
     } catch (erreur) {
-      Alert.alert('Inventaire impossible', erreur instanceof Error ? erreur.message : String(erreur));
+      Alert.alert('Inventaire impossible', erreur instanceof Error ? erreur.message : String(erreur), [
+        { text: 'Fermer', style: 'cancel' },
+        { text: 'Recharger les stocks', onPress: () => {
+          void charger(true).catch((e) => setErreurChargement(String(e)));
+        } },
+      ]);
     } finally {
+      verrouValidation.current = false;
       setEnCours(false);
     }
-  }, [charger, ecarts, enCours, saisies]);
+  }, [charger, ecarts, invalides, saisies]);
 
   const rafraichir = useCallback(async () => {
     setRafraichit(true);
     try {
       await synchroniserMaintenant();
-      await charger();
+      await charger(true);
+    } catch (erreur) {
+      setErreurChargement(erreur instanceof Error ? erreur.message : String(erreur));
     } finally {
       setRafraichit(false);
     }
   }, [charger, synchroniserMaintenant]);
 
-  return <View style={s.page}>
+  const demanderRafraichissement = () => {
+    if (enCours) return;
+    if (ecarts.length || invalides) {
+      Alert.alert('Recommencer le comptage ?', 'Les quantités saisies seront remplacées par les stocks à jour.', [
+        { text: 'Conserver', style: 'cancel' },
+        { text: 'Recharger', onPress: () => { void rafraichir(); } },
+      ]);
+    } else void rafraichir();
+  };
+
+  return <View style={[s.page, secteur === 'HABILLEMENT' && { backgroundColor: H.fond }]}>
+
     <BandeauEtat />
     <View style={s.entete}>
-      <Pressable onPress={() => router.back()} hitSlop={10} style={s.retour}>
+      <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Retour" hitSlop={10} style={s.retour}>
         <Icone nom="retour" taille={22} couleur={couleurs.texte} />
       </Pressable>
       <View style={s.enteteTextes}>
@@ -167,20 +211,22 @@ export function InventaireVariantes({
         placeholder={mots.placeholder} placeholderTextColor={couleurs.texteFaible} />
     </View>
 
+    {chargement ? <Chargement /> : null}
+    {erreurChargement ? <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={s.erreur}>{erreurChargement}</Text> : null}
     <FlatList data={visibles} keyExtractor={(item)=>String(item.id)}
       contentContainerStyle={s.liste} keyboardShouldPersistTaps="handled"
-      refreshControl={<RefreshControl refreshing={rafraichit} onRefresh={rafraichir}/>}
+      refreshControl={<RefreshControl refreshing={rafraichit} onRefresh={demanderRafraichissement}/>}
       renderItem={({item})=>{
         const saisi=saisies[item.id]??'';
-        const nombre=Number(saisi.replace(',','.'));
-        const different=Number.isFinite(nombre)&&nombre>=0&&Math.abs(nombre-item.stock)>0.0001;
+        const nombre=lireStockCompte(saisi);
+        const different=nombre!==null&&Math.abs(nombre-item.stock)>0.0001;
         return <View style={[s.carte,different&&s.carteEcart]}>
           <View style={s.ligneHaut}>
             <View style={s.identite}>
               {item.couleurHex ? <View style={[s.couleur,{backgroundColor:item.couleurHex}]}/> : null}
               <View style={s.textes}>
                 <Text style={s.produit}>{item.produit}</Text>
-                <Text style={s.variante}>{item.libelle}</Text>
+                <Text style={[s.variante, { color: accent }]}>{item.libelle}</Text>
                 <Text style={s.sku}>{item.sku}</Text>
               </View>
             </View>
@@ -189,16 +235,18 @@ export function InventaireVariantes({
           <View style={s.comptage}>
             <Text style={s.comptageLabel}>Stock physique compté</Text>
             <TextInput value={saisi} onChangeText={(texte)=>setSaisies((a)=>({...a,[item.id]:texte}))}
-              keyboardType="decimal-pad" selectTextOnFocus style={[s.champ,different&&s.champEcart]}/>
-            {different ? <Text style={s.ecart}>Écart {nombre-item.stock>0?'+':''}{Math.round((nombre-item.stock)*1000)/1000}</Text> : null}
+              keyboardType="decimal-pad" selectTextOnFocus editable={!enCours}
+              accessibilityLabel={`Stock compté : ${item.produit}, ${item.libelle}`}
+              style={[s.champ,different&&s.champEcart,nombre===null&&s.champInvalide]}/>
+            {different && nombre !== null ? <Text style={s.ecart}>Écart {nombre-item.stock>0?'+':''}{Math.round((nombre-item.stock)*1000)/1000}</Text> : null}
           </View>
         </View>;
       }}
       ListEmptyComponent={<View style={s.vide}><Text style={s.videTitre}>Aucune variante à compter</Text><Text style={s.videTexte}>{mots.vide}</Text></View>}
     />
     <View style={s.pied}><Bouton
-      titre={ecarts.length ? `Valider ${ecarts.length} écart(s)` : 'Aucun écart à valider'}
-      onPress={()=>void valider()} desactive={!ecarts.length} enCours={enCours} grand/></View>
+      titre={invalides ? 'Complétez les quantités' : ecarts.length ? `Valider ${ecarts.length} écart(s)` : 'Aucun écart à valider'}
+      onPress={()=>void valider()} desactive={!ecarts.length || invalides || chargement} enCours={enCours} grand/></View>
   </View>;
 }
 
@@ -214,8 +262,10 @@ const s=StyleSheet.create({
   identite:{flex:1,minWidth:0,flexDirection:'row',alignItems:'center',gap:espaces.s},couleur:{width:26,height:26,borderRadius:13,borderWidth:StyleSheet.hairlineWidth,borderColor:couleurs.bordure},
   textes:{flex:1,minWidth:0},produit:{fontSize:14,fontWeight:'900',color:couleurs.texte},variante:{marginTop:2,fontSize:12,fontWeight:'800',color:couleurs.primaire},
   sku:{marginTop:2,fontSize:9,color:couleurs.texteFaible},theorique:{alignItems:'flex-end'},theoriqueLabel:{fontSize:9,color:couleurs.texteFaible},theoriqueValeur:{marginTop:2,fontSize:20,fontWeight:'900',color:couleurs.texte},
-  comptage:{marginTop:espaces.m,flexDirection:'row',alignItems:'center',gap:espaces.s},comptageLabel:{flex:1,fontSize:11,color:couleurs.texteFaible,fontWeight:'700'},
+  comptage:{marginTop:espaces.m,flexDirection:'row',flexWrap:'wrap',alignItems:'center',gap:espaces.s},comptageLabel:{flex:1,fontSize:11,color:couleurs.texteFaible,fontWeight:'700'},
   champ:{width:82,minHeight:42,paddingHorizontal:espaces.s,textAlign:'right',borderRadius:rayons.s,borderWidth:1,borderColor:couleurs.bordure,backgroundColor:couleurs.fond,color:couleurs.texte,fontWeight:'900'},
+  erreur:{paddingHorizontal:espaces.m,paddingBottom:espaces.s,color:couleurs.danger},
+  champInvalide:{borderColor:couleurs.danger},
   champEcart:{borderColor:couleurs.avertissement},ecart:{minWidth:58,fontSize:11,fontWeight:'900',color:couleurs.avertissementFonce},
   vide:{padding:espaces.xl,alignItems:'center'},videTitre:{fontSize:16,fontWeight:'900',color:couleurs.texte},videTexte:{marginTop:7,textAlign:'center',color:couleurs.texteFaible,lineHeight:18},
   pied:{position:'absolute',left:0,right:0,bottom:0,padding:espaces.m,backgroundColor:couleurs.surface,borderTopWidth:1,borderTopColor:couleurs.bordure},

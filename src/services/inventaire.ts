@@ -23,6 +23,7 @@ import {
 } from '../db/repositories/base';
 import { exigerEcriture } from './abonnement';
 import { verifierStock } from './notifications';
+import { marquerChangement } from './synchronisation';
 
 export type StatutInventaire = 'BROUILLON' | 'VALIDE' | 'ANNULE';
 
@@ -185,104 +186,161 @@ export async function saisirComptage(
 export interface ResultatValidation {
   numero: string;
   produitsAjustes: number;
+  nbComptes: number;
+  nbEcarts: number;
   valeurEcarts: number;
 }
 
+/** Les saisies visibles a l'ecran sont rejouees dans la transaction de validation. */
+export interface ComptageValidation {
+  ligneId: number;
+  produitId: number;
+  stockPhysique: number | null;
+}
+
 /**
- * Applique l'inventaire.
- *
- * Tout se fait dans UNE transaction : un ajustement applique a moitie laisserait
- * un stock incoherent, et le commercant n'aurait aucun moyen de savoir ou la
- * correction s'est arretee.
- *
- * Les produits non comptes sont ignores : leur stock reste celui du systeme.
+ * Un seul moteur de validation pour l'ecran et les autres appelants.
+ * Le delta est calcule par rapport au stock fige a l'ouverture, puis applique
+ * au stock COURANT afin de ne pas effacer les ventes faites pendant le comptage.
+ * La mise a jour du produit, le journal et l'outbox sont atomiques.
  */
 export async function validerInventaire(
   inventaireId: number,
   utilisateurNom?: string,
+  comptages?: ComptageValidation[],
 ): Promise<ResultatValidation> {
-  // Le verrou est ici et non dans l'ecran : un bouton grise se
-  // contourne, une fonction qui refuse d'ecrire, non.
   await exigerEcriture('mouvements');
 
-  const inv = await exigerBrouillon(inventaireId);
-
   const resultat = await dansTransaction(async () => {
+    // Tester le statut DANS la transaction, apres avoir acquis l'acces SQLite.
+    const inv = await exigerBrouillon(inventaireId);
+
+    if (comptages) {
+      const attendues = await lireTout<{
+        id: number; produit_id: number; stock_theorique: number; prix_achat: number;
+      }>(
+        'SELECT id, produit_id, stock_theorique, prix_achat FROM ligne_inventaire WHERE inventaire_id = ?',
+        inventaireId,
+      );
+      if (comptages.length !== attendues.length) {
+        throw new Error('Le comptage a change. Rechargez cet inventaire avant de le valider.');
+      }
+      const parLigne = new Map(attendues.map((ligne) => [ligne.id, ligne]));
+      const dejaVues = new Set<number>();
+      for (const c of comptages) {
+        const reference = parLigne.get(c.ligneId);
+        if (!reference || reference.produit_id !== c.produitId || dejaVues.has(c.ligneId)) {
+          throw new Error('Une ligne de comptage ne correspond pas a cet inventaire.');
+        }
+        dejaVues.add(c.ligneId);
+        if (c.stockPhysique !== null &&
+            (!Number.isFinite(c.stockPhysique) || c.stockPhysique < 0)) {
+          throw new Error('Le stock compte doit etre un nombre positif ou zero.');
+        }
+        const ecart = c.stockPhysique === null ? null : c.stockPhysique - reference.stock_theorique;
+        await executer(
+          'UPDATE ligne_inventaire SET stock_physique = ?, ecart = ?, valeur_ecart = ? WHERE id = ? AND inventaire_id = ?',
+          c.stockPhysique,
+          ecart,
+          ecart === null ? null : Math.round(ecart * reference.prix_achat),
+          c.ligneId,
+          inventaireId,
+        );
+      }
+    }
+
     const lignes = await lireTout<{
       produit_id: number;
       stock_theorique: number;
-      stock_physique: number | null;
+      stock_physique: number;
       prix_achat: number;
     }>(
       `SELECT produit_id, stock_theorique, stock_physique, prix_achat
-       FROM ligne_inventaire
-       WHERE inventaire_id = ? AND stock_physique IS NOT NULL`,
+         FROM ligne_inventaire
+        WHERE inventaire_id = ? AND stock_physique IS NOT NULL`,
       inventaireId,
     );
+    if (lignes.length === 0) {
+      throw new Error('Saisissez au moins un comptage avant la validation.');
+    }
 
     const horodatage = maintenant();
     let ajustes = 0;
     let valeur = 0;
 
     for (const l of lignes) {
-      const reel = l.stock_physique!;
-      const ecart = reel - l.stock_theorique;
+      const ecart = l.stock_physique - l.stock_theorique;
+      if (!Number.isFinite(ecart) || l.stock_physique < 0 ||
+          !Number.isFinite(l.prix_achat) || l.prix_achat < 0) {
+        throw new Error('Une ligne comporte un comptage ou un prix incoherent.');
+      }
       if (Math.abs(ecart) < 0.0001) continue;
 
-      // Le stock actuel peut differer du theorique fige a l'ouverture si des
-      // ventes ont eu lieu pendant le comptage : on trace le vrai avant/apres.
-      const p = await lirePremier<{ quantite_base: number }>(
-        'SELECT quantite_base FROM produit WHERE id = ?',
+      const p = await lirePremier<{
+        quantite_base: number;
+        unite_base: string;
+        gestion_stock: number;
+      }>(
+        'SELECT quantite_base, unite_base, gestion_stock FROM produit WHERE id = ?',
         l.produit_id,
       );
-      const avant = p?.quantite_base ?? l.stock_theorique;
+      if (!p || !p.gestion_stock || !Number.isFinite(p.quantite_base)) {
+        throw new Error('Un produit de cet inventaire est introuvable ou non suivi en stock.');
+      }
+      // Un stock de modele a variantes doit etre corrige par variante, pas
+      // directement sur la somme en laissant les tailles/couleurs inchangees.
+      const variante = await lirePremier<{ id: number }>(
+        'SELECT id FROM variante_produit WHERE produit_id = ? AND actif = 1 LIMIT 1',
+        l.produit_id,
+      );
+      if (variante) {
+        throw new Error('Ce produit possede des tailles ou couleurs : inventairez ses variantes avant de corriger son stock.');
+      }
+
+      const avant = p.quantite_base;
+      const apres = avant + ecart;
+      if (!Number.isFinite(apres) || apres < 0) {
+        throw new Error('Le stock a change pendant le comptage. Actualisez et recomptez ce produit.');
+      }
 
       await executer(
         'UPDATE produit SET quantite_base = ?, date_modification = ? WHERE id = ?',
-        reel,
-        horodatage,
-        l.produit_id,
+        apres, horodatage, l.produit_id,
       );
+      const idLocal = genererIdLocal();
       await executer(
-        `INSERT INTO mouvement_stock (id_local, produit_id, nature, source_operation, quantite,
-                                      quantite_base, stock_avant, stock_apres,
-                                      prix_unitaire, reference, motif, utilisateur,
-                                      date_mouvement)
-         VALUES (lower(hex(randomblob(16))), ?, 'AJUSTEMENT', 'INVENTAIRE', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        l.produit_id,
-        ecart,
-        ecart,
-        avant,
-        reel,
-        l.prix_achat,
-        inv.numero,
-        `Inventaire ${inv.numero}`,
-        utilisateurNom ?? null,
-        horodatage,
+        `INSERT INTO mouvement_stock
+            (id_local, produit_id, nature, source_operation, quantite, unite,
+             quantite_base, stock_avant, stock_apres, prix_unitaire, reference,
+             motif, utilisateur, date_mouvement)
+          VALUES (?, ?, 'AJUSTEMENT', 'INVENTAIRE', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        idLocal, l.produit_id, l.stock_physique, p.unite_base, ecart,
+        avant, apres, l.prix_achat, inv.numero, `Inventaire ${inv.numero}`,
+        utilisateurNom ?? null, horodatage,
       );
+      // Meme transaction que la correction de stock : aucune ecriture perdue.
+      await marquerChangement('mouvement', idLocal);
 
-      ajustes += 1;
+      ajustes++;
       valeur += Math.round(ecart * l.prix_achat);
     }
 
     await executer(
-      `UPDATE inventaire SET statut = 'VALIDE', date_validation = ?,
-                             nb_ecarts = ?, valeur_ecarts = ?
-       WHERE id = ?`,
-      horodatage,
-      ajustes,
-      valeur,
-      inventaireId,
+      `UPDATE inventaire
+          SET statut = 'VALIDE', date_validation = ?, nb_ecarts = ?, valeur_ecarts = ?
+        WHERE id = ? AND statut = 'BROUILLON'`,
+      horodatage, ajustes, valeur, inventaireId,
     );
-
-    return { numero: inv.numero, produitsAjustes: ajustes, valeurEcarts: valeur };
+    return {
+      numero: inv.numero,
+      produitsAjustes: ajustes,
+      nbComptes: lignes.length,
+      nbEcarts: ajustes,
+      valeurEcarts: valeur,
+    };
   });
 
-  // Un inventaire corrige le stock dans les deux sens : il peut reveler une
-  // rupture qu'on ignorait, comme en effacer une qui n'existait que dans la
-  // base. On reexamine donc tout le stock, pas seulement les lignes comptees.
   void verifierStock();
-
   return resultat;
 }
 

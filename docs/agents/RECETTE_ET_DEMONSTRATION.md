@@ -1,5 +1,7 @@
 # Recette Android — 8 octobre 2026
 
+Recette du 4 novembre : [résultats automatiques et contrôles matériels ouverts](STABILISATION_ANDROID_2026-11-04.md). Les anciennes recettes ci-dessous ne certifient pas cette nouvelle candidate.
+
 La [recette du 9 octobre](LIVRAISON_ANDROID_2026-10-09.md) complete ce releve
 avec les verifications de mise a jour et l'etat exact du telephone.
 

@@ -7,6 +7,14 @@ export interface LienNavigationMobile {
   id: string; titre: string; description: string; chemin: string; icone: NomIcone; capability?: string;
 }
 export interface GroupeNavigationMobile { id: string; titre: string; entrees: LienNavigationMobile[]; }
+
+/** Les destinations deja visibles dans les onglets n'encombrent pas le Menu. */
+export function navigationSecondaire(groupes: GroupeNavigationMobile[]): GroupeNavigationMobile[] {
+  const raccourcis = new Set(['caisse', 'produits', 'stock', 'nouvel-achat']);
+  return groupes.map(groupe => ({ ...groupe,
+    entrees: groupe.entrees.filter(entree => !raccourcis.has(entree.id)),
+  })).filter(groupe => groupe.entrees.length > 0);
+}
 function lien(id:string,titre:string,description:string,chemin:string,icone:NomIcone,capability?:string): LienNavigationMobile {
   return { id,titre,description,chemin,icone,capability };
 }
@@ -41,7 +49,7 @@ export function construireNavigationMobile(secteur: SecteurCommerce, role: Role,
       lien('stock',mode?'Stock par variantes':'État du stock','Quantités disponibles','/(tabs)/stock','stock'),
       lien('alertes','Alertes de stock','Ruptures et niveaux faibles','/stock/alertes','alerte'),
       lien('inventaire',mode?'Inventaire variantes':'Inventaires','Comptages et écarts',
-        mode?'/habillement/inventaire':'/inventaire','inventaire'),
+        mode?'/habillement/inventaire':technique?`/${secteur.toLowerCase()}/inventaire`:'/inventaire','inventaire'),
       lien('mouvements','Mouvements de stock','Entrées et sorties','/stock/mouvements','mouvements'),
       ...(vrac?[lien('lots','Lots','Traçabilité des denrées','/stock/lots','stock')]:[]),
     ] },

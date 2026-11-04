@@ -9,6 +9,7 @@
 import type { Client } from '../../domain/types';
 import {
   executer,
+  dansTransaction,
   genererIdLocal,
   lirePremier,
   lireTout,
@@ -83,44 +84,48 @@ export interface SaisieClient {
 
 export async function creerClient(saisie: SaisieClient): Promise<number> {
   await exigerEcriture('clients');
-  const idLocal = genererIdLocal();
-  const horodatage = maintenant();
-  const r = await executer(
-    `INSERT INTO client (id_local, nom, telephone, email, adresse, chemin_photo, date_creation,
-                         date_modification)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    idLocal,
-    saisie.nom.trim(),
-    saisie.telephone?.trim() || null,
-    saisie.email?.trim() || null,
-    saisie.adresse?.trim() || null,
-    saisie.cheminPhoto ?? null,
-    horodatage,
-    horodatage,
-  );
-  await marquerChangement('client', idLocal);
-  return r.lastInsertRowId;
+  return dansTransaction(async () => {
+    const idLocal = genererIdLocal();
+    const horodatage = maintenant();
+    const r = await executer(
+      `INSERT INTO client (id_local, nom, telephone, email, adresse, chemin_photo, date_creation,
+                           date_modification)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      idLocal,
+      saisie.nom.trim(),
+      saisie.telephone?.trim() || null,
+      saisie.email?.trim() || null,
+      saisie.adresse?.trim() || null,
+      saisie.cheminPhoto ?? null,
+      horodatage,
+      horodatage,
+    );
+    await marquerChangement('client', idLocal);
+    return r.lastInsertRowId;
+  });
 }
 
 export async function modifierClient(id: number, saisie: SaisieClient): Promise<void> {
   await exigerEcriture('clients');
-  const existant = await lirePremier<{ id_local: string }>(
-    'SELECT id_local FROM client WHERE id = ?',
-    id,
-  );
-  await executer(
-    `UPDATE client SET nom = ?, telephone = ?, email = ?, adresse = ?, chemin_photo = ?,
-                       date_modification = ?
-      WHERE id = ?`,
-    saisie.nom.trim(),
-    saisie.telephone?.trim() || null,
-    saisie.email?.trim() || null,
-    saisie.adresse?.trim() || null,
-    saisie.cheminPhoto ?? null,
-    maintenant(),
-    id,
-  );
-  await marquerChangement('client', existant?.id_local ?? '');
+  return dansTransaction(async () => {
+    const existant = await lirePremier<{ id_local: string }>(
+      'SELECT id_local FROM client WHERE id = ?',
+      id,
+    );
+    await executer(
+      `UPDATE client SET nom = ?, telephone = ?, email = ?, adresse = ?, chemin_photo = ?,
+                         date_modification = ?
+        WHERE id = ?`,
+      saisie.nom.trim(),
+      saisie.telephone?.trim() || null,
+      saisie.email?.trim() || null,
+      saisie.adresse?.trim() || null,
+      saisie.cheminPhoto ?? null,
+      maintenant(),
+      id,
+    );
+    await marquerChangement('client', existant?.id_local ?? '');
+  });
 }
 
 /**

@@ -1,0 +1,531 @@
+{
+  "source": "sahelpos_web main eee7048705a8a47f815ff05e3355cf0c0852c45c, contrat_mobile, isolated SQLite",
+  "contracts": [
+    {
+      "scenario": "ALIMENTATION",
+      "contract": {
+        "version": 1,
+        "secteur": "ALIMENTATION",
+        "secteur_libelle": "Alimentation / Supérette",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "STOCK_SIMPLE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "HABILLEMENT",
+      "contract": {
+        "version": 1,
+        "secteur": "HABILLEMENT",
+        "secteur_libelle": "Habillement",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "COLOR_DIMENSION",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "PRODUCT_VARIANTS",
+          "SIZE_DIMENSION",
+          "STOCK_SIMPLE",
+          "VARIANT_EXCHANGE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "FRIPERIE",
+      "contract": {
+        "version": 1,
+        "secteur": "FRIPERIE",
+        "secteur_libelle": "Friperie",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "STOCK_SIMPLE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "ELECTRONIQUE",
+      "contract": {
+        "version": 1,
+        "secteur": "ELECTRONIQUE",
+        "secteur_libelle": "Électronique",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "STOCK_SIMPLE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "ELECTRICITE",
+      "contract": {
+        "version": 1,
+        "secteur": "ELECTRICITE",
+        "secteur_libelle": "Électricité",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "PRODUCT_VARIANTS",
+          "STOCK_SIMPLE",
+          "TECHNICAL_DIMENSIONS"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "QUINCAILLERIE",
+      "contract": {
+        "version": 1,
+        "secteur": "QUINCAILLERIE",
+        "secteur_libelle": "Quincaillerie",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "PRODUCT_VARIANTS",
+          "STOCK_SIMPLE",
+          "TECHNICAL_DIMENSIONS",
+          "WHOLESALE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "COSMETIQUE",
+      "contract": {
+        "version": 1,
+        "secteur": "COSMETIQUE",
+        "secteur_libelle": "Cosmétique",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "STOCK_SIMPLE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "PIECES_DETACHEES",
+      "contract": {
+        "version": 1,
+        "secteur": "PIECES_DETACHEES",
+        "secteur_libelle": "Pièces détachées",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "STOCK_SIMPLE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "CEREALES_VRAC",
+      "contract": {
+        "version": 1,
+        "secteur": "CEREALES_VRAC",
+        "secteur_libelle": "Céréales & Produits en vrac",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "BULK_WEIGHT",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "STOCK_SIMPLE",
+          "WHOLESALE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "COMMERCE_GENERAL",
+      "contract": {
+        "version": 1,
+        "secteur": "COMMERCE_GENERAL",
+        "secteur_libelle": "Commerce général",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "STOCK_SIMPLE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "AUTRE",
+      "contract": {
+        "version": 1,
+        "secteur": "AUTRE",
+        "secteur_libelle": "Autre",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "STOCK_SIMPLE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "HABILLEMENT / ADVANCED / MULTI_WAREHOUSE",
+      "contract": {
+        "version": 1,
+        "secteur": "HABILLEMENT",
+        "secteur_libelle": "Habillement",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "ADVANCED",
+        "capabilities_effectives": [
+          "BARCODE",
+          "COLOR_DIMENSION",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "MULTI_WAREHOUSE",
+          "PRODUCT_IMAGES",
+          "PRODUCT_VARIANTS",
+          "SIZE_DIMENSION",
+          "STOCK_SIMPLE",
+          "VARIANT_EXCHANGE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "QUINCAILLERIE / ADVANCED / MULTI_WAREHOUSE",
+      "contract": {
+        "version": 1,
+        "secteur": "QUINCAILLERIE",
+        "secteur_libelle": "Quincaillerie",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "ADVANCED",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "MULTI_WAREHOUSE",
+          "PRODUCT_IMAGES",
+          "PRODUCT_VARIANTS",
+          "STOCK_SIMPLE",
+          "TECHNICAL_DIMENSIONS",
+          "WHOLESALE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "achats",
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "mouvements",
+          "produits",
+          "utilisateurs",
+          "ventes"
+        ],
+        "compatible": true,
+        "raison": ""
+      }
+    },
+    {
+      "scenario": "ELECTRONIQUE / SIMPLE / SERIAL_TRACKING",
+      "contract": {
+        "version": 1,
+        "secteur": "ELECTRONIQUE",
+        "secteur_libelle": "Électronique",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "SERIAL_TRACKING",
+          "STOCK_SIMPLE"
+        ],
+        "capabilities_non_supportees": [
+          "SERIAL_TRACKING"
+        ],
+        "ecritures_autorisees": [
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "utilisateurs"
+        ],
+        "compatible": false,
+        "raison": "Mode mobile partiel : Numéros de série. Les fonctions compatibles restent disponibles ; les operations metier non representees sur Android restent protegees."
+      }
+    },
+    {
+      "scenario": "COSMETIQUE / SIMPLE / EXPIRY_TRACKING",
+      "contract": {
+        "version": 1,
+        "secteur": "COSMETIQUE",
+        "secteur_libelle": "Cosmétique",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "SIMPLE",
+        "capabilities_effectives": [
+          "BARCODE",
+          "EXPIRY_TRACKING",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "STOCK_SIMPLE"
+        ],
+        "capabilities_non_supportees": [
+          "EXPIRY_TRACKING"
+        ],
+        "ecritures_autorisees": [
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "utilisateurs"
+        ],
+        "compatible": false,
+        "raison": "Mode mobile partiel : Dates de péremption. Les fonctions compatibles restent disponibles ; les operations metier non representees sur Android restent protegees."
+      }
+    },
+    {
+      "scenario": "FRIPERIE / ADVANCED / sans option",
+      "contract": {
+        "version": 1,
+        "secteur": "FRIPERIE",
+        "secteur_libelle": "Friperie",
+        "mode_vente": "DETAIL",
+        "mode_approvisionnement": "CLASSIQUE",
+        "mode_catalogue": "ADVANCED",
+        "capabilities_effectives": [
+          "BARCODE",
+          "INVENTORY",
+          "LOW_STOCK_ALERT",
+          "MULTI_UNIT",
+          "PRODUCT_IMAGES",
+          "STOCK_SIMPLE"
+        ],
+        "capabilities_non_supportees": [],
+        "ecritures_autorisees": [
+          "boutique",
+          "clients",
+          "fournisseurs",
+          "utilisateurs"
+        ],
+        "compatible": false,
+        "raison": "Mode mobile partiel : Catalogue avance. Les fonctions compatibles restent disponibles ; les operations metier non representees sur Android restent protegees."
+      }
+    }
+  ]
+}

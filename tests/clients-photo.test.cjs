@@ -37,6 +37,11 @@ function fixture() {
   const changements = [];
   const repo = charger('src/db/repositories/client.ts', {
     './base': {
+      dansTransaction: async fn => {
+        db.exec('BEGIN');
+        try { const value = await fn(); db.exec('COMMIT'); return value; }
+        catch (error) { db.exec('ROLLBACK'); throw error; }
+      },
       executer: async (sql, ...params) => {
         const r = db.prepare(sql).run(...params);
         return { lastInsertRowId: Number(r.lastInsertRowid) };

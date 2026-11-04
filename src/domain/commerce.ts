@@ -44,7 +44,7 @@ const CAPABILITIES_MOBILE = new Set([
   'STOCK_SIMPLE', 'MULTI_UNIT', 'BARCODE', 'PRODUCT_IMAGES', 'INVENTORY', 'LOW_STOCK_ALERT',
   'PRODUCT_VARIANTS', 'SIZE_DIMENSION', 'COLOR_DIMENSION', 'PURCHASE_MATRIX', 'VARIANT_EXCHANGE',
   'ARRIVAL_MANAGEMENT', 'ARRIVALS', 'LOT_TRACKING', 'LANDED_COST',
-  'TECHNICAL_DIMENSIONS', 'WHOLESALE', 'BULK_WEIGHT',
+  'TECHNICAL_DIMENSIONS', 'WHOLESALE', 'BULK_WEIGHT', 'MULTI_WAREHOUSE',
 ]);
 
 export interface ProfilCommerceMobile {
@@ -93,7 +93,7 @@ export function lireProfilCommerce(value: unknown): ProfilCommerceMobile | null 
   // compatible reste un indicateur de parite COMPLETE. Il ne sert plus de
   // coupe-circuit global pour les mutations compatibles.
   const compatible = profil.compatible
-    && profil.mode_catalogue === 'SIMPLE'
+    && (profil.mode_catalogue === 'SIMPLE' || profil.secteur === 'HABILLEMENT' || profil.secteur === 'QUINCAILLERIE')
     && profil.capabilities_non_supportees.length === 0
     && profil.capabilities_effectives.every(code => CAPABILITIES_MOBILE.has(code));
 
@@ -271,14 +271,11 @@ export function resoudreProfilUIMobile(
   if (specifique) {
     // Le vocabulaire d'un profil ne crée jamais de droits : seules les
     // capacités accordées par le contrat signé deviennent effectives.
-    if (code === 'ELECTRICITE' || code === 'COMMERCE_GENERAL' || code === 'CEREALES_VRAC') {
-      return {
-        code, ...specifique,
-        capabilities: specifique.capabilities.filter((capability) =>
-          profil?.capabilities_effectives.includes(capability)),
-      };
-    }
-    return { code, ...specifique };
+    return {
+      code, ...specifique,
+      capabilities: specifique.capabilities.filter((capability) =>
+        profil?.capabilities_effectives.includes(capability)),
+    };
   }
   return {
     code,

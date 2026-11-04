@@ -1,5 +1,7 @@
 # Mobile et synchronisation
 
+Actualisation du 4 novembre : [transactions, reprises, outbox et dépendances API](STABILISATION_ANDROID_2026-11-04.md). Candidate source 1.3.1/code10, SQLite v19 ; aucune installation physique réalisée par ce lot.
+
 Références : [Accounts et QR](../accounts-qr.md),
 [guide technique historique](../mobile/README_MOBILE_AGENT.md).
 La présente recette confirme la source 1.3.0/code9 ; les versions et commandes

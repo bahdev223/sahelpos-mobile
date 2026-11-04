@@ -361,6 +361,40 @@ export async function corrigerStockVariante(
   }
 
   await dansTransaction(async () => {
+    await appliquerComptageVariante(varianteId, stockPhysique, motif);
+  });
+}
+
+export interface ComptageVariante {
+  varianteId: number;
+  stockTheorique: number;
+  stockPhysique: number;
+  motif?: string;
+}
+
+/** Un comptage est un seul engagement : toutes les lignes ou aucune. */
+export async function validerComptageVariantes(comptages: ComptageVariante[]): Promise<void> {
+  await exigerEcriture('mouvements');
+  const identifiants = new Set<number>();
+  for (const ligne of comptages) {
+    if (identifiants.has(ligne.varianteId)) throw new Error('Une variante ne peut être comptée deux fois.');
+    identifiants.add(ligne.varianteId);
+    if (!Number.isFinite(ligne.stockPhysique) || ligne.stockPhysique < 0
+      || !Number.isFinite(ligne.stockTheorique)) {
+      throw new Error('Le stock physique doit être un nombre positif ou nul.');
+    }
+  }
+  await dansTransaction(async () => {
+    for (const ligne of comptages) {
+      await appliquerComptageVariante(ligne.varianteId, ligne.stockPhysique,
+        ligne.motif ?? 'Inventaire variantes', ligne.stockTheorique);
+    }
+  });
+}
+
+async function appliquerComptageVariante(
+  varianteId: number, stockPhysique: number, motif: string, stockTheorique?: number,
+): Promise<void> {
     const variante = await lirePremier<{
       id: number;
       id_local: string;
@@ -385,9 +419,15 @@ export async function corrigerStockVariante(
     if (!produit) throw new Error('Modele introuvable.');
 
     const ancien = Number(variante.stock_actuel || 0);
+    if (stockTheorique !== undefined && Math.abs(ancien - stockTheorique) > 0.0001) {
+      throw new Error('Le stock a changé pendant le comptage. Rechargez puis recomptez les variantes concernées.');
+    }
     const nouveau = Math.round(stockPhysique * 1000) / 1000;
     const delta = Math.round((nouveau - ancien) * 1000) / 1000;
     if (delta === 0) return;
+    if (!Number.isFinite(produit.quantite_base) || produit.quantite_base + delta < 0) {
+      throw new Error('Le stock total du modèle est incohérent. Vérifiez son historique avant de compter.');
+    }
 
     const horodatage = maintenant();
     await executer(
@@ -400,7 +440,7 @@ export async function corrigerStockVariante(
     );
     await executer(
       `UPDATE produit
-          SET quantite_base = MAX(0, quantite_base + ?), date_modification = ?
+          SET quantite_base = quantite_base + ?, date_modification = ?
         WHERE id = ?`,
       delta,
       horodatage,
@@ -428,7 +468,6 @@ export async function corrigerStockVariante(
       horodatage,
     );
     await marquerChangement('mouvement', mouvementId);
-  });
 }
 
 
@@ -437,16 +476,18 @@ export async function changerEtatVariante(
   actif: boolean,
 ): Promise<void> {
   await exigerEcriture('produits');
-  const variante = await lirePremier<{ id_local: string }>(
-    'SELECT id_local FROM variante_produit WHERE id = ?',
-    varianteId,
-  );
-  if (!variante) throw new Error('Variante introuvable.');
-  await executer(
-    'UPDATE variante_produit SET actif = ?, date_modification = ? WHERE id = ?',
-    actif ? 1 : 0,
-    maintenant(),
-    varianteId,
-  );
-  await marquerChangement('variante', variante.id_local);
+  await dansTransaction(async () => {
+    const variante = await lirePremier<{ id_local: string }>(
+      'SELECT id_local FROM variante_produit WHERE id = ?',
+      varianteId,
+    );
+    if (!variante) throw new Error('Variante introuvable.');
+    await executer(
+      'UPDATE variante_produit SET actif = ?, date_modification = ? WHERE id = ?',
+      actif ? 1 : 0,
+      maintenant(),
+      varianteId,
+    );
+    await marquerChangement('variante', variante.id_local);
+  });
 }
