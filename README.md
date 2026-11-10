@@ -17,6 +17,8 @@ Version source actuelle : **1.3.0** (`versionCode 9`).
 - **Synchronisation** : Web -> mobile -> Web avec file locale persistante.
 - **Identité** : Accounts SahelTech / Google pour l'enrôlement, QR d'invitation,
   puis PIN/biométrie local pour l'usage quotidien hors ligne.
+- **Livraisons** : missions des livreurs affectés, pointage, signature, fonds et
+  synchronisation hors ligne. Voir [le parcours Android et sa recette](docs/mobile/LIVRAISONS.md).
 
 ## Architecture : offline-first, pas offline-only
 

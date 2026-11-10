@@ -128,17 +128,24 @@ export interface CompteConnexion extends Utilisateur {
 }
 
 export async function listerComptesConnexion(): Promise<CompteConnexion[]> {
-  const membre = (await etatCourant()).droit?.membre;
+  const etat = await etatCourant();
   const lignes = await lireTout<LigneUtilisateur & { code_pin: string }>(
     `SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a, code_pin
        FROM utilisateur WHERE actif = 1 ORDER BY nom COLLATE NOCASE, login COLLATE NOCASE`,
   );
-  return lignes.filter((ligne) => !membre || (
-    ligne.id_local === membre.id_local && ligne.role === (membre.role === 'patron' ? 'admin' : membre.role)
-  )).map((ligne) => ({
+  return lignes.filter((ligne) => profilAutorise(ligne.id_local, ligne.role, etat)).map((ligne) => ({
     ...versUtilisateur(ligne),
     aCodeLocal: Boolean(ligne.code_pin && ligne.code_pin.trim()),
   }));
+}
+
+function profilAutorise(idLocal: string, role: string, etat: Awaited<ReturnType<typeof etatCourant>>): boolean {
+  const membre = etat.droit?.membre;
+  const livreur = role === 'livreur' || role === 'livreur_prestataire';
+  if (livreur && (!membre || !etat.active)) return false;
+  return !membre || (
+    membre.id_local === idLocal && role === (membre.role === 'patron' ? 'admin' : membre.role)
+  );
 }
 
 export async function listerUtilisateurs(actifsSeulement = false): Promise<Utilisateur[]> {
@@ -238,8 +245,7 @@ export async function finaliserConnexionMobile(droit: Droit, saisie: SaisieUtili
 
 /** Preserved profiles need their own online enrollment before using a scoped device. */
 export async function verifierProfilAppareil(compte: Pick<Utilisateur, 'idLocal' | 'role'>): Promise<void> {
-  const membre = (await etatCourant()).droit?.membre;
-  if (membre && (membre.id_local !== compte.idLocal || compte.role !== (membre.role === 'patron' ? 'admin' : membre.role))) {
+  if (!profilAutorise(compte.idLocal, compte.role, await etatCourant())) {
     throw new PinInvalide('Ce profil n’est pas autorisé sur cet appareil. Connectez-le avec SahelTech pour l’activer. Son PIN et ses données sont conservés.');
   }
 }
@@ -350,6 +356,9 @@ export async function verifierAccesCaisse(utilisateurId: number | null | undefin
     'SELECT id, id_local, login, nom, role, actif, caisse_ouvre_a, caisse_ferme_a FROM utilisateur WHERE id = ?', utilisateurId,
   );
   if (!compte || !versBooleen(compte.actif)) throw new PinInvalide('Ce compte est desactive.');
+  if (compte.role === 'livreur' || compte.role === 'livreur_prestataire') {
+    throw new PinInvalide("Ce profil n'a pas accès à la caisse.");
+  }
   await verifierProfilAppareil(versUtilisateur(compte));
   const debut = compte.caisse_ouvre_a;
   const fin = compte.caisse_ferme_a;
@@ -368,6 +377,8 @@ const DROITS: Record<Role, string[]> = {
     'achats', 'clients', 'rapports',
   ],
   vendeur: ['vendre', 'clients'],
+  livreur: [],
+  livreur_prestataire: [],
 };
 
 export function aLeDroit(role: Role, action: string): boolean {

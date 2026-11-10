@@ -118,6 +118,7 @@ function accountsService(browserResult, local = {}) {
     "../domain/accounts": domain(),
     "./abonnement": {
       empreinteAppareil: async () => "test-device",
+      connecterCompteMobile: async () => local.connexion,
       installerDroitAccounts: async () => {
         calls.push("install");
         if (local.reject) throw new Error("Boutique différente");
@@ -126,7 +127,10 @@ function accountsService(browserResult, local = {}) {
     },
     "./synchronisation": {
       bootstrapInitial: async () => calls.push("bootstrap"),
-      actualiserProfilAccounts: async () => calls.push("member"),
+      actualiserProfilAccounts: async (membre) => {
+        calls.push("member");
+        if (local.connexion) assert.deepEqual(membre, local.connexion.membreProvisionne);
+      },
     },
     "./auth": {
       obtenirUtilisateurParIdLocal: async () => ({ idLocal: "member" }),
@@ -135,6 +139,15 @@ function accountsService(browserResult, local = {}) {
   });
   return { service, getUrl: () => browserUrl, calls };
 }
+
+test("native password login applies the bound server membership before local PIN", async () => {
+  const droit = { boutique: "8", membre: { id_local: "membre-a", role: "livreur" } };
+  const { service, calls } = accountsService({ type: "cancel" }, {
+    connexion: { droit, membreProvisionne: { id_local: "membre-a", login: "awa", actif: true, role: "livreur" } },
+  });
+  assert.deepEqual(await service.connecterProfilMobile("awa", "password", "Téléphone"), { droit });
+  assert.deepEqual(calls, ["member"]);
+});
 test("cancelled native Accounts browser performs no exchange or provisioning", async () => {
   const { service, calls } = accountsService({ type: "cancel" });
   const original = global.fetch;

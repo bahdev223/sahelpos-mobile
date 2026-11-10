@@ -28,10 +28,11 @@ import {
   type SecteurCommerce, type ModeVenteCommerce, type ModeApprovisionnementCommerce,
 } from '../src/domain/commerce';
 import {
-  connecterCompteMobile,
   creerBoutiqueMobile,
   type Droit,
 } from '../src/services/abonnement';
+import { connecterProfilMobile } from '../src/services/accounts';
+import { estLivreur } from '../src/domain/accounts';
 import {
   finaliserConnexionMobile,
   LONGUEUR_PIN_MAX,
@@ -149,7 +150,7 @@ export function EcranDemarrage() {
     try {
       const etat =
         mode === 'connexion'
-          ? await connecterCompteMobile(login, motDePasseWeb, 'Telephone principal')
+          ? await connecterProfilMobile(login, motDePasseWeb, 'Telephone principal')
           : await creerBoutiqueMobile(
               {
                 nomBoutique,
@@ -168,7 +169,7 @@ export function EcranDemarrage() {
             );
       if (!etat.droit) throw new Error("Le serveur n'a pas renvoye l'espace SahelPOS.");
       if (!etat.droit.peutEntrer) throw new Error(etat.droit.raison || "Cet espace SahelPOS n'est pas actif.");
-      await bootstrapInitial(etat.droit.boutique);
+      if (!estLivreur(etat.droit.membre?.role)) await bootstrapInitial(etat.droit.boutique);
       setDroit(etat.droit);
       setNomAdmin((valeur) => valeur || (mode === 'creation' ? nomAdmin : login) || 'Gerant');
       setLogin((valeur) => valeur || normaliserLogin(etat.droit?.nom || 'gerant'));

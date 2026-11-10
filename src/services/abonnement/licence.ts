@@ -22,6 +22,7 @@
  * presenter, et l'application redemande une activation.
  */
 import nacl from 'tweetnacl';
+import type { RoleMembreMobile } from '../../domain/accounts';
 import { lireProfilCommerce, type ProfilCommerceMobile } from '../../domain/commerce';
 
 /**
@@ -47,7 +48,7 @@ export interface Droit {
   peutEcrire: boolean;
   fonctionnalites: string[];
   commerce: ProfilCommerceMobile | null;
-  membre?: {id_local: string; role: 'patron'|'gerant'|'vendeur'};
+  membre?: {id_local: string; role: RoleMembreMobile};
   /** Message destine au commercant. Vide si tout va bien. */
   raison: string;
   /** Vraie echeance commerciale, distincte du droit offline de 30 jours. */
@@ -199,6 +200,9 @@ export function droitPerime(droit: Droit, maintenant = new Date()): boolean {
 
 function lireMembre(value: unknown): NonNullable<Droit['membre']> {
   const member = value as {id_local?: unknown; role?: unknown};
-  if (!member || typeof member.id_local !== 'string' || !/^[0-9a-f]{32}$/.test(member.id_local) || !['patron','gerant','vendeur'].includes(String(member.role))) throw new LicenceInvalide('Le profil signé de ce téléphone est invalide.');
-  return {id_local: member.id_local, role: member.role as 'patron'|'gerant'|'vendeur'};
+  if (!member || typeof member.id_local !== 'string' || !/^[0-9a-f]{32}$/.test(member.id_local)
+    || !['patron', 'gerant', 'vendeur', 'livreur', 'livreur_prestataire'].includes(String(member.role))) {
+    throw new LicenceInvalide('Le profil signé de ce téléphone est invalide.');
+  }
+  return { id_local: member.id_local, role: member.role as RoleMembreMobile };
 }

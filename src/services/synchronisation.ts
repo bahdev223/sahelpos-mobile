@@ -15,7 +15,7 @@ import {
 import { File, Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import { deposer } from './notifications/journal';
-import { ecritureMobileAutorisee, jetonAppareil, rafraichir } from './abonnement';
+import { ecritureMobileAutorisee, etatCourant, jetonAppareil, rafraichir } from './abonnement';
 import type { TypeEcritureCommerce } from '../domain/commerce';
 
 const SERVEUR = 'https://sahelpos.saheltech.tech';
@@ -279,7 +279,7 @@ interface BoutiqueSync {
   date_modification?: string | null;
 }
 
-interface UtilisateurSync {
+export interface UtilisateurSync {
   id_local: string;
   login: string;
   nom: string | null;
@@ -427,6 +427,10 @@ export async function lireEtatSynchronisation(): Promise<EtatSynchronisation> {
 }
 
 export async function synchroniser(): Promise<ResultatSynchronisation> {
+  const role = (await etatCourant()).droit?.membre?.role;
+  if (role === 'livreur' || role === 'livreur_prestataire') {
+    return { pousses: 0, recus: 0, cursor: await lireParam(CLE_CURSOR) };
+  }
   const jeton = await jetonAppareil();
   if (!jeton) {
     throw new Error("Activez l'application avant de synchroniser.");
@@ -437,6 +441,9 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
     // Visibility changed: old hidden rows will never appear after an old cursor.
     // Keep local rows and pending writes; replay only the remote read history.
     const membre = abonnement.droit?.membre;
+    if (membre?.role === 'livreur' || membre?.role === 'livreur_prestataire') {
+      return { pousses: 0, recus: 0, cursor: await lireParam(CLE_CURSOR) };
+    }
     const perimetre = JSON.stringify([abonnement.droit?.boutique ?? await lireParam(CLE_BOUTIQUE), membre?.id_local ?? null, membre?.role ?? null]);
     const precedent = await lireParam(CLE_PERIMETRE);
     if (precedent !== perimetre) {
@@ -547,6 +554,10 @@ export async function synchroniser(): Promise<ResultatSynchronisation> {
 }
 
 export async function bootstrapInitial(boutiqueId: string): Promise<ResultatSynchronisation> {
+  const role = (await etatCourant()).droit?.membre?.role;
+  if (role === 'livreur' || role === 'livreur_prestataire') {
+    return { pousses: 0, recus: 0, cursor: await lireParam(CLE_CURSOR) };
+  }
   const boutiqueCourante = await lireParam(CLE_BOUTIQUE);
   const dejaPret = await lireParam(CLE_BOOTSTRAP);
   const protocole = await lireParam(CLE_PROTOCOLE);
@@ -1017,7 +1028,12 @@ async function appliquerReferentielVariantes(
 export async function actualiserProfilAccounts(u: UtilisateurSync): Promise<void> {
   const role = u.role === 'patron' || u.role === 'admin'
     ? 'admin'
-    : u.role === 'gerant' ? 'gerant' : 'vendeur';
+    : u.role === 'gerant' || u.role === 'livreur' || u.role === 'livreur_prestataire'
+      ? u.role
+      : 'vendeur';
+  // La même identité peut être livreur dans plusieurs boutiques autorisées.
+  // Le PIN et le login local restent attachés au Membre durable.
+  const login = role === 'livreur' || role === 'livreur_prestataire' ? `@livreur:${u.id_local}` : u.login;
   await executer(
     `INSERT INTO utilisateur (id_local, login, nom, code_pin, role, actif,
                               caisse_ouvre_a, caisse_ferme_a, date_creation, date_modification)
@@ -1027,7 +1043,7 @@ export async function actualiserProfilAccounts(u: UtilisateurSync): Promise<void
        actif = excluded.actif, caisse_ouvre_a = excluded.caisse_ouvre_a,
        caisse_ferme_a = excluded.caisse_ferme_a,
        date_modification = excluded.date_modification`,
-    u.id_local, u.login, u.nom ?? u.login, role, u.actif ? 1 : 0,
+    u.id_local, login, u.nom || u.login, role, u.actif ? 1 : 0,
     u.caisse_ouvre_a ?? null, u.caisse_ferme_a ?? null,
     u.date_modification ?? maintenant(), u.date_modification ?? maintenant(),
   );

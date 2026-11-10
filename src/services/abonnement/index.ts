@@ -21,10 +21,11 @@
  * PRO n'a donc pas besoin d'un nouveau code : son prochain rafraichissement
  * suffit.
  */
-import { writeAllowed } from '../../domain/accounts';
+import { estLivreur, writeAllowed } from '../../domain/accounts';
 import { executer, lireTout } from '../../db/repositories/base';
 import { Droit, LicenceInvalide, droitPerime, lireDroit } from './licence';
 import { ecritureCommerceAutorisee, type SecteurCommerce, type ModeVenteCommerce, type ModeApprovisionnementCommerce, type TypeEcritureCommerce } from '../../domain/commerce';
+import type { UtilisateurSync } from '../synchronisation';
 
 export type { Droit } from './licence';
 export { LicenceInvalide } from './licence';
@@ -177,7 +178,7 @@ export async function etatCourant(): Promise<EtatAbonnement> {
     perime: false,
     // Indicateur global pour l'UI : au moins une famille d'ecriture reste
     // disponible. Les services metier utilisent ensuite le controle par type.
-    peutEcrire: droit.peutEcrire && Boolean(droit.commerce?.ecritures_autorisees.length),
+    peutEcrire: !estLivreur(droit.membre?.role) && droit.peutEcrire && Boolean(droit.commerce?.ecritures_autorisees.length),
     message: droit.raison || (droit.commerce
       ? droit.commerce.raison
       : 'Connectez le telephone a Internet pour verifier le profil commerce. Le serveur doit etre a jour.'),
@@ -317,7 +318,7 @@ export async function connecterCompteMobile(
   login: string,
   motDePasse: string,
   libelle = '',
-): Promise<EtatAbonnement> {
+): Promise<EtatAbonnement & { membreProvisionne?: UtilisateurSync }> {
   const empreinte = await empreinteAppareil();
   const reponse = (await appeler('/api/public/mobile/connexion/', {
     method: 'POST',
@@ -327,10 +328,19 @@ export async function connecterCompteMobile(
       empreinte,
       libelle,
     }),
-  })) as { licence?: string; jeton_appareil?: string };
+  })) as { licence?: string; jeton_appareil?: string; membre?: UtilisateurSync; boutique_id?: number };
 
   if (!reponse.licence || !reponse.jeton_appareil) {
     throw new Error("Le serveur n'a pas renvoye de droit d acces.");
+  }
+
+  if (reponse.membre || reponse.boutique_id !== undefined) {
+    if (!reponse.membre?.actif || !Number.isSafeInteger(reponse.boutique_id)) {
+      throw new LicenceInvalide('Le profil signé de la connexion est incomplet.');
+    }
+    await installerDroitAccounts(reponse.licence, reponse.jeton_appareil,
+      reponse.membre.id_local, reponse.boutique_id!, reponse.membre.role);
+    return { ...await etatCourant(), membreProvisionne: reponse.membre };
   }
 
   await verifierBoutiqueLocale(lireDroit(reponse.licence));
@@ -398,8 +408,17 @@ export async function rafraichir(): Promise<EtatAbonnement> {
 
   if (reponse.licence) {
     await verifierBoutiqueLocale(lireDroit(reponse.licence));
-    await ecrireCle(CLE_LICENCE, reponse.licence);
-    await ecrireCle(CLE_DERNIER_CONTACT, new Date().toISOString());
+    // La réponse peut arriver après un réenrôlement Accounts sur cet appareil.
+    // Dans ce cas elle appartient au jeton précédent et ne doit pas l'écraser.
+    const maintenant = new Date().toISOString();
+    await executer(
+      `INSERT INTO parametre (cle, valeur, date_modification)
+       SELECT cle, valeur, date_modification
+       FROM (SELECT ? cle, ? valeur, ? date_modification UNION ALL SELECT ?, ?, ?)
+       WHERE EXISTS (SELECT 1 FROM parametre WHERE cle = ? AND valeur = ?)
+       ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur, date_modification = excluded.date_modification`,
+      CLE_LICENCE, reponse.licence, maintenant, CLE_DERNIER_CONTACT, maintenant, maintenant, CLE_APPAREIL, jeton,
+    );
   }
   return etatCourant();
 }
@@ -513,12 +532,20 @@ export async function exigerEcriture(type?: TypeEcritureCommerce): Promise<void>
 }
 
 /** Verify the signed identity and existing shop binding before touching local state. */
-export async function installerDroitAccounts(licence: string, device: string, memberId: string, boutiqueId: number): Promise<Droit> {
+export async function installerDroitAccounts(
+  licence: string, device: string, memberId: string, boutiqueId: number, role?: string,
+): Promise<Droit> {
   const droit = lireDroit(licence);
-  if (!droit.membre || droit.membre.id_local !== memberId || droit.boutique !== String(boutiqueId) || !droit.peutEntrer) throw new LicenceInvalide('Le droit signé ne correspond pas au profil choisi.');
+  if (!droit.membre || droit.membre.id_local !== memberId || droit.boutique !== String(boutiqueId) || !droit.peutEntrer
+    || (role !== undefined && droit.membre.role !== role)) {
+    throw new LicenceInvalide('Le droit signé ne correspond pas au profil choisi.');
+  }
   await verifierBoutiqueLocale(droit);
-  await ecrireCle(CLE_LICENCE, licence);
-  await ecrireCle(CLE_APPAREIL, device);
-  await ecrireCle(CLE_DERNIER_CONTACT, new Date().toISOString());
+  const maintenant = new Date().toISOString();
+  await executer(
+    `INSERT INTO parametre (cle, valeur, date_modification) VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?)
+     ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur, date_modification = excluded.date_modification`,
+    CLE_LICENCE, licence, maintenant, CLE_APPAREIL, device, maintenant, CLE_DERNIER_CONTACT, maintenant, maintenant,
+  );
   return droit;
 }

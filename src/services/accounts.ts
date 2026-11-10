@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 import * as WebBrowser from "expo-web-browser";
-import { nativeTicket, parseQr } from "../domain/accounts";
-import { empreinteAppareil, installerDroitAccounts } from "./abonnement";
+import { estLivreur, nativeTicket, parseQr, type RoleMembreMobile } from "../domain/accounts";
+import { connecterCompteMobile, empreinteAppareil, installerDroitAccounts } from "./abonnement";
 import { bootstrapInitial, actualiserProfilAccounts } from "./synchronisation";
 import { obtenirUtilisateurParIdLocal, listerComptesConnexion } from "./auth";
 import type { Utilisateur } from "../domain/types";
@@ -14,7 +14,7 @@ export interface AccountsProfile {
   boutiques: {
     id: number;
     nom: string;
-    role: "patron" | "gerant" | "vendeur";
+    role: RoleMembreMobile;
   }[];
 }
 export interface AccountsSession {
@@ -135,10 +135,11 @@ export async function preparerProfil(
     response.jeton_appareil,
     response.membre.id_local,
     boutiqueId,
+    response.membre.role,
   );
   // Apply this exact server member before syncing, without generating a new UUID.
   await actualiserProfilAccounts(response.membre);
-  await bootstrapInitial(droit.boutique);
+  if (!estLivreur(droit.membre?.role)) await bootstrapInitial(droit.boutique);
   const user = await obtenirUtilisateurParIdLocal(response.membre.id_local);
   if (!user) throw new Error("Le profil n’a pas été synchronisé. Réessayez.");
   const profiles = await listerComptesConnexion();
@@ -146,4 +147,11 @@ export async function preparerProfil(
     user,
     needsPin: !profiles.find((p) => p.idLocal === user.idLocal)?.aCodeLocal,
   };
+}
+
+/** Le login historique peut fournir le même Membre signé que le parcours Accounts. */
+export async function connecterProfilMobile(login: string, motDePasse: string, libelle: string) {
+  const { membreProvisionne, ...etat } = await connecterCompteMobile(login, motDePasse, libelle);
+  if (membreProvisionne) await actualiserProfilAccounts(membreProvisionne);
+  return etat;
 }

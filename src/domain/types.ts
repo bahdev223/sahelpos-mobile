@@ -7,7 +7,8 @@
  * n'existent pas et qui feraient diverger le total du ticket.
  */
 
-export type Role = 'admin' | 'gerant' | 'vendeur';
+export type RoleLivreur = 'livreur' | 'livreur_prestataire';
+export type Role = 'admin' | 'gerant' | 'vendeur' | RoleLivreur;
 
 export type ModePaiement = 'especes' | 'mobile_money' | 'credit';
 
