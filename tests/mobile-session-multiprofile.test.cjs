@@ -8,6 +8,9 @@ const ts = require('typescript');
 function charger(relatif) {
   const path = resolve(__dirname, '..', relatif);
   const loaded = new Module(path, module);
+  if (relatif === 'src/domain/permissions-mobile.ts') {
+    loaded.require = (name) => name === './accounts' ? charger('src/domain/accounts.ts') : require(name);
+  }
   loaded._compile(ts.transpileModule(readFileSync(path, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText, path);

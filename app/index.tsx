@@ -12,7 +12,10 @@
  * caisse, qui est l'ecran ou le commercant passe sa journee.
  */
 import { Redirect } from 'expo-router';
+import { estLivreur } from '../src/domain/accounts';
+import { useSession } from './_layout';
 
 export default function Racine() {
-  return <Redirect href="/accueil" />;
+  const { utilisateur } = useSession();
+  return <Redirect href={estLivreur(utilisateur?.role) ? '/livraisons' : '/accueil'} />;
 }

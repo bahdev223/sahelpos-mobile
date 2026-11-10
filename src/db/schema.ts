@@ -13,7 +13,7 @@
  *     futur rapprochement avec le poste ne provoque pas de collision d'entiers.
  */
 
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 export const MIGRATIONS: string[][] = [
   // --- version 1 -----------------------------------------------------------
@@ -515,5 +515,40 @@ export const MIGRATIONS: string[][] = [
     `ALTER TABLE sous_unite ADD COLUMN prix_gros REAL NOT NULL DEFAULT 0`,
     `CREATE INDEX IF NOT EXISTS idx_produit_marque ON produit(marque)`,
     `CREATE INDEX IF NOT EXISTS idx_produit_reference_fabricant ON produit(reference_fabricant)`,
+  ],
+
+  // --- version 17 : missions, opérations et consentement GPS cloisonnés -----
+  [
+    `CREATE TABLE IF NOT EXISTS livraison_cache (
+      perimetre TEXT NOT NULL, mission INTEGER NOT NULL, version INTEGER NOT NULL,
+      resume TEXT NOT NULL, detail TEXT,
+      PRIMARY KEY (perimetre, mission)
+    )`,
+    `CREATE TABLE IF NOT EXISTS livraison_file (
+      id INTEGER PRIMARY KEY, perimetre TEXT NOT NULL, mission INTEGER NOT NULL,
+      cle TEXT NOT NULL UNIQUE, genre TEXT NOT NULL, version INTEGER, type TEXT,
+      apres TEXT, corps TEXT NOT NULL, statut TEXT NOT NULL DEFAULT 'ATTENTE',
+      erreur TEXT, expiration INTEGER
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_livraison_file_perimetre
+       ON livraison_file(perimetre, mission, id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_livraison_file_version
+       ON livraison_file(perimetre, mission, version)
+       WHERE version IS NOT NULL AND statut = 'ATTENTE'`,
+    `CREATE TABLE IF NOT EXISTS livraison_acces_bloque (perimetre TEXT PRIMARY KEY)`,
+    `CREATE TABLE IF NOT EXISTS livraison_fonds_cache (
+      perimetre TEXT NOT NULL, mission INTEGER NOT NULL, version INTEGER NOT NULL, contenu TEXT NOT NULL,
+      PRIMARY KEY (perimetre, mission)
+    )`,
+    `CREATE TABLE IF NOT EXISTS livraison_tournees_cache (
+      perimetre TEXT PRIMARY KEY, contenu TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS livraison_gps (
+      id INTEGER PRIMARY KEY CHECK (id = 1), cle TEXT NOT NULL, perimetre TEXT NOT NULL,
+      mission INTEGER NOT NULL, debut INTEGER NOT NULL, expiration INTEGER NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS livraison_gps_reglages (
+      perimetre TEXT PRIMARY KEY, actif INTEGER NOT NULL
+    )`,
   ],
 ];

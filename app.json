@@ -44,9 +44,17 @@
       "expo-document-picker",
       "expo-notifications",
       [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "locationWhenInUsePermission": "SahelPOS utilise la position uniquement lorsque vous activez le suivi de votre livraison."
+        }
+      ],
+      [
         "expo-camera",
         {
-          "cameraPermission": "SahelPOS utilise l'appareil photo pour scanner les codes-barres des produits et les QR codes de configuration."
+          "cameraPermission": "SahelPOS utilise l’appareil photo pour scanner les produits, les QR de connexion et les QR des colis."
         }
       ],
       [

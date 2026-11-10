@@ -1,3 +1,6 @@
+import type { RoleLivreur } from "./types";
+
+export type RoleMembreMobile = "patron" | "gerant" | "vendeur" | RoleLivreur;
 export type QrReference = { kind: "qr" | "invitation"; token: string };
 const OPAQUE = /^[A-Za-z0-9_-]{43}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -62,11 +65,13 @@ export function nativeTicket(result: {
     throw new Error("Le retour de connexion ne correspond pas à SahelPOS.");
   return ticketFromHash(uri.hash);
 }
-export function writeAllowed(
-  role: "patron" | "gerant" | "vendeur" | undefined,
-  type: string,
-): boolean {
+export function estLivreur(role: string | null | undefined): role is RoleLivreur {
+  return role === "livreur" || role === "livreur_prestataire";
+}
+
+export function writeAllowed(role: RoleMembreMobile | undefined, type: string): boolean {
   if (!role) return true; // Historical unscoped terminal contract.
+  if (estLivreur(role)) return false;
   if (type === "utilisateurs") return false;
   if (role === "vendeur") return type === "clients" || type === "ventes";
   return type !== "boutique" || role === "patron";

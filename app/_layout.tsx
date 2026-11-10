@@ -34,11 +34,15 @@ import {
   type EtatSynchronisation,
 } from '../src/services/synchronisation';
 import type { Role, Utilisateur } from '../src/domain/types';
+import { estLivreur } from '../src/domain/accounts';
 import type { ProfilCommerceMobile } from '../src/domain/commerce';
 import {
   ecouterChangementCompteLocal,
   obtenirUtilisateurParIdLocal,
+  verifierProfilAppareil,
 } from '../src/services/auth';
+import { AccesLivreurRefuse, creerSessionLivreur, invaliderSessionsLivreur, verifierSessionLivreur } from '../src/services/livraisons';
+import { arreterGps } from '../src/services/livraison-gps';
 import { resoudreSessionSynchronisee } from '../src/domain/session';
 import { peutAccederCheminMobile } from '../src/domain/permissions-mobile';
 import type { LargeurPapier } from '../src/services/impression/escpos';
@@ -143,6 +147,7 @@ export async function ecrireParametres(valeurs: Record<string, string>): Promise
 }
 
 export function enRole(valeur: string | null): Role {
+  if (estLivreur(valeur)) return valeur;
   return valeur === 'admin' || valeur === 'patron'
     ? 'admin'
     : valeur === 'gerant'
@@ -204,8 +209,11 @@ export default function DispositionRacine() {
       const comptes = await db.getFirstAsync<{ n: number }>(
         'SELECT COUNT(*) AS n FROM utilisateur WHERE actif = 1',
       );
-      setBoutique(fabriquerBoutique(table));
       const abonnement = await etatAbonnementCourant();
+      const boutiqueLocale = fabriquerBoutique(table);
+      setBoutique(estLivreur(abonnement.droit?.membre?.role)
+        ? { ...BOUTIQUE_PAR_DEFAUT, nom: abonnement.droit?.nom || BOUTIQUE_PAR_DEFAUT.nom }
+        : boutiqueLocale);
       setProfilCommerce(abonnement.droit?.commerce ?? null);
       setInstalle(table[CLES_PARAMETRES.installation] === '1' && (comptes?.n ?? 0) > 0);
       setEtat('pret');
@@ -238,6 +246,10 @@ export default function DispositionRacine() {
   }, []);
 
   const ouvrirSession = useCallback((compte: Utilisateur) => {
+    if (utilisateurCourant.current) {
+      invaliderSessionsLivreur();
+      void arreterGps().catch(() => {});
+    }
     utilisateurCourant.current = compte;
     setUtilisateur(compte);
     setRevisionSession((revision) => revision + 1);
@@ -247,6 +259,8 @@ export default function DispositionRacine() {
     // Invalider la ref AVANT le rendu empêche une synchro déjà en vol de
     // restaurer un profil après que l'utilisateur a touché "Se déconnecter".
     utilisateurCourant.current = null;
+    invaliderSessionsLivreur();
+    void arreterGps().catch(() => {});
     setUtilisateur(null);
     setRevisionSession((revision) => revision + 1);
   }, []);
@@ -255,21 +269,26 @@ export default function DispositionRacine() {
     const courant = utilisateurCourant.current;
     if (!courant) return;
     const local = await obtenirUtilisateurParIdLocal(courant.idLocal);
+    const estSessionLivreur = estLivreur(courant.role) || estLivreur(local?.role);
+    const profilValide = !estSessionLivreur || (local?.role === courant.role
+      && await verifierProfilAppareil(local).then(() => true, () => false));
 
     // Le profil a pu être déconnecté ou remplacé pendant la lecture SQLite.
-    if (utilisateurCourant.current?.idLocal !== courant.idLocal) return;
+    if (utilisateurCourant.current !== courant) return;
 
-    const changement = resoudreSessionSynchronisee(courant, local);
+    const changement = resoudreSessionSynchronisee(courant, profilValide ? local : null);
     if (changement.type === 'FERME') {
-      utilisateurCourant.current = null;
-      setUtilisateur(null);
-      setRevisionSession((revision) => revision + 1);
+      fermerSession();
     } else if (changement.type === 'ACTUALISE') {
+      if (estSessionLivreur) {
+        invaliderSessionsLivreur();
+        void arreterGps().catch(() => {});
+      }
       utilisateurCourant.current = changement.utilisateur;
       setUtilisateur(changement.utilisateur);
       setRevisionSession((revision) => revision + 1);
     }
-  }, []);
+  }, [fermerSession]);
 
   /**
    * Le premier pull peut finir APRES l'affichage de l'accueil. Sans ce signal,
@@ -279,6 +298,7 @@ export default function DispositionRacine() {
    * applique.
    */
   const synchroniserDonnees = useCallback(async () => {
+    if (estLivreur(utilisateurCourant.current?.role)) return;
     if (synchronisationEnCours.current) {
       return synchronisationEnCours.current;
     }
@@ -287,7 +307,7 @@ export default function DispositionRacine() {
       try {
         const abonnement = await etatAbonnementCourant();
         const boutiqueId = abonnement.droit?.boutique;
-        if (!boutiqueId) return;
+        if (!boutiqueId || estLivreur(abonnement.droit?.membre?.role)) return;
 
         await bootstrapInitial(boutiqueId);
         await verifierStock();
@@ -357,26 +377,60 @@ export default function DispositionRacine() {
   );
 
   const pileMontee = etat === 'pret' && installe && utilisateur !== null;
+  const pileCommerciale = pileMontee && !estLivreur(utilisateur?.role);
   const cheminAutorise = !utilisateur || peutAccederCheminMobile(utilisateur.role, cheminCourant);
+
+  // La vérification du droit livreur couvre aussi les pages compte et fonds.
+  useEffect(() => {
+    if (!pileMontee || !utilisateur || !estLivreur(utilisateur.role)) return;
+    const session = creerSessionLivreur(utilisateur);
+    let actif = true;
+    let enCours = false;
+    const verifier = async () => {
+      if (enCours) return;
+      enCours = true;
+      try {
+        await verifierSessionLivreur(session);
+      } catch (erreur) {
+        if (actif && utilisateurCourant.current === utilisateur && erreur instanceof AccesLivreurRefuse) fermerSession();
+      } finally {
+        enCours = false;
+      }
+    };
+    void verifier();
+    const reseau = Network.addNetworkStateListener((etatReseau) => {
+      if (etatReseau.isConnected && etatReseau.isInternetReachable !== false) void verifier();
+    });
+    const reprise = AppState.addEventListener('change', (etatApp) => {
+      if (etatApp === 'active') void verifier();
+    });
+    const intervalle = setInterval(() => { if (AppState.currentState === 'active') void verifier(); }, 120_000);
+    return () => {
+      actif = false;
+      reseau.remove();
+      reprise.remove();
+      clearInterval(intervalle);
+    };
+  }, [fermerSession, pileMontee, utilisateur]);
 
   // Premier examen du stock a l'ouverture, meme si l'appareil n'a pas encore
   // de droit distant (mode hors connexion).
   useEffect(() => {
-    if (!pileMontee) return;
+    if (!pileCommerciale) return;
     void verifierStock();
-  }, [pileMontee]);
+  }, [pileCommerciale]);
 
   // Une synchronisation finalisee reveille les ecrans qui lisent SQLite, ce
   // qui evite le faux tableau de bord vide juste apres une connexion Web.
   useEffect(() => {
-    if (!pileMontee) return;
+    if (!pileCommerciale) return;
     synchroniserSansBruit();
-  }, [pileMontee, synchroniserSansBruit]);
+  }, [pileCommerciale, synchroniserSansBruit]);
 
   // Le retour du reseau est un evenement distinct du retour au premier plan :
   // un vendeur peut activer ses donnees mobiles sans quitter la caisse.
   useEffect(() => {
-    if (!pileMontee) return;
+    if (!pileCommerciale) return;
     const abonnement = Network.addNetworkStateListener((reseau) => {
       if (reseau.isConnected && reseau.isInternetReachable !== false) {
         synchroniserSansBruit();
@@ -388,7 +442,7 @@ export default function DispositionRacine() {
       }
     }).catch(() => {});
     return () => abonnement.remove();
-  }, [pileMontee, synchroniserSansBruit]);
+  }, [pileCommerciale, synchroniserSansBruit]);
 
   // Un changement local de rôle/activation prend effet immédiatement,
   // même si aucun objet métier n'est à synchroniser.
@@ -403,22 +457,22 @@ export default function DispositionRacine() {
   // Le push n'est donc plus conditionne a un redemarrage ou a un changement
   // d'onglet.
   useEffect(() => {
-    if (!pileMontee) return;
+    if (!pileCommerciale) return;
     return ecouterChangementSynchronisation(() => {
       void revaliderSessionLocale();
       // Certains services marquent l'outbox dans leur transaction SQLite. On
       // laisse le commit finir avant de lire cette file et de la pousser.
       setTimeout(synchroniserSansBruit, 250);
     });
-  }, [pileMontee, revaliderSessionLocale, synchroniserSansBruit]);
+  }, [pileCommerciale, revaliderSessionLocale, synchroniserSansBruit]);
 
   // Filet de securite pour un reseau qui change d'etat sans emettre
   // d'evenement natif (certains Android apres une coupure prolongée).
   useEffect(() => {
-    if (!pileMontee) return;
+    if (!pileCommerciale) return;
     const intervalle = setInterval(synchroniserSansBruit, 120000);
     return () => clearInterval(intervalle);
-  }, [pileMontee, synchroniserSansBruit]);
+  }, [pileCommerciale, synchroniserSansBruit]);
 
   // Quand le telephone revient de veille ou retrouve le premier plan, on
   // relit le serveur. C'est ce cas qui etait laisse de cote : les mises a jour
@@ -428,16 +482,16 @@ export default function DispositionRacine() {
     const abonnement = AppState.addEventListener('change', (etatApp) => {
       if (etatApp === 'active') {
         void revaliderSessionLocale();
-        synchroniserSansBruit();
+        if (pileCommerciale) synchroniserSansBruit();
       }
     });
     return () => abonnement.remove();
-  }, [pileMontee, revaliderSessionLocale, synchroniserSansBruit]);
+  }, [pileMontee, pileCommerciale, revaliderSessionLocale, synchroniserSansBruit]);
 
   // La derniere imprimante choisie est reconnectee en arriere-plan. Une
   // imprimante eteinte ou hors de portee ne doit jamais bloquer la caisse.
   useEffect(() => {
-    if (!pileMontee) return;
+    if (!pileCommerciale) return;
     const tenter = () => {
       void reconnecterImprimanteParDefaut().catch(() => {});
     };
@@ -446,7 +500,7 @@ export default function DispositionRacine() {
       if (etatApp === 'active') tenter();
     });
     return () => abonnement.remove();
-  }, [pileMontee]);
+  }, [pileCommerciale]);
 
   // L'aiguillage de la racine est fait par app/index.tsx, qui redirige vers
   // la caisse. Aucun effet de navigation ici : celui qui s'y trouvait
@@ -467,6 +521,13 @@ export default function DispositionRacine() {
     contenu = <EcranDemarrage />;
   } else if (!utilisateur) {
     contenu = <EcranConnexion />;
+  } else if (estLivreur(utilisateur.role)) {
+    contenu = cheminAutorise ? (
+      <Stack
+        key={`livreur-${revisionSession}-${utilisateur.idLocal}`}
+        screenOptions={{ headerShown: false, contentStyle: { backgroundColor: couleurs.fond } }}
+      />
+    ) : <Redirect href="/livraisons" />;
   } else {
     // Le tiroir n'enveloppe QUE la pile : ni l'assistant de premier demarrage
     // ni l'ecran de connexion ne doivent donner acces aux reglages.

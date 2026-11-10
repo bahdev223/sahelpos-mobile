@@ -40,6 +40,7 @@ function chargerSynchronisation(options = {}) {
     'expo-file-system/legacy': {},
     './notifications/journal': { deposer: async () => {} },
     './abonnement': {
+      etatCourant: async () => options.abonnementLocal ?? { droit: null },
       jetonAppareil: async () => options.jeton ?? null,
       rafraichir: async () => options.abonnement ?? {
         peutEcrire: true,
@@ -222,4 +223,20 @@ test('membership changes and licence-refresh role promotion pull hidden history 
     assert.deepEqual(paths, [null, 'new-cursor', null, null]);
     assert.equal(mutations.some(({ sql }) => /DELETE FROM (sync_outbox|vente|utilisateur|produit)/i.test(sql)), false);
   } finally { global.fetch = previous; }
+});
+
+test('a signed courier scope cannot bootstrap or synchronize commercial data', async () => {
+  const { bootstrapInitial, synchroniser, mutations } = chargerSynchronisation({
+    jeton: 'appareil',
+    abonnementLocal: { droit: { membre: { role: 'livreur_prestataire' } } },
+  });
+  const fetchAvant = global.fetch;
+  global.fetch = async () => { assert.fail('Un appareil livreur ne doit pas appeler les API de commerce.'); };
+  try {
+    assert.equal((await bootstrapInitial('boutique-A')).pousses, 0);
+    assert.equal((await synchroniser()).recus, 0);
+    assert.deepEqual(mutations, []);
+  } finally {
+    global.fetch = fetchAvant;
+  }
 });

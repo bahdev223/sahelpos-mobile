@@ -35,5 +35,11 @@ export function comptesPourConnexion(utilisateurs: Utilisateur[]): Utilisateur[]
 }
 
 export function libelleRole(role: Utilisateur['role']): string {
-  return role === 'admin' ? 'Administrateur' : role === 'gerant' ? 'Gérant' : 'Vendeur';
+  return {
+    admin: 'Administrateur',
+    gerant: 'Gérant',
+    vendeur: 'Vendeur',
+    livreur: 'Livreur salarié',
+    livreur_prestataire: 'Livreur prestataire',
+  }[role];
 }

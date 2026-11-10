@@ -40,6 +40,8 @@ const LIBELLE_ROLE: Record<Role, string> = {
   admin: 'Administrateur',
   gerant: 'Gerant',
   vendeur: 'Vendeur',
+  livreur: 'Livreur salarié',
+  livreur_prestataire: 'Livreur prestataire',
 };
 
 const HEURES_CAISSE = Array.from({ length: 48 }, (_, index) => {
